@@ -3862,6 +3862,11 @@ lambda/translprim.cmi : \
     lambda/lambda.cmi \
     typing/ident.cmi \
     typing/env.cmi
+wasm/wtyp.cmo : \
+    wasm/wtyp.cmi
+wasm/wtyp.cmx : \
+    wasm/wtyp.cmi
+wasm/wtyp.cmi :
 file_formats/cmi_format.cmo : \
     typing/types.cmi \
     utils/misc.cmi \

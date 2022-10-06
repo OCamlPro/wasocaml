@@ -140,6 +140,10 @@ LAMBDA = \
   lambda/runtimedef.cmo
 LAMBDA_CMI =
 
+WASM = \
+  wasm/wtyp.cmo
+WASM_CMI =
+
 COMP = \
   bytecomp/meta.cmo \
   bytecomp/opcodes.cmo \
@@ -159,9 +163,9 @@ COMP_CMI = \
 # All file format descriptions (including cmx{,s}) are in the
 # ocamlcommon library so that ocamlobjinfo can depend on them.
 
-COMMON_CMI = $(UTILS_CMI) $(PARSING_CMI) $(TYPING_CMI) $(LAMBDA_CMI) $(COMP_CMI)
+COMMON_CMI = $(UTILS_CMI) $(PARSING_CMI) $(TYPING_CMI) $(LAMBDA_CMI) $(WASM_CMI) $(COMP_CMI)
 
-COMMON = $(UTILS) $(PARSING) $(TYPING) $(LAMBDA) $(COMP)
+COMMON = $(UTILS) $(PARSING) $(TYPING) $(LAMBDA) $(WASM) $(COMP)
 
 BYTECOMP = \
   bytecomp/instruct.cmo \
