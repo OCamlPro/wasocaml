@@ -141,7 +141,8 @@ LAMBDA = \
 LAMBDA_CMI =
 
 WASM = \
-  wasm/wtyp.cmo
+  wasm/wtyp.cmo \
+  wasm/emit_wast.cmo
 WASM_CMI =
 
 COMP = \
@@ -163,9 +164,9 @@ COMP_CMI = \
 # All file format descriptions (including cmx{,s}) are in the
 # ocamlcommon library so that ocamlobjinfo can depend on them.
 
-COMMON_CMI = $(UTILS_CMI) $(PARSING_CMI) $(TYPING_CMI) $(LAMBDA_CMI) $(WASM_CMI) $(COMP_CMI)
+COMMON_CMI = $(UTILS_CMI) $(PARSING_CMI) $(TYPING_CMI) $(LAMBDA_CMI) $(COMP_CMI)
 
-COMMON = $(UTILS) $(PARSING) $(TYPING) $(LAMBDA) $(WASM) $(COMP)
+COMMON = $(UTILS) $(PARSING) $(TYPING) $(LAMBDA) $(COMP)
 
 BYTECOMP = \
   bytecomp/instruct.cmo \
@@ -300,6 +301,7 @@ MIDDLE_END_FLAMBDA = \
   middle_end/flambda/closure_offsets.cmo \
   middle_end/flambda/un_anf.cmo \
   middle_end/flambda/flambda_to_clambda.cmo \
+  $(WASM) \
   middle_end/flambda/flambda_middle_end.cmo
 MIDDLE_END_FLAMBDA_CMI = \
   middle_end/flambda/inlining_decision_intf.cmi \
@@ -351,7 +353,7 @@ MIDDLE_END_CMI = \
   $(MIDDLE_END_FLAMBDA_CMI)
 
 OPTCOMP = $(MIDDLE_END) $(ASMCOMP)
-OPTCOMP_CMI = $(MIDDLE_END_CMI) $(ASMCOMP_CMI)
+OPTCOMP_CMI = $(MIDDLE_END_CMI) $(WASM_CMI) $(ASMCOMP_CMI)
 
 TOPLEVEL = \
   toplevel/genprintval.cmo \

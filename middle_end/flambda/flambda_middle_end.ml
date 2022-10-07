@@ -221,6 +221,15 @@ let lambda_to_clambda ~backend ~prefixname ~ppf_dump
       ~module_initializer:program.code
   in
   let export = Build_export_info.build_transient ~backend program in
+
+  let do_wasm =
+    match Sys.getenv_opt "WASM" with
+    | None -> false
+    | Some _ -> true
+  in
+  if do_wasm then
+    Emit_wast.emit ~output_prefix:prefixname program;
+
   let clambda, preallocated_blocks, constants =
     Profile.record_call "backend" (fun () ->
       (program, export)

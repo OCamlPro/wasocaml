@@ -3862,6 +3862,16 @@ lambda/translprim.cmi : \
     lambda/lambda.cmi \
     typing/ident.cmi \
     typing/env.cmi
+wasm/emit_wast.cmo : \
+    middle_end/symbol.cmi \
+    utils/misc.cmi \
+    middle_end/linkage_name.cmi \
+    middle_end/flambda/flambda.cmi
+wasm/emit_wast.cmx : \
+    middle_end/symbol.cmx \
+    utils/misc.cmx \
+    middle_end/linkage_name.cmx \
+    middle_end/flambda/flambda.cmx
 wasm/wtyp.cmo : \
     wasm/wtyp.cmi
 wasm/wtyp.cmx : \
@@ -4554,6 +4564,7 @@ middle_end/flambda/flambda_middle_end.cmo : \
     middle_end/flambda/flambda_iterators.cmi \
     middle_end/flambda/flambda_invariants.cmi \
     middle_end/flambda/flambda.cmi \
+    wasm/emit_wast.cmo \
     lambda/debuginfo.cmi \
     middle_end/compilenv.cmi \
     middle_end/flambda/base_types/closure_id.cmi \
@@ -4589,6 +4600,7 @@ middle_end/flambda/flambda_middle_end.cmx : \
     middle_end/flambda/flambda_iterators.cmx \
     middle_end/flambda/flambda_invariants.cmx \
     middle_end/flambda/flambda.cmx \
+    wasm/emit_wast.cmx \
     lambda/debuginfo.cmx \
     middle_end/compilenv.cmx \
     middle_end/flambda/base_types/closure_id.cmx \

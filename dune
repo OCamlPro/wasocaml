@@ -28,6 +28,7 @@
 (copy_files# asmcomp/*.ml{,i})
 (copy_files# file_formats/*.ml{,i})
 (copy_files# lambda/*.ml{,i})
+(copy_files# wasm/*.ml{,i})
 (copy_files# middle_end/*.ml{,i})
 (copy_files# middle_end/closure/*.ml{,i})
 (copy_files# middle_end/flambda/*.ml{,i})
@@ -70,6 +71,9 @@
    ;; lambda/
    debuginfo lambda matching printlambda runtimedef tmc simplif switch
    translattribute translclass translcore translmod translobj translprim
+
+   ;; wasm/
+   emit_wast
 
    ;; bytecomp/
    meta opcodes bytesections dll symtable
