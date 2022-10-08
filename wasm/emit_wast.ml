@@ -35,6 +35,9 @@ module Var = struct
   let gen_env, empty = fresh ~name:"gen_env" empty
   let arity_field, empty = fresh ~name:"arity" empty
   let default_fun, empty = fresh ~name:"fun" empty
+
+  (* TODO remove, but lazy right now *)
+  let name s = { name = s; id = 0 }
 end
 
 module Cst = struct
@@ -180,7 +183,7 @@ module Downard_acc = struct
   type t =
     { venv : Var.env;
       func_types : Var.t Arity.Map.t;
-      closure_types : Var.t Arity.Map.t Arity.Map.t
+      closure_types : (Var.t Arity.Map.t * Var.t) Arity.Map.t
     }
 
   let empty =
@@ -206,17 +209,20 @@ module Downard_acc = struct
     match Arity.Map.find arity t.closure_types with
     | exception Not_found ->
       let name, venv = var () in
+      let name_base, venv =
+        Var.fresh ~name:(Printf.sprintf "closure_type_%i" arity) venv
+      in
       let t =
         { t with
           venv;
           closure_types =
             Arity.Map.add arity
-              (Arity.Map.singleton fields name)
+              (Arity.Map.singleton fields name, name_base)
               t.closure_types
         }
       in
       name, t
-    | sizes -> (
+    | sizes, base_name -> (
       match Arity.Map.find fields sizes with
       | exception Not_found ->
         let name, venv = var () in
@@ -224,7 +230,8 @@ module Downard_acc = struct
         let t =
           { t with
             venv;
-            closure_types = Arity.Map.add arity sizes t.closure_types
+            closure_types =
+              Arity.Map.add arity (sizes, base_name) t.closure_types
           }
         in
         name, t
@@ -238,6 +245,25 @@ end
 
 module DA = Downard_acc
 module UA = Upward_acc
+
+let partial_closure_name ~applied ~total =
+  Var.name (Printf.sprintf "closure_apply_%i_%i" applied total)
+
+(* type struct (arity fun1 closurem field1 .. fieldn) *)
+let apply_closure (dacc : DA.t) ~closure_n ~applied ~total =
+  let func_type_1, dacc = DA.add_arity 1 dacc in
+  let name = partial_closure_name ~applied ~total in
+  let fields = List.init applied (fun _ -> None, ref_any) in
+  let fields =
+    [ None, Cst.atom "i8";
+      None, Cst.ref_type func_type_1;
+      None, Cst.ref_type closure_n ]
+    @ fields
+  in
+  let decl = Cst.struct_subtype ~name ~sub:Var.gen_env fields in
+  decl, dacc
+
+(* let parital_apply_fun' (env : Env.t) (dacc : DA.t) ~applied ~total = *)
 
 let params (env : Env.t) params =
   let params, env =
@@ -408,23 +434,52 @@ let func_types (dacc : DA.t) =
 
 let closure_types (dacc : DA.t) =
   let func_type_1, dacc = DA.add_arity 1 dacc in
+  let mk_decl ~name ~sub ~arity ~size =
+    let fields = List.init size (fun _ -> None, ref_any) in
+    let func_type_name = Arity.Map.find arity dacc.func_types in
+    let fields =
+      [ None, Cst.atom "i8";
+        None, Cst.ref_type func_type_1;
+        None, Cst.ref_type func_type_name ]
+      @ fields
+    in
+    let decl = Cst.struct_subtype ~name ~sub fields in
+    decl
+  in
   let closure_types =
     Arity.Map.fold
-      (fun arity sizes decls ->
-        Arity.Map.fold
-          (fun size name decls ->
-            let fields = List.init size (fun _ -> None, ref_any) in
-            let func_type_name = Arity.Map.find arity dacc.func_types in
-            let fields =
-              [ None, Cst.atom "i8";
-                None, Cst.ref_type func_type_1;
-                None, Cst.ref_type func_type_name ]
-              @ fields
-            in
-            let decl = Cst.struct_subtype ~name ~sub:Var.gen_env fields in
-            decl :: decls)
-          sizes decls)
+      (fun arity (sizes, base_name) decls ->
+        let base_decl =
+          mk_decl ~name:base_name ~arity ~sub:Var.gen_env ~size:0
+        in
+        let decls =
+          Arity.Map.fold
+            (fun size name decls ->
+              let decl = mk_decl ~name ~arity ~sub:base_name ~size in
+              decl :: decls)
+            sizes decls
+        in
+        base_decl :: decls)
       dacc.closure_types []
+  in
+  closure_types, dacc
+
+let partial_apply_closure_types (dacc : DA.t) =
+  let closure_types, dacc =
+    Arity.Map.fold
+      (fun arity (_sizes, base_name) (decls, dacc) ->
+        let dacc = ref dacc in
+        let decls' =
+          List.init (arity - 1) (fun i ->
+              let applied = i + 1 in
+              let decl, dacc' =
+                apply_closure !dacc ~closure_n:base_name ~applied ~total:arity
+              in
+              dacc := dacc';
+              decl)
+        in
+        decls' @ decls, !dacc)
+      dacc.closure_types ([], dacc)
   in
   closure_types, dacc
 
@@ -437,8 +492,11 @@ let types dacc =
         Some Var.default_fun, Cst.ref_type func_type_1 ]
   in
   let closure_types, dacc = closure_types dacc in
+  let partial_apply_closure_types, dacc = partial_apply_closure_types dacc in
   let func_types = func_types dacc in
-  env_type :: (List.rev func_types @ (gen_env_type :: closure_types))
+  env_type
+  :: (List.rev func_types
+     @ (gen_env_type :: (closure_types @ partial_apply_closure_types)))
 
 let module_ (flambda : Flambda.program) =
   let dacc = DA.empty in
