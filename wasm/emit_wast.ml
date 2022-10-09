@@ -505,6 +505,7 @@ let module_ (flambda : Flambda.program) =
   Cst.module_ (types @ declarations)
 
 let emit ~output_prefix (flambda : Flambda.program) =
+  Wtyp.run ~output_prefix flambda;
   let wastfile = output_prefix ^ ".wast" in
   let oc = open_out_bin wastfile in
   let ppf = Format.formatter_of_out_channel oc in
