@@ -30,21 +30,32 @@ module Closure_type = struct
   include M
   module Set = MSet (M)
 end
+module C_import = struct
+  module M = struct
+    type t = Primitive.description
+    let compare = compare
+  end
+  include M
+  module Set = MSet (M)
+end
 
 module State = struct
   let arities = ref Arity.Set.empty
   let block_sizes = ref Arity.Set.empty
   let closure_types = ref Closure_type.Set.empty
+  let c_imports = ref C_import.Set.empty
 
   let add_arity i = Arity.Set.(arities += i)
   let add_block_size i = Arity.Set.(block_sizes += i)
   let add_closure_type ~arity ~fields =
     Closure_type.Set.(closure_types += { arity; fields })
+  let add_c_import description = C_import.Set.(c_imports += description)
 
   let reset () =
     arities := Arity.Set.empty;
     block_sizes := Arity.Set.empty;
-    closure_types := Closure_type.Set.empty
+    closure_types := Closure_type.Set.empty;
+    c_imports := C_import.Set.empty
 end
 
 module Type = struct
@@ -81,6 +92,9 @@ module Type = struct
   type atom =
     | I8
     | I16
+    | I32
+    | I64
+    | F64
     | Any
     | Rvar of Var.t
 
@@ -97,6 +111,9 @@ module Type = struct
   let print_atom ppf = function
     | I8 -> Format.fprintf ppf "i8"
     | I16 -> Format.fprintf ppf "i16"
+    | I32 -> Format.fprintf ppf "i32"
+    | I64 -> Format.fprintf ppf "i64"
+    | F64 -> Format.fprintf ppf "f64"
     | Any -> Format.fprintf ppf "ref_any"
     | Rvar v -> Format.fprintf ppf "ref_%a" Var.print v
 
@@ -124,6 +141,7 @@ module Func_id = struct
     | V of string * int
     | Symbol of Symbol.t
     | Caml_curry of int * int
+    | C_import of string
 
   let name = function
     | V (name, n) -> Format.asprintf "%s_%i" name n
@@ -132,6 +150,7 @@ module Func_id = struct
       if m = 0
       then Format.asprintf "Caml_curry_%i" n
       else Format.asprintf "Caml_curry_%i_%i" n m
+    | C_import s -> Format.asprintf "C_%s" s
 
   let print ppf = function
     | V (name, n) -> Format.fprintf ppf "%s_%i" name n
@@ -140,6 +159,15 @@ module Func_id = struct
       if m = 0
       then Format.fprintf ppf "Caml_curry_%i" n
       else Format.fprintf ppf "Caml_curry_%i_%i" n m
+    | C_import s -> Format.fprintf ppf "C_%s" s
+
+  let of_var_closure_id var =
+    let name, id = Variable.unique_name_id var in
+    V (name, id)
+
+  let of_closure_id closure_id =
+    let var = Closure_id.unwrap closure_id in
+    of_var_closure_id var
 end
 
 module Param = struct
@@ -236,10 +264,15 @@ module Expr = struct
           args : t list;
           func : t
         }
+    | Call of
+        { args : t list;
+          func : Func_id.t
+        }
     | Ref_cast of
         { typ : Type.Var.t;
           r : t
         }
+    | Global_get of Global.t
 
   let print_binop ppf = function
     | I32_add -> Format.fprintf ppf "I32_add"
@@ -270,9 +303,14 @@ module Expr = struct
     | Call_ref { typ; args; func } ->
       Format.fprintf ppf "@[<hov 2>Call_ref(%a:@ %a(%a))@]" Type.Var.print typ
         print func (print_list print ",") args
+    | Call { args; func } ->
+      Format.fprintf ppf "@[<hov 2>Call(%a(%a))@]" Func_id.print func
+        (print_list print ",") args
     | Ref_cast { typ; r } ->
       Format.fprintf ppf "@[<hov 2>Ref_cast(%a:@ %a)@]" Type.Var.print typ print
         r
+    | Global_get g ->
+      Format.fprintf ppf "@[<hov 2>Global_get(%a)@]" Global.print g
 
   let let_ var typ defining_expr body = Let { var; typ; defining_expr; body }
 
@@ -292,7 +330,10 @@ module Expr = struct
       | Struct_get { typ = _; block; field = _ } -> loop acc block
       | Call_ref { typ = _; args; func } ->
         List.fold_left (fun acc arg -> loop acc arg) (loop acc func) args
+      | Call { args; func = _ } ->
+        List.fold_left (fun acc arg -> loop acc arg) acc args
       | Ref_cast { typ = _; r } -> loop acc r
+      | Global_get _ -> acc
     in
     loop Local.Map.empty expr
 end
@@ -305,7 +346,8 @@ module Func = struct
           body : Expr.t
         }
     | Import of
-        { typ : Type.Var.t;
+        { params : Type.atom list;
+          result : Type.atom list;
           module_ : string;
           name : string
         }
@@ -321,9 +363,12 @@ module Func = struct
       in
       Format.fprintf ppf "@[<hov 2>Func (%a)%a@ {@ %a@ }@]"
         (print_list param ",") params pr_result result Expr.print body
-    | Import { typ; module_; name } ->
-      Format.fprintf ppf "@[<hov 2>Import %a %s %s@]" Type.Var.print typ module_
-        name
+    | Import { params; result; module_; name } ->
+      Format.fprintf ppf "@[<hov 2>Import %s %s : (%a) -> %a @]" module_ name
+        (print_list Type.print_atom ",")
+        params
+        (print_list Type.print_atom ",")
+        result
 end
 
 module Const = struct
@@ -352,7 +397,6 @@ module Decl = struct
   type t =
     | Type of Type.Var.t * Type.descr
     | Type_rec of (Type.Var.t * Type.descr) list
-    (* | Declare_func of Expr.Var.t *)
     | Func of
         { name : Func_id.t;
           descr : Func.t
@@ -416,7 +460,7 @@ module Conv = struct
       else if Variable.Set.mem var env.bound_vars
       then Var (Expr.Local.of_var var)
       else if Variable.Set.mem var env.closure_vars
-      then failwith "TODO"
+      then failwith "TODO closure_var"
       else Misc.fatal_errorf "Unbound variable %a" Variable.print var
     end
 
@@ -434,6 +478,19 @@ module Conv = struct
     in
     Struct { typ = Type.Var.Block { size }; fields }
 
+  let cast_to_env r = Expr.Ref_cast { typ = Type.Var.Env; r }
+
+  let conv_apply env (apply : Flambda.apply) : Expr.t =
+    match apply.kind with
+    | Indirect -> failwith "TODO call indirect"
+    | Direct closure_id ->
+      let func = Func_id.of_closure_id closure_id in
+      let args =
+        List.map (conv_var env) apply.args
+        @ [cast_to_env (conv_var env apply.func)]
+      in
+      Call { func; args }
+
   let rec conv_body (expr : Flambda.program_body) : Module.t =
     match expr with
     | Let_symbol (symbol, Set_of_closures set, body) ->
@@ -445,6 +502,8 @@ module Conv = struct
       let descr = const_block tag fields in
       let body = conv_body body in
       Const { name; descr } :: body
+    | Let_symbol (_symbol, Project_closure (_sym, _closure_id), body) ->
+      conv_body body
     | Let_symbol (_symbol, _const, body) ->
       Format.printf "IGNORE LET SYMBOL@.";
       conv_body body
@@ -463,7 +522,7 @@ module Conv = struct
       (declarations : Flambda.function_declarations) : Decl.t list =
     Variable.Map.fold
       (fun name declaration declarations ->
-        let function_name = Func_id.V (Variable.name name, 0) in
+        let function_name = Func_id.of_var_closure_id name in
         let e, closure =
           closed_function_declaration function_name declaration
         in
@@ -522,12 +581,19 @@ module Conv = struct
       let body = conv_expr (bind_var env var) body in
       Let { var = local; typ = Type.Any; defining_expr; body }
     | Var var -> conv_var env var
-    | _ -> failwith "TODO"
+    | Apply apply -> conv_apply env apply
+    | _ ->
+      let msg = Format.asprintf "TODO %a" Flambda.print expr in
+      failwith msg
 
   and conv_named env (named : Flambda.named) : Expr.t =
     match named with
     | Prim (prim, args, _dbg) -> conv_prim env ~prim ~args
-    | _ -> failwith "TODO"
+    | Symbol s -> Global_get (Global.of_symbol s)
+    | Expr (Var var) -> conv_var env var
+    | _ ->
+      let msg = Format.asprintf "TODO named %a" Flambda.print_named named in
+      failwith msg
 
   and conv_prim env ~(prim : Clambda_primitives.primitive) ~args : Expr.t =
     let args = List.map (conv_var env) args in
@@ -541,7 +607,14 @@ module Conv = struct
     match prim with
     | Paddint -> i31 (Expr.Binop (I32_add, args2 (List.map i32 args)))
     | Psubint -> i31 (Expr.Binop (I32_sub, args2 (List.map i32 args)))
-    | _ -> failwith "TODO"
+    | Pccall descr ->
+      State.add_c_import descr;
+      Call { args; func = Func_id.C_import descr.prim_name }
+    | _ ->
+      let msg =
+        Format.asprintf "TODO prim %a" Printclambda_primitives.primitive prim
+      in
+      failwith msg
 
   let block_type size : Type.descr =
     let fields = List.init size (fun _ -> Type.Any) in
@@ -673,6 +746,20 @@ module Conv = struct
         body
       }
 
+  let c_import (descr : Primitive.description) =
+    let repr_type (t : Primitive.native_repr) : Type.atom =
+      match t with
+      | Same_as_ocaml_repr -> Type.Any
+      | Unboxed_float -> Type.F64
+      | Unboxed_integer Pnativeint -> Type.I32
+      | Unboxed_integer Pint32 -> Type.I32
+      | Unboxed_integer Pint64 -> Type.I64
+      | Untagged_int -> Type.I32
+    in
+    let params = List.map repr_type descr.prim_native_repr_args in
+    let result = [repr_type descr.prim_native_repr_res] in
+    Func.Import { params; result; module_ = "import"; name = descr.prim_name }
+
   let func_1_and_env =
     let env =
       let fields : Type.atom list =
@@ -709,6 +796,14 @@ module Conv = struct
             decls ms)
         (Arity.Set.remove 1 !State.arities)
         decls
+    in
+    let decls =
+      C_import.Set.fold
+        (fun (descr : Primitive.description) decls ->
+          let name = Func_id.C_import descr.prim_name in
+          let descr = c_import descr in
+          Decl.Func { name; descr } :: decls)
+        !State.c_imports decls
     in
     let decls =
       Arity.Set.fold
@@ -772,6 +867,7 @@ module ToWasm = struct
 
     type t =
       | Int of int64
+      | String of string
       | Atom of string
       | Node of
           { name : string;
@@ -787,6 +883,7 @@ module ToWasm = struct
 
     let rec emit ppf = function
       | Int i -> Format.fprintf ppf "%Li" i
+      | String s -> Format.fprintf ppf "\"%s\"" s
       | Atom s -> Format.pp_print_string ppf s
       | Node { name; args_h; args_v; force_paren } -> begin
         match args_h, args_v with
@@ -828,6 +925,7 @@ module ToWasm = struct
       node "struct.new_canon" (type_name typ :: fields)
 
     let int i = Int (Int64.of_int i)
+    let string s = String s
 
     let i32_ i = node "i32.const" [int i]
     let i32 i = node "i32.const" [Int (Int64.of_int32 i)]
@@ -841,6 +939,7 @@ module ToWasm = struct
 
     let struct_get typ field = node "struct.get" [type_name typ; int field]
     let call_ref typ = node "call_ref" [type_name typ]
+    let call func = node "call" [!$(Func_id.name func)]
     let ref_cast typ = node "ref.cast" [type_name typ]
 
     let declare_func f =
@@ -850,6 +949,9 @@ module ToWasm = struct
       match t with
       | I8 -> atom "i8"
       | I16 -> atom "i16"
+      | I32 -> atom "i32"
+      | I64 -> atom "i64"
+      | F64 -> atom "f64"
       | Any -> node "ref" [atom "any"]
       | Rvar v -> reft v
 
@@ -865,17 +967,23 @@ module ToWasm = struct
     let field f = node "field" [type_atom f]
 
     let struct_type fields = node "struct" (List.map field fields)
-    let func_type params res =
-      let res = match res with None -> [] | Some res -> [result res] in
-      node "func" (List.map param_t params @ res)
+    let func_type ?name params res =
+      let name =
+        match name with None -> [] | Some name -> [!$(Func_id.name name)]
+      in
+      let res = List.map result res in
+      node "func" (name @ (List.map param_t params @ res))
 
     let type_ name descr = node "type" [type_name name; descr]
     let sub name descr = node "sub" [type_name name; descr]
 
     let rec_ l = node "rec" l
+    let import module_ name e = node "import" [String module_; String name; e]
 
     let module_ m = nodev "module" m
   end
+
+  let option_to_list = function None -> [] | Some v -> [v]
 
   let tvar v = Type.Var.name v
   let gvar v = Global.name v
@@ -917,13 +1025,16 @@ module ToWasm = struct
       conv_expr block @ [C.struct_get typ field]
     | Call_ref { typ; args; func } ->
       List.flatten (List.map conv_expr args) @ conv_expr func @ [C.call_ref typ]
+    | Call { args; func } ->
+      List.flatten (List.map conv_expr args) @ [C.call func]
     | Ref_cast { typ; r } -> conv_expr r @ [C.ref_cast typ]
+    | Global_get g -> [C.global_get g]
 
   let conv_func name (func : Func.t) =
     match func with
-    | Import _ ->
-      Printf.printf "TODO CONV IMPORT@.";
-      []
+    | Import { module_; name = prim_name; params; result } ->
+      let typ = C.func_type ~name params result in
+      [C.import module_ prim_name typ]
     | Decl { params; result; body } ->
       let func =
         let locals = Expr.required_locals body in
@@ -947,7 +1058,8 @@ module ToWasm = struct
         match sub with None -> descr | Some sub -> C.sub sub descr
       in
       C.type_ name descr
-    | Func { params; result } -> C.type_ name (C.func_type params result)
+    | Func { params; result } ->
+      C.type_ name (C.func_type params (option_to_list result))
 
   let conv_type_rec types =
     C.rec_ (List.map (fun (name, descr) -> conv_type name descr) types)
