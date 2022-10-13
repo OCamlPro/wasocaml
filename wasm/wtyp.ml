@@ -1005,6 +1005,17 @@ module ToWasm = struct
   let conv_module module_ = C.module_ (conv_decl module_)
 end
 
+let output_file ~output_prefix module_ =
+  let wastfile = output_prefix ^ ".wast" in
+  let oc = open_out_bin wastfile in
+  let ppf = Format.formatter_of_out_channel oc in
+  Misc.try_finally
+    ~always:(fun () ->
+      Format.fprintf ppf "@.";
+      close_out oc)
+    (* ~exceptionally:(fun () -> Misc.remove_file wastfile) *)
+      (fun () -> ToWasm.Cst.emit ppf module_)
+
 let run ~output_prefix (flambda : Flambda.program) =
   State.reset ();
   let m = Conv.conv_body flambda.program_body in
@@ -1015,3 +1026,4 @@ let run ~output_prefix (flambda : Flambda.program) =
   Format.printf "COMMON@.%a@." Module.print common;
   let wasm = ToWasm.conv_module (common @ m) in
   Format.printf "@.%a@." ToWasm.Cst.emit wasm;
+  output_file ~output_prefix wasm
