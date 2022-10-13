@@ -72,9 +72,6 @@
    debuginfo lambda matching printlambda runtimedef tmc simplif switch
    translattribute translclass translcore translmod translobj translprim
 
-   ;; wasm/
-   emit_wast
-
    ;; bytecomp/
    meta opcodes bytesections dll symtable
 
@@ -141,6 +138,9 @@
    simplify_boxed_integer_ops simplify_boxed_integer_ops_intf simplify_common
    simplify_primitives traverse_for_exported_symbols un_anf unbox_closures
    unbox_free_vars_of_closures unbox_specialised_args
+
+   ;; wasm/
+   wtyp emit_wast
  )
 )
 
