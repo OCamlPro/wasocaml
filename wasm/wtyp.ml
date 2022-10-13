@@ -56,19 +56,24 @@ module Type = struct
           { arity : int;
             fields : int
           }
+      | Gen_closure of { arity : int }
       | Env
       | Block of { size : int }
       | Gen_block
+      | I31
 
     let name = function
-      | V (name, n) -> Format.asprintf "%s_%i" name n
-      | Partial_closure (n, m) -> Format.asprintf "Partial_closure_%i_%i" n m
-      | Env -> Format.asprintf "Env"
-      | Func { arity } -> Format.asprintf "Func_%i" arity
-      | Block { size } -> Format.asprintf "Block_%i" size
-      | Gen_block -> Format.asprintf "Gen_block"
+      | V (name, n) -> Format.asprintf "$%s_%i" name n
+      | Partial_closure (n, m) -> Format.asprintf "$Partial_closure_%i_%i" n m
+      | Env -> Format.asprintf "$Env"
+      | Func { arity } -> Format.asprintf "$Func_%i" arity
+      | Block { size } -> Format.asprintf "$Block_%i" size
+      | Gen_block -> Format.asprintf "$Gen_block"
       | Closure { arity; fields } ->
-        Format.asprintf "Closure_%i_%i" arity fields
+        Format.asprintf "$Closure_%i_%i" arity fields
+      | Gen_closure { arity } ->
+          Format.asprintf "$Gen_closure_%i" arity
+      | I31 -> "i31"
 
     let print ppf v = Format.pp_print_string ppf (name v)
   end
@@ -533,7 +538,7 @@ module Conv = struct
       | [a; b] -> a, b
       | _ -> Misc.fatal_errorf "Wrong number of primitive arguments"
     in
-    let i32 v = Expr.Unop (I31_get_s, v) in
+    let i32 v = Expr.Unop (I31_get_s, Ref_cast { typ = I31; r = v }) in
     let i31 v = Expr.Unop (I31_new, v) in
     match prim with
     | Paddint -> i31 (Expr.Binop (I32_add, args2 (List.map i32 args)))
@@ -550,6 +555,20 @@ module Conv = struct
       I16 ::
       fields }
 
+  let gen_closure_type ~arity : Type.descr =
+    let head : Type.atom list =
+      if arity = 1 then
+        [ I8 (* arity *) ;
+          Rvar (Func { arity = 1 }) (* generic func *);
+        ]
+      else
+        [ I8 (* arity *) ;
+          Rvar (Func { arity = 1 }) (* generic func *);
+          Rvar (Func { arity }) (* direct call func *);
+        ]
+    in
+    Struct { sub = Some Env; fields = head }
+
   let closure_type ~arity ~fields : Type.descr =
     let head : Type.atom list =
       if arity = 1 then
@@ -563,15 +582,14 @@ module Conv = struct
         ]
     in
     let fields = List.init fields (fun _ -> Type.Any) in
-    Struct { sub = Some Env; fields = head @ fields }
+    Struct { sub = Some (Gen_closure { arity }); fields = head @ fields }
 
-  let partial_closure_type ~arity:_ ~applied : Type.descr =
-    (* TODO: right type for the Env field (using arity) *)
+  let partial_closure_type ~arity ~applied : Type.descr =
     let args = List.init applied (fun _ -> Type.Any) in
     let fields : Type.atom list =
       [ Type.I8 (* arity *) ;
         Type.Rvar (Func { arity = 1 }) (* generic func *);
-      ] @ args @ [ Type.Rvar Env ]
+        Type.Rvar (Gen_closure { arity }) ] @ args
     in
     Struct { sub = Some Env; fields = fields }
 
@@ -583,15 +601,17 @@ module Conv = struct
            result = Some Any }
 
   let caml_curry_apply ~param_arg ~env_arg n =
-    let closure_arg_typ = Type.Var.Partial_closure (n, n - 1) in
+    let partial_closure_arg_typ = Type.Var.Partial_closure (n, n - 1) in
+    let partial_closure_var : Expr.Local.var = "partial_closure", 0 in
+    let closure_arg_typ = Type.Var.Gen_closure { arity = n } in
     let closure_var : Expr.Local.var = "closure", 0 in
     let closure_args =
       let first_arg_field = 3 in
       List.init (n - 1) (fun i : Expr.t ->
           let field = first_arg_field + i in
           Struct_get
-            { typ = closure_arg_typ;
-              block = Expr.Var (Expr.Local.V closure_var);
+            { typ = partial_closure_arg_typ;
+              block = Expr.Var (Expr.Local.V partial_closure_var);
               field = field
             })
     in
@@ -603,19 +623,22 @@ module Conv = struct
           field = 2
         }
     in
-    Expr.let_ closure_var (Type.Rvar closure_arg_typ)
-      (Ref_cast { typ = closure_arg_typ; r = Var env_arg })
-      (Expr.Call_ref { typ = Type.Var.Func { arity = n }; args; func })
+    Expr.let_ partial_closure_var (Type.Rvar partial_closure_arg_typ)
+      (Ref_cast { typ = partial_closure_arg_typ; r = Var env_arg })
+      (Expr.let_ closure_var (Type.Rvar closure_arg_typ)
+         (Struct_get
+            { typ = partial_closure_arg_typ;
+              block = Expr.Var (Expr.Local.V partial_closure_var);
+              field = 2
+            })
+         (Expr.Call_ref { typ = Type.Var.Func { arity = n }; args; func }))
 
   let caml_curry_alloc ~param_arg ~env_arg n m : Expr.t =
     (* arity, func, env, arg1..., argn-1, argn *)
     let closure_arg_typ = Type.Var.Partial_closure (n, m) in
     let closure_var : Expr.Local.var = "closure", 0 in
     let closure_local =
-      if m = 0 then
-        env_arg
-      else
-        Expr.Local.V closure_var
+      Expr.Local.V closure_var
     in
     let closure_args =
       let first_arg_field = 3 in
@@ -627,10 +650,20 @@ module Conv = struct
               field = field
             })
     in
+    let closure_field =
+      if m = 0 then
+        (Expr.Ref_cast { typ = Type.Var.Gen_closure { arity = n }; r = Var env_arg })
+      else
+        Expr.Struct_get
+          { typ = closure_arg_typ;
+            block = Expr.Var closure_local;
+            field = 2
+          }
+    in
     let fields =
       [ Expr.I32 1l;
         Expr.Ref_func (Caml_curry (n, m + 1));
-        Expr.Var closure_local ]
+        closure_field ]
       @ closure_args @ [Expr.Var param_arg]
     in
     let body : Expr.t =
@@ -735,6 +768,14 @@ module Conv = struct
            Decl.Type (name, descr) :: decls
         ) !State.closure_types decls
     in
+    let decls =
+      Arity.Set.fold
+        (fun arity decls ->
+           let name = Type.Var.Gen_closure { arity } in
+           let descr = gen_closure_type ~arity in
+           Decl.Type (name, descr) :: decls
+        ) !State.arities decls
+    in
     let decls = gen_block :: decls in
     let decls =
       Arity.Set.fold
@@ -799,11 +840,13 @@ module ToWasm = struct
 
     let ( !$ ) v = atom (Printf.sprintf "$%s" v)
 
+    let type_name v = atom (Type.Var.name v)
+
     let global name typ descr = node "global" [!$name; typ; descr]
 
-    let reft name = node "ref" [!$name]
+    let reft name = node "ref" [type_name name]
 
-    let struct_new_canon typ fields = node "struct.new_canon" (!$typ :: fields)
+    let struct_new_canon typ fields = node "struct.new_canon" (type_name typ :: fields)
 
     let int i = Int (Int64.of_int i)
 
@@ -817,9 +860,9 @@ module ToWasm = struct
     let local_get l = node "local.get" [!$(Expr.Local.name l)]
     let local_set l = node "local.set" [!$(Expr.Local.name l)]
 
-    let struct_get typ field = node "struct.get" [!$(Type.Var.name typ); int field]
-    let call_ref typ = node "call_ref" [!$(Type.Var.name typ)]
-    let ref_cast typ = node "ref.cast" [!$(Type.Var.name typ)]
+    let struct_get typ field = node "struct.get" [type_name typ; int field]
+    let call_ref typ = node "call_ref" [type_name typ]
+    let ref_cast typ = node "ref.cast" [type_name typ]
 
     let declare_func f =
       node "elem" [atom "declare"; atom "func"; !$(Func_id.name f)]
@@ -829,7 +872,7 @@ module ToWasm = struct
       | I8 -> atom "i8"
       | I16 -> atom "i16"
       | Any -> node "ref" [atom "any"]
-      | Rvar v -> reft (Type.Var.name v)
+      | Rvar v -> reft v
 
     let local l t = node "local" [!$(Expr.Local.var_name l); type_atom t]
     let param p t = node "param" [!$(Param.name p); type_atom t]
@@ -853,8 +896,8 @@ module ToWasm = struct
       in
       node "func" ((List.map param_t params) @ res)
 
-    let type_ name descr = node "type" [ !$ (Type.Var.name name); descr ]
-    let sub name descr = node "sub" [ !$ (Type.Var.name name); descr ]
+    let type_ name descr = node "type" [ (type_name name); descr ]
+    let sub name descr = node "sub" [ (type_name name); descr ]
 
     let rec_ l = node "rec" l
 
@@ -873,8 +916,8 @@ module ToWasm = struct
       | Global g -> C.global_get g
     in
     C.global (Global.name name)
-      (C.reft (tvar typ))
-      (C.struct_new_canon (tvar typ) (List.map field fields))
+      (C.reft typ)
+      (C.struct_new_canon typ (List.map field fields))
 
   let binop_name = function
     | Expr.I32_add -> "i32.add"
@@ -897,7 +940,7 @@ module ToWasm = struct
     | Struct_new (typ, fields) ->
         let fields = List.map conv_expr fields in
         (List.flatten fields @
-         [C.struct_new_canon (tvar typ) []])
+         [C.struct_new_canon typ []])
     | Ref_func fid ->
         [C.ref_func fid]
     | Struct_get { typ; block; field } ->
