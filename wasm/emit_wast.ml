@@ -1,4 +1,5 @@
 [@@@ocaml.warning "-23"]
+[@@@ocaml.warning "-32-60"]
 
 module Var = struct
   type t =
