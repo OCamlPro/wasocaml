@@ -142,6 +142,7 @@ module Func_id = struct
     | Symbol of Symbol.t
     | Caml_curry of int * int
     | C_import of string
+    | Start
 
   let name = function
     | V (name, n) -> Format.asprintf "%s_%i" name n
@@ -151,6 +152,7 @@ module Func_id = struct
       then Format.asprintf "Caml_curry_%i" n
       else Format.asprintf "Caml_curry_%i_%i" n m
     | C_import s -> Format.asprintf "C_%s" s
+    | Start -> "Start"
 
   let print ppf = function
     | V (name, n) -> Format.fprintf ppf "%s_%i" name n
@@ -160,6 +162,7 @@ module Func_id = struct
       then Format.fprintf ppf "Caml_curry_%i" n
       else Format.fprintf ppf "Caml_curry_%i_%i" n m
     | C_import s -> Format.fprintf ppf "C_%s" s
+    | Start -> Format.pp_print_string ppf "Start"
 
   let of_var_closure_id var =
     let name, id = Variable.unique_name_id var in
@@ -240,6 +243,7 @@ module Expr = struct
   type unop =
     | I31_get_s
     | I31_new
+    | Drop
 
   type t =
     | Var of Local.t
@@ -273,6 +277,7 @@ module Expr = struct
           r : t
         }
     | Global_get of Global.t
+    | Seq of t list
 
   let print_binop ppf = function
     | I32_add -> Format.fprintf ppf "I32_add"
@@ -281,6 +286,7 @@ module Expr = struct
   let print_unop ppf = function
     | I31_get_s -> Format.fprintf ppf "I31_get_s"
     | I31_new -> Format.fprintf ppf "I31_new"
+    | Drop -> Format.fprintf ppf "Drop"
 
   let rec print ppf = function
     | Var l -> Local.print ppf l
@@ -311,6 +317,7 @@ module Expr = struct
         r
     | Global_get g ->
       Format.fprintf ppf "@[<hov 2>Global_get(%a)@]" Global.print g
+    | Seq l -> Format.fprintf ppf "@[<v 2>Seq(%a)@]" (print_list print ";") l
 
   let let_ var typ defining_expr body = Let { var; typ; defining_expr; body }
 
@@ -334,6 +341,7 @@ module Expr = struct
         List.fold_left (fun acc arg -> loop acc arg) acc args
       | Ref_cast { typ = _; r } -> loop acc r
       | Global_get _ -> acc
+      | Seq l -> List.fold_left (fun acc arg -> loop acc arg) acc l
     in
     loop Local.Map.empty expr
 end
@@ -442,6 +450,11 @@ module Conv = struct
       params : Variable.Set.t;
       closure_vars : Variable.Set.t
     }
+  let empty_env =
+    { bound_vars = Variable.Set.empty;
+      params = Variable.Set.empty;
+      closure_vars = Variable.Set.empty
+    }
   let enter_function ~params ~free_vars =
     let params =
       List.fold_left
@@ -491,32 +504,36 @@ module Conv = struct
       in
       Call { func; args }
 
-  let rec conv_body (expr : Flambda.program_body) : Module.t =
+  let rec conv_body (expr : Flambda.program_body) effects : Module.t =
     match expr with
     | Let_symbol (symbol, Set_of_closures set, body) ->
       let decl = closed_function_declarations symbol set.function_decls in
-      let body = conv_body body in
+      let body = conv_body body effects in
       decl @ body
     | Let_symbol (symbol, Block (tag, fields), body) ->
       let name = Global.of_symbol symbol in
       let descr = const_block tag fields in
-      let body = conv_body body in
+      let body = conv_body body effects in
       Const { name; descr } :: body
     | Let_symbol (_symbol, Project_closure (_sym, _closure_id), body) ->
-      conv_body body
+      conv_body body effects
     | Let_symbol (_symbol, _const, body) ->
       Format.printf "IGNORE LET SYMBOL@.";
-      conv_body body
+      conv_body body effects
     | Let_rec_symbol (_, body) ->
       Format.printf "IGNORE LET REC SYMBOL@.";
-      conv_body body
+      conv_body body effects
     | Initialize_symbol (_, _, _, body) ->
       Format.printf "IGNORE INITIALIZE SYMBOL@.";
-      conv_body body
-    | Effect (_, body) ->
-      Format.printf "IGNORE EFFECT@.";
-      conv_body body
-    | End _end_symbol -> []
+      conv_body body effects
+    | Effect (expr, body) ->
+      let effect : Expr.t = Unop (Drop, conv_expr empty_env expr) in
+      conv_body body (effect :: effects)
+    | End _end_symbol ->
+      [ Decl.Func
+          { name = Start;
+            descr = Decl { params = []; result = None; body = Seq effects }
+          } ]
 
   and closed_function_declarations _symbol
       (declarations : Flambda.function_declarations) : Decl.t list =
@@ -591,6 +608,13 @@ module Conv = struct
     | Prim (prim, args, _dbg) -> conv_prim env ~prim ~args
     | Symbol s -> Global_get (Global.of_symbol s)
     | Expr (Var var) -> conv_var env var
+    | Const c ->
+        let c = match c with
+          | Int i -> i
+          | Char c -> Char.code c
+        in
+        Unop (I31_new, (I32 (Int32.of_int c)))
+    | Expr e -> conv_expr env e
     | _ ->
       let msg = Format.asprintf "TODO named %a" Flambda.print_named named in
       failwith msg
@@ -972,13 +996,15 @@ module ToWasm = struct
         match name with None -> [] | Some name -> [!$(Func_id.name name)]
       in
       let res = List.map result res in
-      node "func" (name @ (List.map param_t params @ res))
+      node "func" (name @ List.map param_t params @ res)
 
     let type_ name descr = node "type" [type_name name; descr]
     let sub name descr = node "sub" [type_name name; descr]
 
     let rec_ l = node "rec" l
     let import module_ name e = node "import" [String module_; String name; e]
+
+    let start f = node "start" [!$(Func_id.name f)]
 
     let module_ m = nodev "module" m
   end
@@ -1006,6 +1032,7 @@ module ToWasm = struct
   let unop_name = function
     | Expr.I31_get_s -> "i31.get_s"
     | Expr.I31_new -> "i31.new"
+    | Expr.Drop -> "drop"
 
   let rec conv_expr (expr : Expr.t) =
     match expr with
@@ -1029,6 +1056,7 @@ module ToWasm = struct
       List.flatten (List.map conv_expr args) @ [C.call func]
     | Ref_cast { typ; r } -> conv_expr r @ [C.ref_cast typ]
     | Global_get g -> [C.global_get g]
+    | Seq l -> List.flatten (List.map conv_expr l)
 
   let conv_func name (func : Func.t) =
     match func with
@@ -1065,7 +1093,7 @@ module ToWasm = struct
     C.rec_ (List.map (fun (name, descr) -> conv_type name descr) types)
 
   let rec conv_decl = function
-    | [] -> []
+    | [] -> [C.start Start]
     | Decl.Const { name; descr } :: tl -> conv_const name descr :: conv_decl tl
     | Decl.Func { name; descr } :: tl ->
       let func = conv_func name descr in
@@ -1077,7 +1105,8 @@ module ToWasm = struct
       let type_ = conv_type_rec types in
       type_ :: conv_decl tl
 
-  let conv_module module_ = C.module_ (conv_decl module_)
+  let conv_module module_ =
+    C.module_ (conv_decl module_)
 end
 
 let output_file ~output_prefix module_ =
@@ -1093,7 +1122,7 @@ let output_file ~output_prefix module_ =
 
 let run ~output_prefix (flambda : Flambda.program) =
   State.reset ();
-  let m = Conv.conv_body flambda.program_body in
+  let m = Conv.conv_body flambda.program_body [] in
   Format.printf "WASM %s@.%a@." output_prefix Module.print m;
   let common = Conv.make_common () in
   Format.printf "COMMON@.%a@." Module.print common;
