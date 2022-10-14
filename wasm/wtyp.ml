@@ -539,8 +539,7 @@ module Conv = struct
         let typ = Type.Var.Block { size } in
         Binop
           ( Struct_set { typ; field = field + 2 },
-            (Global_get (Global.of_symbol symbol),
-             conv_expr empty_env expr) )
+            (Global_get (Global.of_symbol symbol), conv_expr empty_env expr) )
       in
       let effect = List.mapi effect fields in
       decl :: conv_body body (effect @ effects)
@@ -550,7 +549,8 @@ module Conv = struct
     | End _end_symbol ->
       [ Decl.Func
           { name = Start;
-            descr = Decl { params = []; result = None; body = Seq (List.rev effects) }
+            descr =
+              Decl { params = []; result = None; body = Seq (List.rev effects) }
           } ]
 
   and closed_function_declarations _symbol
@@ -662,10 +662,12 @@ module Conv = struct
 
   let block_type size : Type.descr =
     let fields = List.init size (fun _ -> Type.Any) in
-    Struct
-      { sub = Some Gen_block; fields = (* Tag *)
-                                       I8 :: (* size *)
-                                             I16 :: fields }
+    let sub : Type.Var.t =
+      if size = 1 then Gen_block else Block { size = size - 1 }
+    in
+    Struct { sub = Some sub; fields = (* Tag *)
+                                      I8 :: (* size *)
+                                            I16 :: fields }
 
   let gen_closure_type ~arity : Type.descr =
     let head : Type.atom list =
@@ -845,12 +847,14 @@ module Conv = struct
         !State.c_imports decls
     in
     let decls =
-      Arity.Set.fold
-        (fun size decls ->
+      let max_block_size = Arity.Set.max_elt !State.block_sizes in
+      let block_sizes = List.init max_block_size (fun i -> i + 1) in
+      List.fold_left
+        (fun decls size ->
           let name = Type.Var.Block { size } in
           let descr = block_type size in
           Decl.Type (name, descr) :: decls)
-        !State.block_sizes decls
+        decls (List.rev block_sizes)
     in
     let decls =
       Arity.Set.fold
