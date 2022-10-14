@@ -239,11 +239,19 @@ module Expr = struct
   type binop =
     | I32_add
     | I32_sub
+    | Struct_set of
+        { typ : Type.Var.t;
+          field : int
+        }
 
   type unop =
     | I31_get_s
     | I31_new
     | Drop
+    | Struct_get of
+        { typ : Type.Var.t;
+          field : int
+        }
 
   type t =
     | Var of Local.t
@@ -258,11 +266,6 @@ module Expr = struct
     | Binop of binop * (t * t)
     | Unop of unop * t
     | Struct_new of Type.Var.t * t list
-    | Struct_get of
-        { typ : Type.Var.t;
-          block : t;
-          field : int
-        }
     | Call_ref of
         { typ : Type.Var.t;
           args : t list;
@@ -282,11 +285,17 @@ module Expr = struct
   let print_binop ppf = function
     | I32_add -> Format.fprintf ppf "I32_add"
     | I32_sub -> Format.fprintf ppf "I32_sub"
+    | Struct_set { typ; field } ->
+      Format.fprintf ppf "@[<hov 2>Struct_set(%a).(%i)@]" Type.Var.print typ
+        field
 
   let print_unop ppf = function
     | I31_get_s -> Format.fprintf ppf "I31_get_s"
     | I31_new -> Format.fprintf ppf "I31_new"
     | Drop -> Format.fprintf ppf "Drop"
+    | Struct_get { typ; field } ->
+      Format.fprintf ppf "@[<hov 2>Struct_get(%a).(%i)@]" Type.Var.print typ
+        field
 
   let rec print ppf = function
     | Var l -> Local.print ppf l
@@ -303,9 +312,6 @@ module Expr = struct
     | Struct_new (typ, args) ->
       Format.fprintf ppf "@[<hov 2>Struct_new(%a:@ %a)@]" Type.Var.print typ
         (print_list print ",") args
-    | Struct_get { typ; block; field } ->
-      Format.fprintf ppf "@[<hov 2>Struct_get(%a:@ %a).(%i)@]" Type.Var.print
-        typ print block field
     | Call_ref { typ; args; func } ->
       Format.fprintf ppf "@[<hov 2>Call_ref(%a:@ %a(%a))@]" Type.Var.print typ
         print func (print_list print ",") args
@@ -334,7 +340,6 @@ module Expr = struct
       | Unop (_op, arg) -> loop acc arg
       | Struct_new (_typ, args) ->
         List.fold_left (fun acc arg -> loop acc arg) acc args
-      | Struct_get { typ = _; block; field = _ } -> loop acc block
       | Call_ref { typ = _; args; func } ->
         List.fold_left (fun acc arg -> loop acc arg) (loop acc func) args
       | Call { args; func = _ } ->
@@ -523,16 +528,29 @@ module Conv = struct
     | Let_rec_symbol (_, body) ->
       Format.printf "IGNORE LET REC SYMBOL@.";
       conv_body body effects
-    | Initialize_symbol (_, _, _, body) ->
-      Format.printf "IGNORE INITIALIZE SYMBOL@.";
-      conv_body body effects
+    | Initialize_symbol (symbol, tag, fields, body) ->
+      let dummy_fields = List.map (fun _ -> Flambda.Const (Int 0)) fields in
+      let name = Global.of_symbol symbol in
+      let descr = const_block tag dummy_fields in
+      let decl = Decl.Const { name; descr } in
+      let size = List.length fields in
+      State.add_block_size size;
+      let effect field expr : Expr.t =
+        let typ = Type.Var.Block { size } in
+        Binop
+          ( Struct_set { typ; field = field + 2 },
+            (Global_get (Global.of_symbol symbol),
+             conv_expr empty_env expr) )
+      in
+      let effect = List.mapi effect fields in
+      decl :: conv_body body (effect @ effects)
     | Effect (expr, body) ->
       let effect : Expr.t = Unop (Drop, conv_expr empty_env expr) in
       conv_body body (effect :: effects)
     | End _end_symbol ->
       [ Decl.Func
           { name = Start;
-            descr = Decl { params = []; result = None; body = Seq effects }
+            descr = Decl { params = []; result = None; body = Seq (List.rev effects) }
           } ]
 
   and closed_function_declarations _symbol
@@ -609,12 +627,14 @@ module Conv = struct
     | Symbol s -> Global_get (Global.of_symbol s)
     | Expr (Var var) -> conv_var env var
     | Const c ->
-        let c = match c with
-          | Int i -> i
-          | Char c -> Char.code c
-        in
-        Unop (I31_new, (I32 (Int32.of_int c)))
+      let c = match c with Int i -> i | Char c -> Char.code c in
+      Unop (I31_new, I32 (Int32.of_int c))
     | Expr e -> conv_expr env e
+    | Read_symbol_field (symbol, field) ->
+      let typ = Type.Var.Block { size = field + 1 } in
+      Unop
+        ( Struct_get { typ; field = field + 2 },
+          Global_get (Global.of_symbol symbol) )
     | _ ->
       let msg = Format.asprintf "TODO named %a" Flambda.print_named named in
       failwith msg
@@ -693,28 +713,22 @@ module Conv = struct
       let first_arg_field = 3 in
       List.init (n - 1) (fun i : Expr.t ->
           let field = first_arg_field + i in
-          Struct_get
-            { typ = partial_closure_arg_typ;
-              block = Expr.Var (Expr.Local.V partial_closure_var);
-              field
-            })
+          Unop
+            ( Struct_get { typ = partial_closure_arg_typ; field },
+              Expr.Var (Expr.Local.V partial_closure_var) ))
     in
     let args = closure_args @ [Expr.Var param_arg; Expr.Var env_arg] in
     let func : Expr.t =
-      Struct_get
-        { typ = closure_arg_typ;
-          block = Expr.Var (Expr.Local.V closure_var);
-          field = 2
-        }
+      Unop
+        ( Struct_get { typ = closure_arg_typ; field = 2 },
+          Expr.Var (Expr.Local.V closure_var) )
     in
     Expr.let_ partial_closure_var (Type.Rvar partial_closure_arg_typ)
       (Ref_cast { typ = partial_closure_arg_typ; r = Var env_arg })
       (Expr.let_ closure_var (Type.Rvar closure_arg_typ)
-         (Struct_get
-            { typ = partial_closure_arg_typ;
-              block = Expr.Var (Expr.Local.V partial_closure_var);
-              field = 2
-            })
+         (Unop
+            ( Struct_get { typ = partial_closure_arg_typ; field = 2 },
+              Expr.Var (Expr.Local.V partial_closure_var) ))
          (Expr.Call_ref { typ = Type.Var.Func { arity = n }; args; func }))
 
   let caml_curry_alloc ~param_arg ~env_arg n m : Expr.t =
@@ -726,8 +740,8 @@ module Conv = struct
       let first_arg_field = 3 in
       List.init m (fun i : Expr.t ->
           let field = first_arg_field + i in
-          Struct_get
-            { typ = closure_arg_typ; block = Expr.Var closure_local; field })
+          Unop
+            (Struct_get { typ = closure_arg_typ; field }, Expr.Var closure_local))
     in
     let closure_field =
       if m = 0
@@ -735,8 +749,9 @@ module Conv = struct
         Expr.Ref_cast
           { typ = Type.Var.Gen_closure { arity = n }; r = Var env_arg }
       else
-        Expr.Struct_get
-          { typ = closure_arg_typ; block = Expr.Var closure_local; field = 2 }
+        Expr.Unop
+          ( Struct_get { typ = closure_arg_typ; field = 2 },
+            Expr.Var closure_local )
     in
     let fields =
       [Expr.I32 1l; Expr.Ref_func (Caml_curry (n, m + 1)); closure_field]
@@ -953,7 +968,7 @@ module ToWasm = struct
 
     let i32_ i = node "i32.const" [int i]
     let i32 i = node "i32.const" [Int (Int64.of_int32 i)]
-    let i31_new i = node "i31.new" [int i]
+    let i31_new i = node "i31.new" [i]
 
     let ref_func f = node "ref.func" [!$(Func_id.name f)]
     let global_get g = node "global.get" [!$(Global.name g)]
@@ -962,6 +977,7 @@ module ToWasm = struct
     let local_set l = node "local.set" [!$(Expr.Local.name l)]
 
     let struct_get typ field = node "struct.get" [type_name typ; int field]
+    let struct_set typ field = node "struct.set" [type_name typ; int field]
     let call_ref typ = node "call_ref" [type_name typ]
     let call func = node "call" [!$(Func_id.name func)]
     let ref_cast typ = node "ref.cast" [type_name typ]
@@ -988,7 +1004,7 @@ module ToWasm = struct
       let fields = [!$(Func_id.name name)] @ params @ result @ locals in
       nodehv "func" fields body
 
-    let field f = node "field" [type_atom f]
+    let field f = node "field" [node "mut" [type_atom f]]
 
     let struct_type fields = node "struct" (List.map field fields)
     let func_type ?name params res =
@@ -1018,28 +1034,30 @@ module ToWasm = struct
     let field (field : Const.field) : Cst.t =
       match field with
       | I8 i | I16 i -> C.i32_ i
-      | I31 i -> C.i31_new i
+      | I31 i -> C.i31_new (C.i32_ i)
       | Ref_func f -> C.ref_func f
       | Global g -> C.global_get g
     in
     C.global (Global.name name) (C.reft typ)
       (C.struct_new_canon typ (List.map field fields))
 
-  let binop_name = function
-    | Expr.I32_add -> "i32.add"
-    | Expr.I32_sub -> "i32.sub"
+  let conv_binop = function
+    | Expr.I32_add -> Cst.atom "i32.add"
+    | Expr.I32_sub -> Cst.atom "i32.sub"
+    | Expr.Struct_set { typ; field } -> C.struct_set typ field
 
-  let unop_name = function
-    | Expr.I31_get_s -> "i31.get_s"
-    | Expr.I31_new -> "i31.new"
-    | Expr.Drop -> "drop"
+  let conv_unop = function
+    | Expr.I31_get_s -> Cst.atom "i31.get_s"
+    | Expr.I31_new -> Cst.atom "i31.new"
+    | Expr.Drop -> Cst.atom "drop"
+    | Expr.Struct_get { typ; field } -> C.struct_get typ field
 
   let rec conv_expr (expr : Expr.t) =
     match expr with
     | Var v -> [C.local_get v]
     | Binop (op, (arg1, arg2)) ->
-      conv_expr arg1 @ conv_expr arg2 @ [Cst.atom (binop_name op)]
-    | Unop (op, arg) -> conv_expr arg @ [Cst.atom (unop_name op)]
+      conv_expr arg1 @ conv_expr arg2 @ [conv_binop op]
+    | Unop (op, arg) -> conv_expr arg @ [conv_unop op]
     | Let { var; typ = _; defining_expr; body } ->
       conv_expr defining_expr
       @ (C.local_set (Expr.Local.V var) :: conv_expr body)
@@ -1048,8 +1066,6 @@ module ToWasm = struct
       let fields = List.map conv_expr fields in
       List.flatten fields @ [C.struct_new_canon typ []]
     | Ref_func fid -> [C.ref_func fid]
-    | Struct_get { typ; block; field } ->
-      conv_expr block @ [C.struct_get typ field]
     | Call_ref { typ; args; func } ->
       List.flatten (List.map conv_expr args) @ conv_expr func @ [C.call_ref typ]
     | Call { args; func } ->
@@ -1105,8 +1121,7 @@ module ToWasm = struct
       let type_ = conv_type_rec types in
       type_ :: conv_decl tl
 
-  let conv_module module_ =
-    C.module_ (conv_decl module_)
+  let conv_module module_ = C.module_ (conv_decl module_)
 end
 
 let output_file ~output_prefix module_ =
