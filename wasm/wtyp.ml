@@ -92,6 +92,10 @@ module Type = struct
       | Block of { size : int }
       | Gen_block
       | I31
+      | Float
+      | Int32
+      | Int64
+      | Nativeint
 
     let name = function
       | V (name, n) -> Format.asprintf "$%s_%i" name n
@@ -103,6 +107,10 @@ module Type = struct
       | Closure { arity; fields } ->
         Format.asprintf "$Closure_%i_%i" arity fields
       | Gen_closure { arity } -> Format.asprintf "$Gen_closure_%i" arity
+      | Float -> "$Float"
+      | Int32 -> "$Int32"
+      | Int64 -> "$Int64"
+      | Nativeint -> "$Nativeint"
       | I31 -> "i31"
 
     let print ppf v = Format.pp_print_string ppf (name v)
@@ -283,6 +291,8 @@ module Expr = struct
   type t =
     | Var of Local.t
     | I32 of int32
+    | I64 of int64
+    | F64 of float
     | Ref_func of Func_id.t
     | Let of
         { var : Local.var
@@ -328,6 +338,8 @@ module Expr = struct
   let rec print ppf = function
     | Var l -> Local.print ppf l
     | I32 i -> Format.fprintf ppf "%li" i
+    | I64 i -> Format.fprintf ppf "%Li" i
+    | F64 f -> Format.fprintf ppf "%g" f
     | Ref_func f -> Format.fprintf ppf "Ref_func %a" Func_id.print f
     | Let { var; defining_expr; body } ->
       Format.fprintf ppf "@[<hov 2>Let %a =@ %a@]@ in@ %a" Local.print_var var
@@ -357,7 +369,7 @@ module Expr = struct
 
   let required_locals expr =
     let rec loop acc = function
-      | Var _ | I32 _ | Ref_func _ -> acc
+      | Var _ | I32 _ | I64 _ | F64 _ | Ref_func _ -> acc
       | Let { var; typ; defining_expr; body } ->
         let acc = Local.Map.add var typ acc in
         let acc = loop acc defining_expr in
@@ -425,6 +437,10 @@ module Const = struct
         { typ : Type.Var.t
         ; fields : field list
         }
+    | Expr of
+        { typ : Type.atom
+        ; e : Expr.t
+        }
 
   let print_field ppf = function
     | I8 i -> Format.fprintf ppf "i8(%i)" i
@@ -464,6 +480,9 @@ module Decl = struct
         Type.Var.print typ
         (print_list Const.print_field ";")
         fields
+    | Const { name; descr = Expr { typ; e } } ->
+      Format.fprintf ppf "@[<hov 2>const %a : %a =@ {%a}@]" Global.print name
+        Type.print_atom typ Expr.print e
 end
 
 module Module = struct
@@ -498,6 +517,11 @@ module Conv = struct
     in
     let closure_vars = Variable.Set.diff free_vars params in
     { bound_vars = Variable.Set.empty; params; closure_vars }
+
+  let const_float f : Expr.t = Struct_new (Float, [ F64 f ])
+  let const_int32 i : Expr.t = Struct_new (Int32, [ I32 i ])
+  let const_int64 i : Expr.t = Struct_new (Int64, [ I64 i ])
+  let const_nativeint i : Expr.t = Struct_new (Nativeint, [ I32 (Nativeint.to_int32 i) ])
 
   let bind_var env var =
     { env with bound_vars = Variable.Set.add var env.bound_vars }
@@ -549,6 +573,16 @@ module Conv = struct
         @ [ cast_to_env (conv_var env apply.func) ]
       in
       Call { func; args }
+
+  let conv_allocated_const (const : Allocated_const.t) : Const.t =
+    match const with
+    | Float f -> Expr { typ = Rvar Float; e = const_float f }
+    | Int32 i -> Expr { typ = Rvar Int32; e = const_int32 i }
+    | Int64 i -> Expr { typ = Rvar Int64; e = const_int64 i }
+    | Nativeint i -> Expr { typ = Rvar Nativeint; e = const_nativeint i }
+    | Float_array _ | Immutable_float_array _
+    | String _ | Immutable_string _ ->
+      failwith "TODO"
 
   let rec conv_body (expr : Flambda.program_body) effects : Module.t =
     match expr with
@@ -632,9 +666,10 @@ module Conv = struct
     | Set_of_closures set ->
       let decl = closed_function_declarations symbol set.function_decls in
       (decl, [])
-    | _ ->
-      Format.printf "IGNORE CONST SYMBOL %a@." Symbol.print symbol;
-      ([], [])
+    | Allocated_const const ->
+      let name = Global.of_symbol symbol in
+      let descr = conv_allocated_const const in
+      ([ Const { name; descr } ], [])
 
   and closed_function_declarations _symbol
       (declarations : Flambda.function_declarations) : Decl.t list =
@@ -900,6 +935,15 @@ module Conv = struct
     in
     Decl.Type_rec [ func_1; env ]
 
+  let float_type =
+    Decl.Type (Type.Var.Float, Type.Struct { sub = None; fields = [ F64 ] })
+  let int32_type =
+    Decl.Type (Type.Var.Int32, Type.Struct { sub = None; fields = [ I32 ] })
+  let int64_type =
+    Decl.Type (Type.Var.Int64, Type.Struct { sub = None; fields = [ I64 ] })
+  let nativeint_type =
+    Decl.Type (Type.Var.Nativeint, Type.Struct { sub = None; fields = [ I32 ] })
+
   let gen_block =
     let fields : Type.atom list = [ I8 (* tag *); I16 (* size *) ] in
     Decl.Type (Gen_block, Struct { sub = None; fields })
@@ -983,7 +1027,7 @@ module Conv = struct
         (Arity.Set.remove 1 !State.arities)
         decls
     in
-    let decls = func_1_and_env :: decls in
+    let decls = float_type :: int32_type :: int64_type :: nativeint_type :: func_1_and_env :: decls in
     decls
 end
 
@@ -995,6 +1039,7 @@ module ToWasm = struct
 
     type t =
       | Int of int64
+      | Float of float
       | String of string
       | Atom of string
       | Node of
@@ -1011,6 +1056,7 @@ module ToWasm = struct
 
     let rec emit ppf = function
       | Int i -> Format.fprintf ppf "%Li" i
+      | Float f -> Format.fprintf ppf "%h" f
       | String s -> Format.fprintf ppf "\"%s\"" s
       | Atom s -> Format.pp_print_string ppf s
       | Node { name; args_h; args_v; force_paren } -> begin
@@ -1049,7 +1095,7 @@ module ToWasm = struct
 
     let type_name v = atom (Type.Var.name v)
 
-    let global name typ descr = node "global" [ !$name; typ; descr ]
+    let global name typ descr = node "global" ([ !$name; typ ] @ descr)
 
     let reft name = node "ref" [ type_name name ]
 
@@ -1063,6 +1109,10 @@ module ToWasm = struct
     let i32_ i = node "i32.const" [ int i ]
 
     let i32 i = node "i32.const" [ Int (Int64.of_int32 i) ]
+
+    let i64 i = node "i64.const" [ Int i ]
+
+    let f64 f = node "f64.const" [ Float f ]
 
     let i31_new i = node "i31.new" [ i ]
 
@@ -1139,17 +1189,6 @@ module ToWasm = struct
 
   let gvar v = Global.name v
 
-  let conv_const name (Const.Struct { typ; fields }) =
-    let field (field : Const.field) : Cst.t =
-      match field with
-      | I8 i | I16 i -> C.i32_ i
-      | I31 i -> C.i31_new (C.i32_ i)
-      | Ref_func f -> C.ref_func f
-      | Global g -> C.global_get g
-    in
-    C.global (Global.name name) (C.reft typ)
-      (C.struct_new_canon typ (List.map field fields))
-
   let conv_binop = function
     | Expr.I32_add -> Cst.atom "i32.add"
     | Expr.I32_sub -> Cst.atom "i32.sub"
@@ -1172,6 +1211,8 @@ module ToWasm = struct
       conv_expr defining_expr
       @ (C.local_set (Expr.Local.V var) :: conv_expr body)
     | I32 i -> [ C.i32 i ]
+    | I64 i -> [ C.i64 i ]
+    | F64 f -> [ C.f64 f ]
     | Struct_new (typ, fields) ->
       let fields = List.map conv_expr fields in
       List.flatten fields @ [ C.struct_new_canon typ [] ]
@@ -1185,6 +1226,21 @@ module ToWasm = struct
     | Ref_cast { typ; r } -> conv_expr r @ [ C.ref_cast typ ]
     | Global_get g -> [ C.global_get g ]
     | Seq l -> List.flatten (List.map conv_expr l)
+
+  let conv_const name (const : Const.t) =
+    match const with
+    | Struct { typ; fields } ->
+      let field (field : Const.field) : Cst.t =
+        match field with
+        | I8 i | I16 i -> C.i32_ i
+        | I31 i -> C.i31_new (C.i32_ i)
+        | Ref_func f -> C.ref_func f
+        | Global g -> C.global_get g
+      in
+      C.global (Global.name name) (C.reft typ)
+        [ C.struct_new_canon typ (List.map field fields) ]
+    | Expr { typ; e } ->
+      C.global (Global.name name) (C.type_atom typ) (conv_expr e)
 
   let conv_func name (func : Func.t) =
     match func with
