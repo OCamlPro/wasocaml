@@ -513,19 +513,29 @@ module Conv = struct
       else Misc.fatal_errorf "Unbound variable %a" Variable.print var
     end
 
-  let const_block tag fields : Const.t =
+  let dummy_const = 123456789
+
+  let const_block ~symbols_being_bound tag fields :
+      Const.t * (int * Symbol.t) list =
     let size = List.length fields in
     State.add_block_size size;
-    let field (f : Flambda.constant_defining_value_block_field) : Const.field =
+    let fields_to_update = ref [] in
+    let field i (f : Flambda.constant_defining_value_block_field) : Const.field
+        =
       match f with
-      | Symbol s -> Global (Global.of_symbol s)
+      | Symbol s ->
+        if Symbol.Set.mem s symbols_being_bound then begin
+          fields_to_update := (i, s) :: !fields_to_update;
+          I31 dummy_const
+        end
+        else Global (Global.of_symbol s)
       | Const (Int i) -> I31 i
       | Const (Char c) -> I31 (Char.code c)
     in
     let fields =
-      [ Const.I8 (Tag.to_int tag); Const.I16 size ] @ List.map field fields
+      [ Const.I8 (Tag.to_int tag); Const.I16 size ] @ List.mapi field fields
     in
-    Struct { typ = Type.Var.Block { size }; fields }
+    (Struct { typ = Type.Var.Block { size }; fields }, !fields_to_update)
 
   let cast_to_env r = Expr.Ref_cast { typ = Type.Var.Env; r }
 
@@ -547,17 +557,36 @@ module Conv = struct
       let body = conv_body body effects in
       decl @ body
     | Let_symbol (symbol, const, body) ->
-      let decls = conv_symbol symbol const in
+      let decls, new_effects =
+        conv_symbol ~symbols_being_bound:Symbol.Set.empty symbol const
+      in
+      assert (new_effects = []);
       let body = conv_body body effects in
       decls @ body
     | Let_rec_symbol (decls, body) ->
-      let decls = List.map (fun (symbol, const) -> conv_symbol symbol const) decls in
+      let symbols_being_bound =
+        List.fold_left
+          (fun set (symbol, _) -> Symbol.Set.add symbol set)
+          Symbol.Set.empty decls
+      in
+      let decls, effects =
+        List.fold_left
+          (fun (decls, effects) (symbol, const) ->
+            let decl, new_effecs =
+              conv_symbol ~symbols_being_bound symbol const
+            in
+            (decl @ decls, new_effecs @ effects) )
+          ([], effects) decls
+      in
       let body = conv_body body effects in
-      (List.flatten decls) @ body
+      decls @ body
     | Initialize_symbol (symbol, tag, fields, body) ->
       let dummy_fields = List.map (fun _ -> Flambda.Const (Int 0)) fields in
       let name = Global.of_symbol symbol in
-      let descr = const_block tag dummy_fields in
+      let descr, fields_to_update =
+        const_block ~symbols_being_bound:Symbol.Set.empty tag dummy_fields
+      in
+      assert (fields_to_update = []);
       let decl = Decl.Const { name; descr } in
       let size = List.length fields in
       State.add_block_size size;
@@ -580,20 +609,32 @@ module Conv = struct
           }
       ]
 
-  and conv_symbol symbol (const : Flambda.constant_defining_value) : Decl.t list
-      =
+  and conv_symbol ~symbols_being_bound symbol
+      (const : Flambda.constant_defining_value) : Decl.t list * Expr.t list =
     match const with
     | Block (tag, fields) ->
       let name = Global.of_symbol symbol in
-      let descr = const_block tag fields in
-      [ Const { name; descr } ]
-    | Project_closure (_sym, _closure_id) -> []
+      let descr, fields_to_update =
+        const_block ~symbols_being_bound tag fields
+      in
+      let new_effects =
+        List.map
+          (fun (field_to_update, field_contents) : Expr.t ->
+            let typ = Type.Var.Block { size = field_to_update + 1 } in
+            Binop
+              ( Struct_set { typ; field = field_to_update + 2 }
+              , ( Global_get (Global.of_symbol symbol)
+                , Global_get (Global.of_symbol field_contents) ) ) )
+          fields_to_update
+      in
+      ([ Const { name; descr } ], new_effects)
+    | Project_closure (_sym, _closure_id) -> ([], [])
     | Set_of_closures set ->
       let decl = closed_function_declarations symbol set.function_decls in
-      decl
+      (decl, [])
     | _ ->
       Format.printf "IGNORE CONST SYMBOL %a@." Symbol.print symbol;
-      []
+      ([], [])
 
   and closed_function_declarations _symbol
       (declarations : Flambda.function_declarations) : Decl.t list =
