@@ -546,19 +546,14 @@ module Conv = struct
       let decl = closed_function_declarations symbol set.function_decls in
       let body = conv_body body effects in
       decl @ body
-    | Let_symbol (symbol, Block (tag, fields), body) ->
-      let name = Global.of_symbol symbol in
-      let descr = const_block tag fields in
+    | Let_symbol (symbol, const, body) ->
+      let decls = conv_symbol symbol const in
       let body = conv_body body effects in
-      Const { name; descr } :: body
-    | Let_symbol (_symbol, Project_closure (_sym, _closure_id), body) ->
-      conv_body body effects
-    | Let_symbol (_symbol, _const, body) ->
-      Format.printf "IGNORE LET SYMBOL@.";
-      conv_body body effects
-    | Let_rec_symbol (_, body) ->
-      Format.printf "IGNORE LET REC SYMBOL@.";
-      conv_body body effects
+      decls @ body
+    | Let_rec_symbol (decls, body) ->
+      let decls = List.map (fun (symbol, const) -> conv_symbol symbol const) decls in
+      let body = conv_body body effects in
+      (List.flatten decls) @ body
     | Initialize_symbol (symbol, tag, fields, body) ->
       let dummy_fields = List.map (fun _ -> Flambda.Const (Int 0)) fields in
       let name = Global.of_symbol symbol in
@@ -584,6 +579,21 @@ module Conv = struct
               Decl { params = []; result = None; body = Seq (List.rev effects) }
           }
       ]
+
+  and conv_symbol symbol (const : Flambda.constant_defining_value) : Decl.t list
+      =
+    match const with
+    | Block (tag, fields) ->
+      let name = Global.of_symbol symbol in
+      let descr = const_block tag fields in
+      [ Const { name; descr } ]
+    | Project_closure (_sym, _closure_id) -> []
+    | Set_of_closures set ->
+      let decl = closed_function_declarations symbol set.function_decls in
+      decl
+    | _ ->
+      Format.printf "IGNORE CONST SYMBOL %a@." Symbol.print symbol;
+      []
 
   and closed_function_declarations _symbol
       (declarations : Flambda.function_declarations) : Decl.t list =
