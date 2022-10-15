@@ -51,6 +51,8 @@ module State = struct
 
   let block_sizes = ref Arity.Set.empty
 
+  let block_float_sizes = ref Arity.Set.empty
+
   let closure_types = ref Closure_type.Set.empty
 
   let c_imports = ref C_import.Set.empty
@@ -59,6 +61,8 @@ module State = struct
 
   let add_block_size i = Arity.Set.(block_sizes += i)
 
+  let add_block_float_size i = Arity.Set.(block_float_sizes += i)
+
   let add_closure_type ~arity ~fields =
     Closure_type.Set.(closure_types += { arity; fields })
 
@@ -66,7 +70,8 @@ module State = struct
 
   let reset () =
     arities := Arity.Set.empty;
-    block_sizes := Arity.Set.empty;
+    block_sizes := Arity.Set.singleton 0;
+    block_float_sizes := Arity.Set.singleton 0;
     closure_types := Closure_type.Set.empty;
     c_imports := C_import.Set.empty
 end
@@ -84,12 +89,16 @@ module Type = struct
       | Gen_closure of { arity : int }
       | Env
       | Block of { size : int }
+      | BlockFloat of { size : int }
       | Gen_block
       | I31
       | Float
       | Int32
       | Int64
       | Nativeint
+      | String
+      | Array
+      | FloatArray
 
     let name = function
       | V (name, n) -> Format.asprintf "$%s_%i" name n
@@ -97,6 +106,7 @@ module Type = struct
       | Env -> Format.asprintf "$Env"
       | Func { arity } -> Format.asprintf "$Func_%i" arity
       | Block { size } -> Format.asprintf "$Block_%i" size
+      | BlockFloat { size } -> Format.asprintf "$BlockFloat_%i" size
       | Gen_block -> Format.asprintf "$Gen_block"
       | Closure { arity; fields } ->
         Format.asprintf "$Closure_%i_%i" arity fields
@@ -105,6 +115,9 @@ module Type = struct
       | Int32 -> "$Int32"
       | Int64 -> "$Int64"
       | Nativeint -> "$Nativeint"
+      | String -> "$String"
+      | Array -> "$Array"
+      | FloatArray -> "$FloatArray"
       | I31 -> "i31"
 
     let print ppf v = Format.pp_print_string ppf (name v)
@@ -123,6 +136,10 @@ module Type = struct
     | Struct of
         { sub : Var.t option
         ; fields : atom list
+        }
+    | Array of
+        { sub : Var.t option
+        ; fields : atom
         }
     | Func of
         { params : atom list
@@ -147,6 +164,12 @@ module Type = struct
       Format.fprintf ppf "@[<hov 2>Struct {%a%a}@]" pp_sub sub
         (print_list print_atom ";")
         atoms
+    | Array { sub; fields = atom } ->
+      let pp_sub ppf = function
+        | None -> ()
+        | Some sub -> Format.fprintf ppf "sub: %a;@ " Var.print sub
+      in
+      Format.fprintf ppf "@[<hov 2>Array {%a%a}@]" pp_sub sub print_atom atom
     | Func { params; result = None } ->
       Format.fprintf ppf "@[<hov 2>Func {%a}@]"
         (print_list print_atom ",")
@@ -830,6 +853,13 @@ module Conv = struct
                                       I8 :: (* size *)
                                             I16 :: fields }
 
+  let block_float_type size : Type.descr =
+    let fields = List.init size (fun _ -> Type.F64) in
+    let sub : Type.Var.t option =
+      if size = 0 then None else Some (BlockFloat { size = size - 1 })
+    in
+    Struct { sub; fields = (* size *) I16 :: fields }
+
   let gen_closure_type ~arity : Type.descr =
     let head : Type.atom list =
       if arity = 1 then
@@ -988,9 +1018,27 @@ module Conv = struct
   let nativeint_type =
     Decl.Type (Type.Var.Nativeint, Type.Struct { sub = None; fields = [ I32 ] })
 
+  let string_type =
+    Decl.Type (Type.Var.String, Type.Array { sub = None; fields = I8 })
+
+  let array_type =
+    Decl.Type (Type.Var.Array, Type.Array { sub = None; fields = Any })
+
+  let floatarray_type =
+    Decl.Type (Type.Var.FloatArray, Type.Array { sub = None; fields = F64 })
+
   let gen_block =
     let fields : Type.atom list = [ I8 (* tag *); I16 (* size *) ] in
     Decl.Type (Gen_block, Struct { sub = None; fields })
+
+  let define_types_smaller ~max_size ~name ~descr ~decls =
+    let sizes = List.init max_size (fun i -> i + 1) in
+    List.fold_left
+      (fun decls size ->
+        let name = name size in
+        let descr = descr size in
+        Decl.Type (name, descr) :: decls )
+      decls (List.rev sizes)
 
   let make_common () =
     let decls = [] in
@@ -1020,14 +1068,16 @@ module Conv = struct
         !State.c_imports decls
     in
     let decls =
-      let max_block_size = Arity.Set.max_elt !State.block_sizes in
-      let block_sizes = List.init max_block_size (fun i -> i + 1) in
-      List.fold_left
-        (fun decls size ->
-          let name = Type.Var.Block { size } in
-          let descr = block_type size in
-          Decl.Type (name, descr) :: decls )
-        decls (List.rev block_sizes)
+      define_types_smaller
+        ~max_size:(Arity.Set.max_elt !State.block_sizes)
+        ~name:(fun size -> Type.Var.Block { size })
+        ~descr:block_type ~decls
+    in
+    let decls =
+      define_types_smaller
+        ~max_size:(Arity.Set.max_elt !State.block_float_sizes)
+        ~name:(fun size -> Type.Var.BlockFloat { size })
+        ~descr:block_float_type ~decls
     in
     let decls =
       Arity.Set.fold
@@ -1072,8 +1122,8 @@ module Conv = struct
         decls
     in
     let decls =
-      float_type :: int32_type :: int64_type :: nativeint_type :: func_1_and_env
-      :: decls
+      float_type :: int32_type :: int64_type :: nativeint_type :: string_type
+      :: array_type :: floatarray_type :: func_1_and_env :: decls
     in
     decls
 end
@@ -1206,6 +1256,8 @@ module ToWasm = struct
 
     let struct_type fields = node "struct" (List.map field fields)
 
+    let array_type f = node "array" [ node "mut" [ type_atom f ] ]
+
     let func_type ?name params res =
       let name =
         match name with None -> [] | Some name -> [ !$(Func_id.name name) ]
@@ -1309,6 +1361,12 @@ module ToWasm = struct
     match descr with
     | Struct { sub; fields } ->
       let descr = C.struct_type fields in
+      let descr =
+        match sub with None -> descr | Some sub -> C.sub sub descr
+      in
+      C.type_ name descr
+    | Array { sub; fields } ->
+      let descr = C.array_type fields in
       let descr =
         match sub with None -> descr | Some sub -> C.sub sub descr
       in
