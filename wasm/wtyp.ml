@@ -319,6 +319,10 @@ module Expr = struct
     | Binop of binop * (t * t)
     | Unop of unop * t
     | Struct_new of Type.Var.t * t list
+    | Array_new_fixed of
+        { typ : Type.Var.t
+        ; fields : t list
+        }
     | Call_ref of
         { typ : Type.Var.t
         ; args : t list
@@ -368,6 +372,9 @@ module Expr = struct
     | Struct_new (typ, args) ->
       Format.fprintf ppf "@[<hov 2>Struct_new(%a:@ %a)@]" Type.Var.print typ
         (print_list print ",") args
+    | Array_new_fixed { typ; fields } ->
+      Format.fprintf ppf "@[<hov 2>Array_new_fixed(%a:@ %a)@]" Type.Var.print
+        typ (print_list print ",") fields
     | Call_ref { typ; args; func } ->
       Format.fprintf ppf "@[<hov 2>Call_ref(%a:@ %a(%a))@]" Type.Var.print typ
         print func (print_list print ",") args
@@ -396,6 +403,8 @@ module Expr = struct
       | Unop (_op, arg) -> loop acc arg
       | Struct_new (_typ, args) ->
         List.fold_left (fun acc arg -> loop acc arg) acc args
+      | Array_new_fixed { typ = _; fields } ->
+        List.fold_left (fun acc arg -> loop acc arg) acc fields
       | Call_ref { typ = _; args; func } ->
         List.fold_left (fun acc arg -> loop acc arg) (loop acc func) args
       | Call { args; func = _ } ->
@@ -543,6 +552,14 @@ module Conv = struct
   let const_nativeint i : Expr.t =
     Struct_new (Nativeint, [ I32 (Nativeint.to_int32 i) ])
 
+  let const_string s : Expr.t =
+    let fields =
+      String.fold_right
+        (fun c l -> Expr.I32 (Int32.of_int (Char.code c)) :: l)
+        s []
+    in
+    Array_new_fixed { typ = String; fields }
+
   let bind_var env var =
     { env with bound_vars = Variable.Set.add var env.bound_vars }
 
@@ -600,7 +617,9 @@ module Conv = struct
     | Int32 i -> Expr { typ = Rvar Int32; e = const_int32 i }
     | Int64 i -> Expr { typ = Rvar Int64; e = const_int64 i }
     | Nativeint i -> Expr { typ = Rvar Nativeint; e = const_nativeint i }
-    | Float_array _ | Immutable_float_array _ | String _ | Immutable_string _ ->
+    | Immutable_string s | String s ->
+      Expr { typ = Rvar String; e = const_string s }
+    | Float_array _ | Immutable_float_array _ ->
       failwith
         (Format.asprintf "TODO allocated const %a" Allocated_const.print const)
 
@@ -1193,7 +1212,10 @@ module ToWasm = struct
     let reft name = node "ref" [ type_name name ]
 
     let struct_new_canon typ fields =
-      node "struct.new_canon" (type_name typ :: fields)
+      node "struct.new_canon" ((type_name typ) :: fields)
+
+    let array_new_canon_fixed typ size =
+      node "array.new_canon_fixed" [type_name typ ; Int (Int64.of_int size)]
 
     let int i = Int (Int64.of_int i)
 
@@ -1311,6 +1333,10 @@ module ToWasm = struct
     | Struct_new (typ, fields) ->
       let fields = List.map conv_expr fields in
       List.flatten fields @ [ C.struct_new_canon typ [] ]
+    | Array_new_fixed { typ; fields } ->
+      let size = List.length fields in
+      let fields = List.map conv_expr fields in
+      List.flatten fields @ [ C.array_new_canon_fixed typ size ]
     | Ref_func fid -> [ C.ref_func fid ]
     | Call_ref { typ; args; func } ->
       List.flatten (List.map conv_expr args)
