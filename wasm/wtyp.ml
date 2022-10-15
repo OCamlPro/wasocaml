@@ -753,6 +753,8 @@ module Conv = struct
 
   and conv_expr env (expr : Flambda.t) : Expr.t =
     match expr with
+    | Let { var; defining_expr; body = Var v; _ } when Variable.equal var v ->
+      conv_named env defining_expr
     | Let { var; defining_expr; body; _ } ->
       let local = Expr.Local.var_of_var var in
       let defining_expr = conv_named env defining_expr in
