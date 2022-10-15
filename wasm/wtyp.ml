@@ -615,22 +615,7 @@ module Conv = struct
       let body = conv_body body effects in
       decls @ body
     | Initialize_symbol (symbol, tag, fields, body) ->
-      let dummy_fields = List.map (fun _ -> Flambda.Const (Int 0)) fields in
-      let name = Global.of_symbol symbol in
-      let descr, fields_to_update =
-        const_block ~symbols_being_bound:Symbol.Set.empty tag dummy_fields
-      in
-      assert (fields_to_update = []);
-      let decl = Decl.Const { name; descr } in
-      let size = List.length fields in
-      State.add_block_size size;
-      let effect field expr : Expr.t =
-        let typ = Type.Var.Block { size } in
-        Binop
-          ( Struct_set { typ; field = field + 2 }
-          , (Global_get (Global.of_symbol symbol), conv_expr empty_env expr) )
-      in
-      let effect = List.mapi effect fields in
+      let decl, effect = conv_initialize_symbol symbol tag fields in
       decl :: conv_body body (effect @ effects)
     | Effect (expr, body) ->
       let effect : Expr.t = Unop (Drop, conv_expr empty_env expr) in
@@ -642,6 +627,49 @@ module Conv = struct
               Decl { params = []; result = None; body = Seq (List.rev effects) }
           }
       ]
+
+  and conv_initialize_symbol symbol tag fields =
+    let size = List.length fields in
+    let fields =
+      List.mapi
+        (fun i field ->
+          (i, field, Initialize_symbol_to_let_symbol.constant_field field) )
+        fields
+    in
+    let fields_to_update = ref [] in
+    let predefined_fields =
+      List.map
+        (fun (i, expr, field) : Const.field ->
+          match field with
+          | None ->
+            let expr = conv_expr empty_env expr in
+            fields_to_update := (i, expr) :: !fields_to_update;
+            I31 dummy_const
+          | Some (field : Flambda.constant_defining_value_block_field) -> (
+            match field with
+            | Symbol s -> Global (Global.of_symbol s)
+            | Const (Int i) -> I31 i
+            | Const (Char c) -> I31 (Char.code c) ) )
+        fields
+    in
+    let name = Global.of_symbol symbol in
+    let descr : Const.t =
+      let fields =
+        [ Const.I8 (Tag.to_int tag); Const.I16 size ] @ predefined_fields
+      in
+      Struct { typ = Type.Var.Block { size }; fields }
+    in
+    let decl = Decl.Const { name; descr } in
+    let size = List.length fields in
+    State.add_block_size size;
+    let effect (field, expr) : Expr.t =
+      let typ = Type.Var.Block { size } in
+      Binop
+        ( Struct_set { typ; field = field + 2 }
+        , (Global_get (Global.of_symbol symbol), expr) )
+    in
+    let effect = List.map effect !fields_to_update in
+    (decl, effect)
 
   and conv_symbol ~symbols_being_bound symbol
       (const : Flambda.constant_defining_value) : Decl.t list * Expr.t list =
