@@ -788,6 +788,11 @@ module Conv = struct
 
   and conv_prim env ~(prim : Clambda_primitives.primitive) ~args : Expr.t =
     let args = List.map (conv_var env) args in
+    let arg1 args =
+      match args with
+      | [ a ] -> a
+      | _ -> Misc.fatal_errorf "Wrong number of primitive arguments"
+    in
     let args2 args =
       match args with
       | [ a; b ] -> (a, b)
@@ -802,6 +807,15 @@ module Conv = struct
     | Pccall descr ->
       State.add_c_import descr;
       Call { args; func = Func_id.C_import descr.prim_name }
+    | Pmakeblock (tag, _mut, _shape) ->
+      let size = List.length args in
+      Struct_new
+        ( Block { size }
+        , I32 (Int32.of_int tag) :: I32 (Int32.of_int size) :: args )
+    | Pfield field ->
+      let arg = arg1 args in
+      let typ : Type.Var.t = Block { size = field + 1 } in
+      Unop (Struct_get { typ; field = field + 2 }, Ref_cast { typ; r = arg })
     | _ ->
       let msg =
         Format.asprintf "TODO prim %a" Printclambda_primitives.primitive prim
