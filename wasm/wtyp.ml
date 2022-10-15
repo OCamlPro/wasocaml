@@ -4,12 +4,6 @@
 
 [@@@ocaml.warning "-32"]
 
-[@@@ocaml.warning "-34"]
-
-[@@@ocaml.warning "-60"]
-
-[@@@ocaml.warning "-69"]
-
 let print_list f sep ppf l =
   Format.pp_print_list
     ~pp_sep:(fun ppf () -> Format.fprintf ppf "%s@ " sep)
@@ -61,7 +55,7 @@ module State = struct
 
   let c_imports = ref C_import.Set.empty
 
-  let add_arity i = Arity.Set.(arities += i)
+  let add_arity (i : Arity.t) = Arity.Set.(arities += i)
 
   let add_block_size i = Arity.Set.(block_sizes += i)
 
@@ -266,7 +260,6 @@ module Expr = struct
       let compare = compare
     end
 
-    module Set = Set.Make (M)
     module Map = Map.Make (M)
   end
 
@@ -519,9 +512,13 @@ module Conv = struct
     { bound_vars = Variable.Set.empty; params; closure_vars }
 
   let const_float f : Expr.t = Struct_new (Float, [ F64 f ])
+
   let const_int32 i : Expr.t = Struct_new (Int32, [ I32 i ])
+
   let const_int64 i : Expr.t = Struct_new (Int64, [ I64 i ])
-  let const_nativeint i : Expr.t = Struct_new (Nativeint, [ I32 (Nativeint.to_int32 i) ])
+
+  let const_nativeint i : Expr.t =
+    Struct_new (Nativeint, [ I32 (Nativeint.to_int32 i) ])
 
   let bind_var env var =
     { env with bound_vars = Variable.Set.add var env.bound_vars }
@@ -580,9 +577,9 @@ module Conv = struct
     | Int32 i -> Expr { typ = Rvar Int32; e = const_int32 i }
     | Int64 i -> Expr { typ = Rvar Int64; e = const_int64 i }
     | Nativeint i -> Expr { typ = Rvar Nativeint; e = const_nativeint i }
-    | Float_array _ | Immutable_float_array _
-    | String _ | Immutable_string _ ->
-      failwith "TODO"
+    | Float_array _ | Immutable_float_array _ | String _ | Immutable_string _ ->
+      failwith
+        (Format.asprintf "TODO allocated const %a" Allocated_const.print const)
 
   let rec conv_body (expr : Flambda.program_body) effects : Module.t =
     match expr with
@@ -979,10 +976,13 @@ module Conv = struct
 
   let float_type =
     Decl.Type (Type.Var.Float, Type.Struct { sub = None; fields = [ F64 ] })
+
   let int32_type =
     Decl.Type (Type.Var.Int32, Type.Struct { sub = None; fields = [ I32 ] })
+
   let int64_type =
     Decl.Type (Type.Var.Int64, Type.Struct { sub = None; fields = [ I64 ] })
+
   let nativeint_type =
     Decl.Type (Type.Var.Nativeint, Type.Struct { sub = None; fields = [ I32 ] })
 
@@ -1069,16 +1069,15 @@ module Conv = struct
         (Arity.Set.remove 1 !State.arities)
         decls
     in
-    let decls = float_type :: int32_type :: int64_type :: nativeint_type :: func_1_and_env :: decls in
+    let decls =
+      float_type :: int32_type :: int64_type :: nativeint_type :: func_1_and_env
+      :: decls
+    in
     decls
 end
 
 module ToWasm = struct
   module Cst = struct
-    type k =
-      | V
-      | Hov
-
     type t =
       | Int of int64
       | Float of float
