@@ -57,3 +57,6 @@ let () =
   h (opaque_identity 5);
   morteau (uuu 12.34 456. 2.);
   montbeliard 78.
+
+let next x = x + 1
+let n = (opaque_identity next) 2

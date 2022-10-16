@@ -267,12 +267,7 @@ module Expr = struct
       | Fresh of string * int
       | Partial_closure
       | Closure
-
-    let print_var ppf = function
-      | Variable v -> Format.fprintf ppf "LV(%a)" Variable.print v
-      | Fresh (name, n) -> Format.fprintf ppf "L(%s_%i)" name n
-      | Partial_closure -> Format.fprintf ppf "Partial_closure"
-      | Closure -> Format.fprintf ppf "Closure"
+      | Indirec_call_closure of { arity : int }
 
     let var_name = function
       | Variable v ->
@@ -281,6 +276,10 @@ module Expr = struct
       | Fresh (name, n) -> Format.asprintf "%s#%i" name n
       | Partial_closure -> "Partial_closure"
       | Closure -> "Closure"
+      | Indirec_call_closure { arity } ->
+        Format.asprintf "Indirec_call_closure_%i" arity
+
+    let print_var ppf var = Format.pp_print_string ppf (var_name var)
 
     type t =
       | V of var
@@ -294,9 +293,7 @@ module Expr = struct
 
     let of_var v = V (Variable v)
 
-    let name = function
-      | V v -> var_name v
-      | Param p -> Param.name p
+    let name = function V v -> var_name v | Param p -> Param.name p
 
     module M = struct
       type nonrec t = var
@@ -423,10 +420,9 @@ module Expr = struct
     let add var typ acc =
       match Local.Map.find var acc with
       | prev_typ ->
-          assert(typ = prev_typ);
-          acc
-      | exception Not_found ->
-          Local.Map.add var typ acc
+        assert (typ = prev_typ);
+        acc
+      | exception Not_found -> Local.Map.add var typ acc
     in
     let rec loop acc = function
       | Var _ | I32 _ | I64 _ | F64 _ | Ref_func _ -> acc
@@ -663,7 +659,28 @@ module Conv = struct
 
   let conv_apply env (apply : Flambda.apply) : Expr.t =
     match apply.kind with
-    | Indirect -> failwith "TODO call indirect"
+    | Indirect -> begin
+      match apply.args with
+      | [] -> assert false
+      | [ arg ] ->
+        let typ = Type.Var.Func { arity = 1 } in
+        let closure_type = Type.Var.Env in
+        let var : Expr.Local.var = Indirec_call_closure { arity = 1 } in
+        let closure : Expr.t =
+          Ref_cast { typ = closure_type; r = conv_var env apply.func }
+        in
+        let func : Expr.t =
+          Unop (Struct_get { typ = closure_type; field = 1 }, Var (V var))
+        in
+        let args : Expr.t list = [ conv_var env arg; Var (V var) ] in
+        Let
+          { var
+          ; typ = Rvar closure_type
+          ; defining_expr = closure
+          ; body = Call_ref { typ; func; args }
+          }
+      | _ :: _ :: _ -> failwith "TODO call indirect 2"
+    end
     | Direct closure_id ->
       let func = Func_id.of_closure_id closure_id in
       let args =
@@ -942,8 +959,7 @@ module Conv = struct
       let arg = arg1 args in
       let typ : Type.Var.t = Block { size = field + 1 } in
       Unop (Struct_get { typ; field = field + 2 }, Ref_cast { typ; r = arg })
-    | Popaque ->
-      arg1 args
+    | Popaque -> arg1 args
     | _ ->
       let msg =
         Format.asprintf "TODO prim %a" Printclambda_primitives.primitive prim
