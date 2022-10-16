@@ -634,6 +634,31 @@ module Conv = struct
 
   let unit_value : Expr.t = Unop (I31_new, I32 0l)
 
+  let rec expr_is_pure (e : Expr.t) =
+    match e with
+    | Var _ | I32 _ | I64 _ | F64 _ | Global_get _ -> true
+    | Unop (I31_new, e) -> expr_is_pure e
+    | Let { defining_expr; body } ->
+      expr_is_pure defining_expr && expr_is_pure body
+    | _ -> false
+
+  let seq l : Expr.t = match l with [ e ] -> e | _ -> Seq l
+
+  let rec drop (expr : Expr.t) : Expr.t =
+    match expr with
+    | Seq l -> seq (drop_list l)
+    | Let { typ; var; defining_expr; body } ->
+      Let { typ; var; defining_expr; body = drop body }
+    | _ -> Unop (Drop, expr)
+
+  and drop_list (l : Expr.t list) =
+    match l with
+    | [] -> []
+    | [ e ] ->
+      if expr_is_pure e then []
+      else [ drop e ]
+    | h :: t -> h :: drop_list t
+
   let const_block ~symbols_being_bound tag fields :
       Const.t * (int * Symbol.t) list =
     let size = List.length fields in
@@ -760,7 +785,7 @@ module Conv = struct
       let decl, effect = conv_initialize_symbol symbol tag fields in
       decl :: conv_body body (effect @ effects)
     | Effect (expr, body) ->
-      let effect : Expr.t = Unop (Drop, conv_expr empty_env expr) in
+      let effect : Expr.t = drop (conv_expr empty_env expr) in
       conv_body body (effect :: effects)
     | End _end_symbol ->
       [ Decl.Func
