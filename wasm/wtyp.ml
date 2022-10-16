@@ -262,11 +262,25 @@ end
 
 module Expr = struct
   module Local = struct
-    type var = string * int
+    type var =
+      | Variable of Variable.t
+      | Fresh of string * int
+      | Partial_closure
+      | Closure
 
-    let print_var ppf (name, n) = Format.fprintf ppf "L(%s_%i)" name n
+    let print_var ppf = function
+      | Variable v -> Format.fprintf ppf "LV(%a)" Variable.print v
+      | Fresh (name, n) -> Format.fprintf ppf "L(%s_%i)" name n
+      | Partial_closure -> Format.fprintf ppf "Partial_closure"
+      | Closure -> Format.fprintf ppf "Closure"
 
-    let var_name (name, n) = Format.asprintf "%s_%i" name n
+    let var_name = function
+      | Variable v ->
+        let name, id = Variable.unique_name_id v in
+        Format.asprintf "%s_%i" name id
+      | Fresh (name, n) -> Format.asprintf "%s#%i" name n
+      | Partial_closure -> "Partial_closure"
+      | Closure -> "Closure"
 
     type t =
       | V of var
@@ -276,11 +290,13 @@ module Expr = struct
       | V v -> print_var ppf v
       | Param p -> Param.print ppf p
 
-    let var_of_var v = Variable.unique_name_id v
+    let var_of_var v = Variable v
 
-    let of_var v = V (var_of_var v)
+    let of_var v = V (Variable v)
 
-    let name = function V v -> var_name v | Param p -> Param.name p
+    let name = function
+      | V v -> var_name v
+      | Param p -> Param.name p
 
     module M = struct
       type nonrec t = var
@@ -404,10 +420,18 @@ module Expr = struct
   let let_ var typ defining_expr body = Let { var; typ; defining_expr; body }
 
   let required_locals expr =
+    let add var typ acc =
+      match Local.Map.find var acc with
+      | prev_typ ->
+          assert(typ = prev_typ);
+          acc
+      | exception Not_found ->
+          Local.Map.add var typ acc
+    in
     let rec loop acc = function
       | Var _ | I32 _ | I64 _ | F64 _ | Ref_func _ -> acc
       | Let { var; typ; defining_expr; body } ->
-        let acc = Local.Map.add var typ acc in
+        let acc = add var typ acc in
         let acc = loop acc defining_expr in
         loop acc body
       | Binop (_op, (arg1, arg2)) ->
@@ -984,9 +1008,9 @@ module Conv = struct
 
   let caml_curry_apply ~param_arg ~env_arg n =
     let partial_closure_arg_typ = Type.Var.Partial_closure (n, n - 1) in
-    let partial_closure_var : Expr.Local.var = ("partial_closure", 0) in
+    let partial_closure_var : Expr.Local.var = Partial_closure in
     let closure_arg_typ = Type.Var.Gen_closure { arity = n } in
-    let closure_var : Expr.Local.var = ("closure", 0) in
+    let closure_var : Expr.Local.var = Closure in
     let closure_args =
       let first_arg_field = 3 in
       List.init (n - 1) (fun i : Expr.t ->
@@ -1012,7 +1036,7 @@ module Conv = struct
   let caml_curry_alloc ~param_arg ~env_arg n m : Expr.t =
     (* arity, func, env, arg1..., argn-1, argn *)
     let closure_arg_typ = Type.Var.Partial_closure (n, m) in
-    let closure_var : Expr.Local.var = ("closure", 0) in
+    let closure_var : Expr.Local.var = Closure in
     let closure_local = Expr.Local.V closure_var in
     let closure_args =
       let first_arg_field = 3 in
