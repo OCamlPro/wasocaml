@@ -918,6 +918,8 @@ module Conv = struct
       let arg = arg1 args in
       let typ : Type.Var.t = Block { size = field + 1 } in
       Unop (Struct_get { typ; field = field + 2 }, Ref_cast { typ; r = arg })
+    | Popaque ->
+      arg1 args
     | _ ->
       let msg =
         Format.asprintf "TODO prim %a" Printclambda_primitives.primitive prim
