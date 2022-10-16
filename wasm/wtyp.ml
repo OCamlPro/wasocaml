@@ -213,6 +213,11 @@ module Func_id = struct
   let of_closure_id closure_id =
     let var = Closure_id.unwrap closure_id in
     of_var_closure_id var
+
+  let prim_func_name ({ prim_native_name; prim_name } : Primitive.description) =
+    if prim_native_name <> "" then prim_native_name else prim_name
+
+  let prim_name descr = C_import (prim_func_name descr)
 end
 
 module Param = struct
@@ -290,6 +295,10 @@ module Expr = struct
     | I32_add
     | I32_sub
     | I32_mul
+    | F64_add
+    | F64_sub
+    | F64_mul
+    | F64_div
     | Struct_set of
         { typ : Type.Var.t
         ; field : int
@@ -343,6 +352,10 @@ module Expr = struct
     | I32_add -> Format.fprintf ppf "I32_add"
     | I32_sub -> Format.fprintf ppf "I32_sub"
     | I32_mul -> Format.fprintf ppf "I32_mul"
+    | F64_add -> Format.fprintf ppf "F64_add"
+    | F64_sub -> Format.fprintf ppf "F64_sub"
+    | F64_mul -> Format.fprintf ppf "F64_mul"
+    | F64_div -> Format.fprintf ppf "F64_div"
     | Struct_set { typ; field } ->
       Format.fprintf ppf "@[<hov 2>Struct_set(%a).(%i)@]" Type.Var.print typ
         field
@@ -600,6 +613,30 @@ module Conv = struct
 
   let cast_to_env r = Expr.Ref_cast { typ = Type.Var.Env; r }
 
+  let box_float x : Expr.t = Struct_new (Type.Var.Float, [ x ])
+
+  let unbox_float x : Expr.t =
+    let typ = Type.Var.Float in
+    Unop (Struct_get { typ; field = 0 }, Ref_cast { typ; r = x })
+
+  let box_int (kind : Primitive.boxed_integer) x : Expr.t =
+    let typ : Type.Var.t =
+      match kind with
+      | Pint32 -> Int32
+      | Pint64 -> Int64
+      | Pnativeint -> Nativeint
+    in
+    Struct_new (typ, [ x ])
+
+  let unbox_int (kind : Primitive.boxed_integer) x : Expr.t =
+    let typ : Type.Var.t =
+      match kind with
+      | Pint32 -> Int32
+      | Pint64 -> Int64
+      | Pnativeint -> Nativeint
+    in
+    Unop (Struct_get { typ; field = 0 }, Ref_cast { typ; r = x })
+
   let conv_apply env (apply : Flambda.apply) : Expr.t =
     match apply.kind with
     | Indirect -> failwith "TODO call indirect"
@@ -845,9 +882,33 @@ module Conv = struct
     | Paddint -> i31 (Expr.Binop (I32_add, args2 (List.map i32 args)))
     | Psubint -> i31 (Expr.Binop (I32_sub, args2 (List.map i32 args)))
     | Pmulint -> i31 (Expr.Binop (I32_mul, args2 (List.map i32 args)))
+    | Paddfloat ->
+      box_float (Expr.Binop (F64_add, args2 (List.map unbox_float args)))
+    | Psubfloat ->
+      box_float (Expr.Binop (F64_sub, args2 (List.map unbox_float args)))
+    | Pmulfloat ->
+      box_float (Expr.Binop (F64_mul, args2 (List.map unbox_float args)))
+    | Pdivfloat ->
+      box_float (Expr.Binop (F64_div, args2 (List.map unbox_float args)))
     | Pccall descr ->
+      let unbox_arg (t : Primitive.native_repr) arg =
+        match t with
+        | Same_as_ocaml_repr -> arg
+        | Unboxed_float -> unbox_float arg
+        | Unboxed_integer kind -> unbox_int kind arg
+        | Untagged_int -> i32 arg
+      in
+      let box_result (t : Primitive.native_repr) res =
+        match t with
+        | Same_as_ocaml_repr -> res
+        | Unboxed_float -> box_float res
+        | Unboxed_integer kind -> box_int kind res
+        | Untagged_int -> i31 res
+      in
       State.add_c_import descr;
-      Call { args; func = Func_id.C_import descr.prim_name }
+      let args = List.map2 unbox_arg descr.prim_native_repr_args args in
+      box_result descr.prim_native_repr_res
+        (Call { args; func = Func_id.prim_name descr })
     | Pmakeblock (tag, _mut, _shape) ->
       let size = List.length args in
       Struct_new
@@ -999,6 +1060,8 @@ module Conv = struct
 
   let c_import (descr : Primitive.description) =
     let repr_type (t : Primitive.native_repr) : Type.atom =
+      if descr.prim_native_name = "" then
+        assert (t = Primitive.Same_as_ocaml_repr);
       match t with
       | Same_as_ocaml_repr -> Type.Any
       | Unboxed_float -> Type.F64
@@ -1009,7 +1072,12 @@ module Conv = struct
     in
     let params = List.map repr_type descr.prim_native_repr_args in
     let result = [ repr_type descr.prim_native_repr_res ] in
-    Func.Import { params; result; module_ = "import"; name = descr.prim_name }
+    Func.Import
+      { params
+      ; result
+      ; module_ = "import"
+      ; name = Func_id.prim_func_name descr
+      }
 
   let func_1_and_env =
     let env =
@@ -1081,7 +1149,7 @@ module Conv = struct
     let decls =
       C_import.Set.fold
         (fun (descr : Primitive.description) decls ->
-          let name = Func_id.C_import descr.prim_name in
+          let name = Func_id.prim_name descr in
           let descr = c_import descr in
           Decl.Func { name; descr } :: decls )
         !State.c_imports decls
@@ -1212,10 +1280,10 @@ module ToWasm = struct
     let reft name = node "ref" [ type_name name ]
 
     let struct_new_canon typ fields =
-      node "struct.new_canon" ((type_name typ) :: fields)
+      node "struct.new_canon" (type_name typ :: fields)
 
     let array_new_canon_fixed typ size =
-      node "array.new_canon_fixed" [type_name typ ; Int (Int64.of_int size)]
+      node "array.new_canon_fixed" [ type_name typ; Int (Int64.of_int size) ]
 
     let int i = Int (Int64.of_int i)
 
@@ -1310,6 +1378,10 @@ module ToWasm = struct
     | Expr.I32_add -> Cst.atom "i32.add"
     | Expr.I32_sub -> Cst.atom "i32.sub"
     | Expr.I32_mul -> Cst.atom "i32.mul"
+    | Expr.F64_add -> Cst.atom "f64.add"
+    | Expr.F64_sub -> Cst.atom "f64.sub"
+    | Expr.F64_mul -> Cst.atom "f64.mul"
+    | Expr.F64_div -> Cst.atom "f64.div"
     | Expr.Struct_set { typ; field } -> C.struct_set typ field
 
   let conv_unop = function
