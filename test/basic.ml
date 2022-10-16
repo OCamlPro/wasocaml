@@ -14,6 +14,11 @@ external ( /. ) : float -> float -> float = "%divfloat"
 
 external opaque_identity : 'a -> 'a = "%opaque"
 
+type 'a ref = { mutable contents : 'a }
+external ref : 'a -> 'a ref = "%makemutable"
+external ( ! ) : 'a ref -> 'a = "%field0"
+external ( := ) : 'a ref -> 'a -> unit = "%setfield0"
+
 let f x y z =
   x + y - z * x
 
@@ -35,6 +40,21 @@ let s () =
 
 let () =
   h 3
+
+let r = ref 0
+
+let () = r := 1
+
+let () = r := !r + 1
+
+let () = saucisse !r
+
+let rrr n =
+  let r = ref n in
+  r := !r * !r;
+  saucisse !r
+[@@inline never]
+let () = rrr 3
 
 let rec stuff x = stuff x
 
@@ -60,3 +80,10 @@ let () =
 
 let next x = x + 1
 let n = (opaque_identity next) 2
+
+let m =
+  let a = (opaque_identity g) 2 in
+  let () = opaque_identity () in
+  let b = (opaque_identity a) 3 in
+  h b;
+  b

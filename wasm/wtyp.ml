@@ -264,6 +264,7 @@ module Expr = struct
   module Local = struct
     type var =
       | Variable of Variable.t
+      | Mutable of Mutable_variable.t
       | Fresh of string * int
       | Partial_closure
       | Closure
@@ -273,6 +274,9 @@ module Expr = struct
       | Variable v ->
         let name, id = Variable.unique_name_id v in
         Format.asprintf "%s_%i" name id
+      | Mutable v ->
+        let name, id = Mutable_variable.unique_name_id v in
+        Format.asprintf "%s@%i" name id
       | Fresh (name, n) -> Format.asprintf "%s#%i" name n
       | Partial_closure -> "Partial_closure"
       | Closure -> "Closure"
@@ -290,6 +294,8 @@ module Expr = struct
       | Param p -> Param.print ppf p
 
     let var_of_var v = Variable v
+
+    let var_of_mut_var v = Mutable v
 
     let of_var v = V (Variable v)
 
@@ -360,6 +366,10 @@ module Expr = struct
         }
     | Global_get of Global.t
     | Seq of t list
+    | Assign of
+        { being_assigned : Local.var
+        ; new_value : t
+        }
 
   let print_binop ppf = function
     | I32_add -> Format.fprintf ppf "I32_add"
@@ -413,6 +423,9 @@ module Expr = struct
     | Global_get g ->
       Format.fprintf ppf "@[<hov 2>Global_get(%a)@]" Global.print g
     | Seq l -> Format.fprintf ppf "@[<v 2>Seq(%a)@]" (print_list print ";") l
+    | Assign { being_assigned; new_value } ->
+      Format.fprintf ppf "@[<v 2>Assign(%a <- %a)@]" Local.print_var
+        being_assigned print new_value
 
   let let_ var typ defining_expr body = Let { var; typ; defining_expr; body }
 
@@ -445,6 +458,7 @@ module Expr = struct
       | Ref_cast { typ = _; r } -> loop acc r
       | Global_get _ -> acc
       | Seq l -> List.fold_left (fun acc arg -> loop acc arg) acc l
+      | Assign { being_assigned = _; new_value } -> loop acc new_value
     in
     loop Local.Map.empty expr
 end
@@ -559,12 +573,14 @@ module Conv = struct
     { bound_vars : Variable.Set.t
     ; params : Variable.Set.t
     ; closure_vars : Variable.Set.t
+    ; mutables : Mutable_variable.Set.t
     }
 
   let empty_env =
     { bound_vars = Variable.Set.empty
     ; params = Variable.Set.empty
     ; closure_vars = Variable.Set.empty
+    ; mutables = Mutable_variable.Set.empty
     }
 
   let enter_function ~params ~free_vars =
@@ -574,7 +590,11 @@ module Conv = struct
         Variable.Set.empty params
     in
     let closure_vars = Variable.Set.diff free_vars params in
-    { bound_vars = Variable.Set.empty; params; closure_vars }
+    { bound_vars = Variable.Set.empty
+    ; params
+    ; closure_vars
+    ; mutables = Mutable_variable.Set.empty
+    }
 
   let const_float f : Expr.t = Struct_new (Float, [ F64 f ])
 
@@ -596,6 +616,9 @@ module Conv = struct
   let bind_var env var =
     { env with bound_vars = Variable.Set.add var env.bound_vars }
 
+  let bind_mutable_var env var =
+    { env with mutables = Mutable_variable.Set.add var env.mutables }
+
   let conv_var (env : env) (var : Variable.t) : Expr.t =
     begin
       if Variable.Set.mem var env.params then
@@ -608,6 +631,8 @@ module Conv = struct
     end
 
   let dummy_const = 123456789
+
+  let unit_value : Expr.t = Unop (I31_new, I32 0l)
 
   let const_block ~symbols_being_bound tag fields :
       Const.t * (int * Symbol.t) list =
@@ -882,6 +907,16 @@ module Conv = struct
       Let { var = local; typ = Type.Any; defining_expr; body }
     | Var var -> conv_var env var
     | Apply apply -> conv_apply env apply
+    | Let_mutable { var; initial_value; contents_kind = _; body } ->
+      let local = Expr.Local.var_of_mut_var var in
+      let defining_expr = conv_var env initial_value in
+      let body = conv_expr (bind_mutable_var env var) body in
+      Let { var = local; typ = Type.Any; defining_expr; body }
+    | Assign { being_assigned; new_value } ->
+      assert (Mutable_variable.Set.mem being_assigned env.mutables);
+      let being_assigned = Expr.Local.var_of_mut_var being_assigned in
+      let new_value = conv_var env new_value in
+      Seq [ Assign { being_assigned; new_value }; unit_value ]
     (* | If _ -> I *)
     | _ ->
       let msg = Format.asprintf "TODO (conv_expr) %a" Flambda.print expr in
@@ -901,6 +936,7 @@ module Conv = struct
       Unop
         ( Struct_get { typ; field = field + 2 }
         , Global_get (Global.of_symbol symbol) )
+    | Read_mutable mut_var -> Var (V (Expr.Local.var_of_mut_var mut_var))
     | _ ->
       let msg = Format.asprintf "TODO named %a" Flambda.print_named named in
       failwith msg
@@ -959,6 +995,15 @@ module Conv = struct
       let arg = arg1 args in
       let typ : Type.Var.t = Block { size = field + 1 } in
       Unop (Struct_get { typ; field = field + 2 }, Ref_cast { typ; r = arg })
+    | Psetfield (field, _kind, _init) ->
+      let block, value = args2 args in
+      let typ : Type.Var.t = Block { size = field + 1 } in
+      Seq
+        [ Binop
+            ( Struct_set { typ; field = field + 2 }
+            , (Ref_cast { typ; r = block }, value) )
+        ; unit_value
+        ]
     | Popaque -> arg1 args
     | _ ->
       let msg =
@@ -1461,6 +1506,8 @@ module ToWasm = struct
     | Ref_cast { typ; r } -> conv_expr r @ [ C.ref_cast typ ]
     | Global_get g -> [ C.global_get g ]
     | Seq l -> List.flatten (List.map conv_expr l)
+    | Assign { being_assigned; new_value } ->
+      conv_expr new_value @ [ C.local_set (Expr.Local.V being_assigned) ]
 
   let conv_const name (const : Const.t) =
     match const with

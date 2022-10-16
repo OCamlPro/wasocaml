@@ -38,6 +38,7 @@ val rename
 val in_compilation_unit : t -> Compilation_unit.t -> bool
 
 val name : t -> string
+val unique_name_id : t -> string * int
 
 val unique_name : t -> string
 
