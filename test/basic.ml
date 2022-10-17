@@ -87,3 +87,8 @@ let m =
   let b = (opaque_identity a) 3 in
   h b;
   b
+
+let mm =
+  let b = (opaque_identity g) 2 3 in
+  h b;
+  b

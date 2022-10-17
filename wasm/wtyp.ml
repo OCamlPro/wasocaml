@@ -49,6 +49,8 @@ end
 module State = struct
   let arities = ref Arity.Set.empty
 
+  let caml_applies = ref Arity.Set.empty
+
   let block_sizes = ref Arity.Set.empty
 
   let block_float_sizes = ref Arity.Set.empty
@@ -58,6 +60,8 @@ module State = struct
   let c_imports = ref C_import.Set.empty
 
   let add_arity (i : Arity.t) = Arity.Set.(arities += i)
+
+  let add_caml_apply (i : Arity.t) = Arity.Set.(caml_applies += i)
 
   let add_block_size i = Arity.Set.(block_sizes += i)
 
@@ -70,6 +74,7 @@ module State = struct
 
   let reset () =
     arities := Arity.Set.empty;
+    caml_applies := Arity.Set.empty;
     block_sizes := Arity.Set.singleton 0;
     block_float_sizes := Arity.Set.singleton 0;
     closure_types := Closure_type.Set.empty;
@@ -185,6 +190,7 @@ module Func_id = struct
     | V of string * int
     | Symbol of Symbol.t
     | Caml_curry of int * int
+    | Caml_apply of int
     | C_import of string
     | Start
 
@@ -194,6 +200,7 @@ module Func_id = struct
     | Caml_curry (n, m) ->
       if m = 0 then Format.asprintf "Caml_curry_%i" n
       else Format.asprintf "Caml_curry_%i_%i" n m
+    | Caml_apply n -> Format.asprintf "Caml_apply_%i" n
     | C_import s -> Format.asprintf "C_%s" s
     | Start -> "Start"
 
@@ -203,6 +210,7 @@ module Func_id = struct
     | Caml_curry (n, m) ->
       if m = 0 then Format.fprintf ppf "Caml_curry_%i" n
       else Format.fprintf ppf "Caml_curry_%i_%i" n m
+    | Caml_apply n -> Format.fprintf ppf "Caml_apply_%i" n
     | C_import s -> Format.fprintf ppf "C_%s" s
     | Start -> Format.pp_print_string ppf "Start"
 
@@ -654,9 +662,7 @@ module Conv = struct
   and drop_list (l : Expr.t list) =
     match l with
     | [] -> []
-    | [ e ] ->
-      if expr_is_pure e then []
-      else [ drop e ]
+    | [ e ] -> if expr_is_pure e then [] else [ drop e ]
     | h :: t -> h :: drop_list t
 
   let const_block ~symbols_being_bound tag fields :
@@ -729,7 +735,14 @@ module Conv = struct
           ; defining_expr = closure
           ; body = Call_ref { typ; func; args }
           }
-      | _ :: _ :: _ -> failwith "TODO call indirect 2"
+      | _ :: _ :: _ ->
+        let arity = List.length apply.args in
+        let args =
+          cast_to_env (conv_var env apply.func)
+          :: List.map (conv_var env) apply.args
+        in
+        State.add_caml_apply arity;
+        Call { func = Caml_apply arity; args }
     end
     | Direct closure_id ->
       let func = Func_id.of_closure_id closure_id in
@@ -1170,6 +1183,35 @@ module Conv = struct
       ; body
       }
 
+  let caml_apply n =
+    (* TODO apply direct if right number of arguments *)
+    let closure_param = Param.P ("closure", 0) in
+    let param_i i = Param.P ("param", i) in
+    let params = List.init n (fun i -> (param_i i, Type.Any)) in
+    let rec build closure_var n params : Expr.t =
+      let mk_call param =
+        Expr.Call_ref
+          { typ = Func { arity = 1 }
+          ; args = [ Var (Param param); Var closure_var ]
+          ; func = Unop (Struct_get { typ = Env; field = 1 }, Var closure_var)
+          }
+      in
+      match params with
+      | [] -> assert false
+      | [ (param, _typ) ] -> mk_call param
+      | (param, _typ) :: params ->
+        let var : Expr.Local.var = Fresh ("partial_closure", n) in
+        let call : Expr.t = Ref_cast { typ = Env; r = mk_call param } in
+        let body = build (Expr.Local.V var) (n + 1) params in
+        Let { var; typ = Rvar Env; defining_expr = call; body }
+    in
+    let body = build (Param closure_param) 0 params in
+    Func.Decl
+      { params = (closure_param, Type.Rvar Env) :: params
+      ; result = Some Type.Any
+      ; body
+      }
+
   let c_import (descr : Primitive.description) =
     let repr_type (t : Primitive.native_repr) : Type.atom =
       if descr.prim_native_name = "" then
@@ -1256,6 +1298,17 @@ module Conv = struct
               decl :: decls )
             decls ms )
         (Arity.Set.remove 1 !State.arities)
+        decls
+    in
+    let decls =
+      Arity.Set.fold
+        (fun arity decls ->
+          let decl =
+            Decl.Func
+              { name = Func_id.Caml_apply arity; descr = caml_apply arity }
+          in
+          decl :: decls )
+        !State.caml_applies
         decls
     in
     let decls =
