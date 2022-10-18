@@ -604,6 +604,40 @@ module Conv = struct
     ; mutables = Mutable_variable.Set.empty
     }
 
+  module Closure = struct
+    let cast r : Expr.t = Ref_cast { typ = Env; r }
+
+    let get_arity e : Expr.t = Unop (Struct_get { typ = Env; field = 0 }, e)
+
+    let get_gen_func e : Expr.t = Unop (Struct_get { typ = Env; field = 1 }, e)
+
+    let get_direct_func e ~arity : Expr.t =
+      if arity = 1 then get_gen_func e
+      else Unop (Struct_get { typ = Gen_closure { arity }; field = 2 }, e)
+  end
+
+  module Block = struct
+    let get_field ?(cast : unit option) e ~field : Expr.t =
+      let size = field + 1 in
+      State.add_block_size size;
+      let typ : Type.Var.t = Block { size } in
+      let e =
+        match cast with None -> e | Some () -> Expr.(Ref_cast { typ; r = e })
+      in
+      Unop (Struct_get { typ; field = field + 2 }, e)
+
+    let set_field ?(cast : unit option) ~block value ~field : Expr.t =
+      let size = field + 1 in
+      State.add_block_size size;
+      let typ : Type.Var.t = Block { size } in
+      let block =
+        match cast with
+        | None -> block
+        | Some () -> Expr.(Ref_cast { typ; r = block })
+      in
+      Binop (Struct_set { typ; field = field + 2 }, (block, value))
+  end
+
   let const_float f : Expr.t = Struct_new (Float, [ F64 f ])
 
   let const_int32 i : Expr.t = Struct_new (Int32, [ I32 i ])
@@ -687,8 +721,6 @@ module Conv = struct
     in
     (Struct { typ = Type.Var.Block { size }; fields }, !fields_to_update)
 
-  let cast_to_env r = Expr.Ref_cast { typ = Type.Var.Env; r }
-
   let box_float x : Expr.t = Struct_new (Type.Var.Float, [ x ])
 
   let unbox_float x : Expr.t =
@@ -719,26 +751,21 @@ module Conv = struct
       match apply.args with
       | [] -> assert false
       | [ arg ] ->
-        let typ = Type.Var.Func { arity = 1 } in
-        let closure_type = Type.Var.Env in
+        let func_typ = Type.Var.Func { arity = 1 } in
         let var : Expr.Local.var = Indirec_call_closure { arity = 1 } in
-        let closure : Expr.t =
-          Ref_cast { typ = closure_type; r = conv_var env apply.func }
-        in
-        let func : Expr.t =
-          Unop (Struct_get { typ = closure_type; field = 1 }, Var (V var))
-        in
+        let closure : Expr.t = Closure.cast (conv_var env apply.func) in
+        let func : Expr.t = Closure.get_gen_func (Var (V var)) in
         let args : Expr.t list = [ conv_var env arg; Var (V var) ] in
         Let
           { var
-          ; typ = Rvar closure_type
+          ; typ = Rvar Env
           ; defining_expr = closure
-          ; body = Call_ref { typ; func; args }
+          ; body = Call_ref { typ = func_typ; func; args }
           }
       | _ :: _ :: _ ->
         let arity = List.length apply.args in
         let args =
-          cast_to_env (conv_var env apply.func)
+          Closure.cast (conv_var env apply.func)
           :: List.map (conv_var env) apply.args
         in
         State.add_caml_apply arity;
@@ -748,7 +775,7 @@ module Conv = struct
       let func = Func_id.of_closure_id closure_id in
       let args =
         List.map (conv_var env) apply.args
-        @ [ cast_to_env (conv_var env apply.func) ]
+        @ [ Closure.cast (conv_var env apply.func) ]
       in
       Call { func; args }
 
@@ -843,10 +870,9 @@ module Conv = struct
     let size = List.length fields in
     State.add_block_size size;
     let effect (field, expr) : Expr.t =
-      let typ = Type.Var.Block { size } in
-      Binop
-        ( Struct_set { typ; field = field + 2 }
-        , (Global_get (Global.of_symbol symbol), expr) )
+      Block.set_field ~field
+        ~block:(Expr.Global_get (Global.of_symbol symbol))
+        expr
     in
     let effect = List.map effect !fields_to_update in
     (decl, effect)
@@ -862,11 +888,9 @@ module Conv = struct
       let new_effects =
         List.map
           (fun (field_to_update, field_contents) : Expr.t ->
-            let typ = Type.Var.Block { size = field_to_update + 1 } in
-            Binop
-              ( Struct_set { typ; field = field_to_update + 2 }
-              , ( Global_get (Global.of_symbol symbol)
-                , Global_get (Global.of_symbol field_contents) ) ) )
+            Block.set_field ~field:field_to_update
+              ~block:(Expr.Global_get (Global.of_symbol symbol))
+              (Expr.Global_get (Global.of_symbol field_contents)) )
           fields_to_update
       in
       ([ Const { name; descr } ], new_effects)
@@ -970,10 +994,7 @@ module Conv = struct
       Unop (I31_new, I32 (Int32.of_int c))
     | Expr e -> conv_expr env e
     | Read_symbol_field (symbol, field) ->
-      let typ = Type.Var.Block { size = field + 1 } in
-      Unop
-        ( Struct_get { typ; field = field + 2 }
-        , Global_get (Global.of_symbol symbol) )
+      Block.get_field ~field Expr.(Global_get (Global.of_symbol symbol))
     | Read_mutable mut_var -> Var (V (Expr.Local.var_of_mut_var mut_var))
     | _ ->
       let msg = Format.asprintf "TODO named %a" Flambda.print_named named in
@@ -1031,17 +1052,10 @@ module Conv = struct
         , I32 (Int32.of_int tag) :: I32 (Int32.of_int size) :: args )
     | Pfield field ->
       let arg = arg1 args in
-      let typ : Type.Var.t = Block { size = field + 1 } in
-      Unop (Struct_get { typ; field = field + 2 }, Ref_cast { typ; r = arg })
+      Block.get_field ~field ~cast:() arg
     | Psetfield (field, _kind, _init) ->
       let block, value = args2 args in
-      let typ : Type.Var.t = Block { size = field + 1 } in
-      Seq
-        [ Binop
-            ( Struct_set { typ; field = field + 2 }
-            , (Ref_cast { typ; r = block }, value) )
-        ; unit_value
-        ]
+      Seq [ Block.set_field ~cast:() ~field ~block value; unit_value ]
     | Popaque -> arg1 args
     | _ ->
       let msg =
@@ -1106,6 +1120,7 @@ module Conv = struct
     Func { params = params @ [ Type.Rvar Env ]; result = Some Any }
 
   let caml_curry_apply ~param_arg ~env_arg n =
+    assert (n > 1);
     let partial_closure_arg_typ = Type.Var.Partial_closure (n, n - 1) in
     let partial_closure_var : Expr.Local.var = Partial_closure in
     let closure_arg_typ = Type.Var.Gen_closure { arity = n } in
@@ -1120,9 +1135,7 @@ module Conv = struct
     in
     let args = closure_args @ [ Expr.Var param_arg; Expr.Var env_arg ] in
     let func : Expr.t =
-      Unop
-        ( Struct_get { typ = closure_arg_typ; field = 2 }
-        , Expr.Var (Expr.Local.V closure_var) )
+      Closure.get_direct_func (Expr.Var (Expr.Local.V closure_var)) ~arity:n
     in
     Expr.let_ partial_closure_var (Type.Rvar partial_closure_arg_typ)
       (Ref_cast { typ = partial_closure_arg_typ; r = Var env_arg })
@@ -1193,7 +1206,7 @@ module Conv = struct
         Expr.Call_ref
           { typ = Func { arity = 1 }
           ; args = [ Var (Param param); Var closure_var ]
-          ; func = Unop (Struct_get { typ = Env; field = 1 }, Var closure_var)
+          ; func = Closure.get_gen_func (Var closure_var)
           }
       in
       match params with
@@ -1201,7 +1214,7 @@ module Conv = struct
       | [ (param, _typ) ] -> mk_call param
       | (param, _typ) :: params ->
         let var : Expr.Local.var = Fresh ("partial_closure", n) in
-        let call : Expr.t = Ref_cast { typ = Env; r = mk_call param } in
+        let call : Expr.t = Closure.cast (mk_call param) in
         let body = build (Expr.Local.V var) (n + 1) params in
         Let { var; typ = Rvar Env; defining_expr = call; body }
     in
@@ -1308,8 +1321,7 @@ module Conv = struct
               { name = Func_id.Caml_apply arity; descr = caml_apply arity }
           in
           decl :: decls )
-        !State.caml_applies
-        decls
+        !State.caml_applies decls
     in
     let decls =
       C_import.Set.fold
