@@ -140,6 +140,7 @@
    unbox_free_vars_of_closures unbox_specialised_args
 
    ;; wasm/
+   wasm_closure_offsets
    wtyp emit_wast
  )
 )

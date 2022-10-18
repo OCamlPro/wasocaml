@@ -95,6 +95,7 @@ module Type = struct
       | Env
       | Block of { size : int }
       | BlockFloat of { size : int }
+      | Set_of_closures of Set_of_closures_id.t
       | Gen_block
       | I31
       | Float
@@ -116,6 +117,8 @@ module Type = struct
       | Closure { arity; fields } ->
         Format.asprintf "$Closure_%i_%i" arity fields
       | Gen_closure { arity } -> Format.asprintf "$Gen_closure_%i" arity
+      | Set_of_closures set ->
+        Format.asprintf "$Set_of_closures_%a" Set_of_closures_id.print set
       | Float -> "$Float"
       | Int32 -> "$Int32"
       | Int64 -> "$Int64"
@@ -577,21 +580,25 @@ module Module = struct
 end
 
 module Conv = struct
+  type top_env = { offsets : Wasm_closure_offsets.result }
+
   type env =
     { bound_vars : Variable.Set.t
     ; params : Variable.Set.t
     ; closure_vars : Variable.Set.t
     ; mutables : Mutable_variable.Set.t
+    ; top_env : top_env
     }
 
-  let empty_env =
+  let empty_env ~top_env =
     { bound_vars = Variable.Set.empty
     ; params = Variable.Set.empty
     ; closure_vars = Variable.Set.empty
     ; mutables = Mutable_variable.Set.empty
+    ; top_env
     }
 
-  let enter_function ~params ~free_vars =
+  let enter_function ~top_env ~params ~free_vars =
     let params =
       List.fold_left
         (fun params p -> Variable.Set.add (Parameter.var p) params)
@@ -602,6 +609,7 @@ module Conv = struct
     ; params
     ; closure_vars
     ; mutables = Mutable_variable.Set.empty
+    ; top_env
     }
 
   module Closure = struct
@@ -614,6 +622,35 @@ module Conv = struct
     let get_direct_func e ~arity : Expr.t =
       if arity = 1 then get_gen_func e
       else Unop (Struct_get { typ = Gen_closure { arity }; field = 2 }, e)
+
+    let project_closure (top_env : top_env) closure_id set_of_closures : Expr.t =
+      let accessor =
+        Closure_id.Map.find closure_id top_env.offsets.function_accessors
+      in
+      if not accessor.recursive_set then set_of_closures else
+        let typ : Type.Var.t = Set_of_closures accessor.set in
+        Unop (Struct_get { typ; field = accessor.field }, set_of_closures)
+
+    let project_var (top_env : top_env) closure_id var closure : Expr.t =
+      let accessor =
+        Var_within_closure.Map.find var top_env.offsets.free_variable_accessors
+      in
+      let closure_info = Closure_id.Map.find closure_id top_env.offsets.function_accessors in
+      if not accessor.recursive_set then begin
+        let typ : Type.Var.t = Closure { arity = closure_info.arity; fields = accessor.closure_size } in
+        State.add_closure_type ~arity:closure_info.arity ~fields:accessor.closure_size;
+        Unop (Struct_get { typ; field = accessor.field }, closure)
+      end
+      else
+        let closure_typ : Type.Var.t =
+          Closure { arity = closure_info.arity; fields = 1 }
+        in
+        State.add_closure_type ~arity:closure_info.arity ~fields:1;
+        let set_typ : Type.Var.t = Set_of_closures closure_info.set in
+        let set_of_closures : Expr.t =
+          Ref_cast { typ = set_typ; r = Unop (Struct_get { typ = closure_typ; field = 1 }, closure)}
+        in
+        Unop (Struct_get { typ = set_typ; field = accessor.field }, set_of_closures)
   end
 
   module Block = struct
@@ -791,18 +828,22 @@ module Conv = struct
       failwith
         (Format.asprintf "TODO allocated const %a" Allocated_const.print const)
 
-  let rec conv_body (expr : Flambda.program_body) effects : Module.t =
+  let rec conv_body (env : top_env) (expr : Flambda.program_body) effects :
+      Module.t =
     match expr with
     | Let_symbol (symbol, Set_of_closures set, body) ->
-      let decl = closed_function_declarations symbol set.function_decls in
-      let body = conv_body body effects in
+      let decl =
+        closed_function_declarations ~top_env:env symbol set.function_decls
+      in
+      let body = conv_body env body effects in
       decl @ body
     | Let_symbol (symbol, const, body) ->
       let decls, new_effects =
-        conv_symbol ~symbols_being_bound:Symbol.Set.empty symbol const
+        conv_symbol ~top_env:env ~symbols_being_bound:Symbol.Set.empty symbol
+          const
       in
       assert (new_effects = []);
-      let body = conv_body body effects in
+      let body = conv_body env body effects in
       decls @ body
     | Let_rec_symbol (decls, body) ->
       let symbols_being_bound =
@@ -814,19 +855,20 @@ module Conv = struct
         List.fold_left
           (fun (decls, effects) (symbol, const) ->
             let decl, new_effecs =
-              conv_symbol ~symbols_being_bound symbol const
+              conv_symbol ~top_env:env ~symbols_being_bound symbol const
             in
             (decl @ decls, new_effecs @ effects) )
           ([], effects) decls
       in
-      let body = conv_body body effects in
+      let body = conv_body env body effects in
       decls @ body
     | Initialize_symbol (symbol, tag, fields, body) ->
-      let decl, effect = conv_initialize_symbol symbol tag fields in
-      decl :: conv_body body (effect @ effects)
+      let decl, effect = conv_initialize_symbol env symbol tag fields in
+      decl :: conv_body env body (effect @ effects)
     | Effect (expr, body) ->
-      let effect : Expr.t = drop (conv_expr empty_env expr) in
-      conv_body body (effect :: effects)
+      let expr_env = empty_env ~top_env:env in
+      let effect : Expr.t = drop (conv_expr expr_env expr) in
+      conv_body env body (effect :: effects)
     | End _end_symbol ->
       [ Decl.Func
           { name = Start
@@ -835,7 +877,7 @@ module Conv = struct
           }
       ]
 
-  and conv_initialize_symbol symbol tag fields =
+  and conv_initialize_symbol env symbol tag fields =
     let size = List.length fields in
     let fields =
       List.mapi
@@ -849,7 +891,8 @@ module Conv = struct
         (fun (i, expr, field) : Const.field ->
           match field with
           | None ->
-            let expr = conv_expr empty_env expr in
+            let expr_env = empty_env ~top_env:env in
+            let expr = conv_expr expr_env expr in
             fields_to_update := (i, expr) :: !fields_to_update;
             I31 dummy_const
           | Some (field : Flambda.constant_defining_value_block_field) -> (
@@ -877,7 +920,7 @@ module Conv = struct
     let effect = List.map effect !fields_to_update in
     (decl, effect)
 
-  and conv_symbol ~symbols_being_bound symbol
+  and conv_symbol ~top_env ~symbols_being_bound symbol
       (const : Flambda.constant_defining_value) : Decl.t list * Expr.t list =
     match const with
     | Block (tag, fields) ->
@@ -896,20 +939,22 @@ module Conv = struct
       ([ Const { name; descr } ], new_effects)
     | Project_closure (_sym, _closure_id) -> ([], [])
     | Set_of_closures set ->
-      let decl = closed_function_declarations symbol set.function_decls in
+      let decl =
+        closed_function_declarations ~top_env symbol set.function_decls
+      in
       (decl, [])
     | Allocated_const const ->
       let name = Global.of_symbol symbol in
       let descr = conv_allocated_const const in
       ([ Const { name; descr } ], [])
 
-  and closed_function_declarations _symbol
+  and closed_function_declarations ~top_env _symbol
       (declarations : Flambda.function_declarations) : Decl.t list =
     Variable.Map.fold
       (fun name declaration declarations ->
         let function_name = Func_id.of_var_closure_id name in
         let e, closure =
-          closed_function_declaration function_name declaration
+          closed_function_declaration ~top_env function_name declaration
         in
         (* let closure_name = Global.Closure name in *)
         let closure_name =
@@ -923,7 +968,7 @@ module Conv = struct
         :: declarations )
       declarations.funs []
 
-  and closed_function_declaration function_name
+  and closed_function_declaration ~top_env function_name
       (declaration : Flambda.function_declaration) : Func.t * Const.t =
     let arity = List.length declaration.params in
     let params =
@@ -933,7 +978,7 @@ module Conv = struct
     in
     let env =
       enter_function ~params:declaration.params
-        ~free_vars:declaration.free_variables
+        ~free_vars:declaration.free_variables ~top_env
     in
     let body = conv_expr env declaration.body in
     let func =
@@ -958,7 +1003,7 @@ module Conv = struct
     in
     (func, closure)
 
-  and conv_expr env (expr : Flambda.t) : Expr.t =
+  and conv_expr (env : env) (expr : Flambda.t) : Expr.t =
     match expr with
     | Let { var; defining_expr; body = Var v; _ } when Variable.equal var v ->
       conv_named env defining_expr
@@ -984,7 +1029,7 @@ module Conv = struct
       let msg = Format.asprintf "TODO (conv_expr) %a" Flambda.print expr in
       failwith msg
 
-  and conv_named env (named : Flambda.named) : Expr.t =
+  and conv_named (env : env) (named : Flambda.named) : Expr.t =
     match named with
     | Prim (prim, args, _dbg) -> conv_prim env ~prim ~args
     | Symbol s -> Global_get (Global.of_symbol s)
@@ -996,6 +1041,12 @@ module Conv = struct
     | Read_symbol_field (symbol, field) ->
       Block.get_field ~field Expr.(Global_get (Global.of_symbol symbol))
     | Read_mutable mut_var -> Var (V (Expr.Local.var_of_mut_var mut_var))
+    | Project_var project_var ->
+        let closure = conv_var env project_var.closure in
+        Closure.project_var env.top_env project_var.closure_id project_var.var closure
+    | Project_closure project_closure ->
+        let set_of_closures = conv_var env project_closure.set_of_closures in
+        Closure.project_closure env.top_env project_closure.closure_id set_of_closures
     | _ ->
       let msg = Format.asprintf "TODO named %a" Flambda.print_named named in
       failwith msg
@@ -1686,7 +1737,9 @@ let run ~output_prefix (flambda : Flambda.program) =
   let print_everything =
     match Sys.getenv_opt "WASMPRINT" with None -> false | Some _ -> true
   in
-  let m = Conv.conv_body flambda.program_body [] in
+  let offsets = Wasm_closure_offsets.compute flambda in
+  let top_env = Conv.{ offsets } in
+  let m = Conv.conv_body top_env flambda.program_body [] in
   if print_everything then
     Format.printf "WASM %s@.%a@." output_prefix Module.print m;
   let common = Conv.make_common () in
