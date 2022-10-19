@@ -1283,7 +1283,7 @@ module Conv = struct
             ( Struct_get { typ = partial_closure_arg_typ; field }
             , Expr.Var (Expr.Local.V partial_closure_var) ) )
     in
-    let args = closure_args @ [ Expr.Var param_arg; Expr.Var env_arg ] in
+    let args = closure_args @ [ Expr.Var param_arg; Expr.Var (V closure_var) ] in
     let func : Expr.t =
       Closure.get_direct_func (Expr.Var (Expr.Local.V closure_var)) ~arity:n
     in
