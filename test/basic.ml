@@ -96,8 +96,18 @@ let mm =
 let set_one x =
   let n = x + x in
   let g y = y + n in
+  let () = () in
   g
 [@@inline never]
 
 let () = saucisse (set_one 12 5)
+
+let set_two x =
+  let n = x + x in
+  let gougou y z = y + n + z in
+  let () = () in
+  gougou
+[@@inline never]
+
+let () = saucisse (set_two 12 5 1)
 

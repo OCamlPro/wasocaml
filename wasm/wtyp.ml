@@ -1052,7 +1052,12 @@ module Conv = struct
       let func_id = Func_id.of_var_closure_id func_var in
       let head_fields =
         if arity = 1 then Expr.[ I32 1l; Ref_func func_id ]
-        else failwith "TODO arity + 1"
+        else
+          Expr.
+            [ I32 (Int32.of_int arity)
+            ; Ref_func (Func_id.Caml_curry (arity, 0))
+            ; Ref_func func_id
+            ]
       in
       Expr.Struct_new (typ, head_fields @ List.rev rev_value_fields)
     end
