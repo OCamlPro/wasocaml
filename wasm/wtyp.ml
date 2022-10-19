@@ -623,11 +623,13 @@ module Conv = struct
       if arity = 1 then get_gen_func e
       else Unop (Struct_get { typ = Gen_closure { arity }; field = 2 }, e)
 
-    let project_closure (top_env : top_env) closure_id set_of_closures : Expr.t =
+    let project_closure (top_env : top_env) closure_id set_of_closures : Expr.t
+        =
       let accessor =
         Closure_id.Map.find closure_id top_env.offsets.function_accessors
       in
-      if not accessor.recursive_set then set_of_closures else
+      if not accessor.recursive_set then set_of_closures
+      else
         let typ : Type.Var.t = Set_of_closures accessor.set in
         Unop (Struct_get { typ; field = accessor.field }, set_of_closures)
 
@@ -635,10 +637,15 @@ module Conv = struct
       let accessor =
         Var_within_closure.Map.find var top_env.offsets.free_variable_accessors
       in
-      let closure_info = Closure_id.Map.find closure_id top_env.offsets.function_accessors in
+      let closure_info =
+        Closure_id.Map.find closure_id top_env.offsets.function_accessors
+      in
       if not accessor.recursive_set then begin
-        let typ : Type.Var.t = Closure { arity = closure_info.arity; fields = accessor.closure_size } in
-        State.add_closure_type ~arity:closure_info.arity ~fields:accessor.closure_size;
+        let typ : Type.Var.t =
+          Closure { arity = closure_info.arity; fields = accessor.closure_size }
+        in
+        State.add_closure_type ~arity:closure_info.arity
+          ~fields:accessor.closure_size;
         Unop (Struct_get { typ; field = accessor.field }, closure)
       end
       else
@@ -648,9 +655,13 @@ module Conv = struct
         State.add_closure_type ~arity:closure_info.arity ~fields:1;
         let set_typ : Type.Var.t = Set_of_closures closure_info.set in
         let set_of_closures : Expr.t =
-          Ref_cast { typ = set_typ; r = Unop (Struct_get { typ = closure_typ; field = 1 }, closure)}
+          Ref_cast
+            { typ = set_typ
+            ; r = Unop (Struct_get { typ = closure_typ; field = 1 }, closure)
+            }
         in
-        Unop (Struct_get { typ = set_typ; field = accessor.field }, set_of_closures)
+        Unop
+          (Struct_get { typ = set_typ; field = accessor.field }, set_of_closures)
   end
 
   module Block = struct
@@ -831,28 +842,34 @@ module Conv = struct
   let closure_type (set_of_closures : Flambda.set_of_closures) =
     let Flambda.{ function_decls; free_vars } = set_of_closures in
     let is_recursive = Variable.Map.cardinal function_decls.funs > 1 in
-    if not is_recursive then None else begin
+    if not is_recursive then None
+    else begin
       let func_types =
-        Variable.Map.fold (fun _id (function_decl : Flambda.function_declaration) acc ->
+        Variable.Map.fold
+          (fun _id (function_decl : Flambda.function_declaration) acc ->
             let arity = Flambda_utils.function_arity function_decl in
             let typ : Type.atom = Rvar (Closure { arity; fields = 1 }) in
-            typ :: acc)
+            typ :: acc )
           function_decls.funs []
       in
       let rev_fields =
-        Variable.Map.fold (fun _id _var acc ->
+        Variable.Map.fold
+          (fun _id _var acc ->
             let typ : Type.atom = Any in
-            typ :: acc)
+            typ :: acc )
           free_vars func_types
       in
-      let descr : Type.descr = Struct { sub = None; fields = List.rev rev_fields } in
-      let name : Type.Var.t = Set_of_closures function_decls.set_of_closures_id in
+      let descr : Type.descr =
+        Struct { sub = None; fields = List.rev rev_fields }
+      in
+      let name : Type.Var.t =
+        Set_of_closures function_decls.set_of_closures_id
+      in
       Some (Decl.Type (name, descr))
     end
 
   let closure_types (program : Flambda.program) =
-    List.filter_map closure_type
-      (Flambda_utils.all_sets_of_closures program)
+    List.filter_map closure_type (Flambda_utils.all_sets_of_closures program)
 
   let rec conv_body (env : top_env) (expr : Flambda.program_body) effects :
       Module.t =
@@ -979,7 +996,7 @@ module Conv = struct
     Variable.Map.fold
       (fun name declaration declarations ->
         let function_name = Func_id.of_var_closure_id name in
-        let e, closure =
+        let closure =
           closed_function_declaration ~top_env function_name declaration
         in
         (* let closure_name = Global.Closure name in *)
@@ -989,14 +1006,59 @@ module Conv = struct
           in
           Global.of_symbol closure_symbol
         in
-        Decl.Func { name = function_name; descr = e }
-        :: Decl.Const { name = closure_name; descr = closure }
+        Decl.Const { name = closure_name; descr = closure }
         :: declarations )
       declarations.funs []
 
-  and closed_function_declaration ~top_env function_name
-      (declaration : Flambda.function_declaration) : Func.t * Const.t =
+  and closed_function_declaration ~top_env:_ function_name
+      (declaration : Flambda.function_declaration) : Const.t =
     let arity = List.length declaration.params in
+    let closure =
+      let fields : Const.field list =
+        State.add_arity arity;
+        State.add_closure_type ~arity ~fields:0;
+        if arity = 1 then [ I8 1; Ref_func function_name ]
+        else
+          [ I8 arity
+          ; Ref_func (Func_id.Caml_curry (arity, 0))
+          ; Ref_func function_name
+          ]
+      in
+      Const.Struct { typ = Type.Var.Closure { arity; fields = 0 }; fields }
+    in
+    closure
+
+  and conv_set_of_closures env (set_of_closures : Flambda.set_of_closures) :
+      Expr.t =
+    let function_decls = set_of_closures.function_decls in
+    let is_recursive = Variable.Map.cardinal function_decls.funs > 1 in
+    if not is_recursive then begin
+      let func_var, function_decl = Variable.Map.choose function_decls.funs in
+      let arity = Flambda_utils.function_arity function_decl in
+      let fields = Variable.Map.cardinal set_of_closures.free_vars in
+      State.add_closure_type ~arity ~fields;
+      let typ : Type.Var.t = Closure { arity; fields } in
+      let rev_value_fields =
+        Variable.Map.fold
+          (fun _id (var : Flambda.specialised_to) acc ->
+            conv_var env var.var :: acc )
+          set_of_closures.free_vars []
+      in
+      let func_id = Func_id.of_var_closure_id func_var in
+      let head_fields =
+        if arity = 1 then Expr.[ I32 1l; Ref_func func_id ]
+        else failwith "TODO arity + 1"
+      in
+      Expr.Struct_new (typ, head_fields @ List.rev rev_value_fields)
+    end
+    else begin
+      failwith "Recursive set of closures"
+    end
+
+  and conv_function_declaration ~top_env function_name
+      (declaration : Flambda.function_declaration) : Decl.t =
+    let arity = List.length declaration.params in
+    State.add_arity arity;
     let params =
       List.map
         (fun p -> (Param.of_var (Parameter.var p), Type.Any))
@@ -1014,20 +1076,8 @@ module Conv = struct
         ; body
         }
     in
-    let closure =
-      let fields : Const.field list =
-        State.add_arity arity;
-        State.add_closure_type ~arity ~fields:0;
-        if arity = 1 then [ I8 1; Ref_func function_name ]
-        else
-          [ I8 arity
-          ; Ref_func (Func_id.Caml_curry (arity, 0))
-          ; Ref_func function_name
-          ]
-      in
-      Const.Struct { typ = Type.Var.Closure { arity; fields = 0 }; fields }
-    in
-    (func, closure)
+    let name = Func_id.of_var_closure_id function_name in
+    Decl.Func { name; descr = func }
 
   and conv_expr (env : env) (expr : Flambda.t) : Expr.t =
     match expr with
@@ -1068,11 +1118,14 @@ module Conv = struct
       Block.get_field ~field Expr.(Global_get (Global.of_symbol symbol))
     | Read_mutable mut_var -> Var (V (Expr.Local.var_of_mut_var mut_var))
     | Project_var project_var ->
-        let closure = conv_var env project_var.closure in
-        Closure.project_var env.top_env project_var.closure_id project_var.var closure
+      let closure = conv_var env project_var.closure in
+      Closure.project_var env.top_env project_var.closure_id project_var.var
+        closure
     | Project_closure project_closure ->
-        let set_of_closures = conv_var env project_closure.set_of_closures in
-        Closure.project_closure env.top_env project_closure.closure_id set_of_closures
+      let set_of_closures = conv_var env project_closure.set_of_closures in
+      Closure.project_closure env.top_env project_closure.closure_id
+        set_of_closures
+    | Set_of_closures set -> conv_set_of_closures env set
     | _ ->
       let msg = Format.asprintf "TODO named %a" Flambda.print_named named in
       failwith msg
@@ -1139,6 +1192,20 @@ module Conv = struct
         Format.asprintf "TODO prim %a" Printclambda_primitives.primitive prim
       in
       failwith msg
+
+  let conv_functions ~top_env (flambda : Flambda.program) =
+    List.fold_left
+      (fun decls (set_of_closures : Flambda.set_of_closures) ->
+        let function_decls = set_of_closures.function_decls in
+        Variable.Map.fold
+          (fun var function_declaration decls ->
+            let decl =
+              conv_function_declaration ~top_env var function_declaration
+            in
+            decl :: decls )
+          function_decls.funs decls )
+      []
+      (Flambda_utils.all_sets_of_closures flambda)
 
   let block_type size : Type.descr =
     let fields = List.init size (fun _ -> Type.Any) in
@@ -1767,7 +1834,8 @@ let run ~output_prefix (flambda : Flambda.program) =
   let top_env = Conv.{ offsets } in
   let m = Conv.conv_body top_env flambda.program_body [] in
   let closure_types = Conv.closure_types flambda in
-  let m = closure_types @ m in
+  let functions = Conv.conv_functions ~top_env flambda in
+  let m = closure_types @ functions @ m in
   if print_everything then
     Format.printf "WASM %s@.%a@." output_prefix Module.print m;
   let common = Conv.make_common () in
