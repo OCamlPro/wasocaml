@@ -875,15 +875,12 @@ module Conv = struct
       Module.t =
     match expr with
     | Let_symbol (symbol, Set_of_closures set, body) ->
-      let decl =
-        closed_function_declarations ~top_env:env symbol set.function_decls
-      in
+      let decl = closed_function_declarations symbol set.function_decls in
       let body = conv_body env body effects in
       decl @ body
     | Let_symbol (symbol, const, body) ->
       let decls, new_effects =
-        conv_symbol ~top_env:env ~symbols_being_bound:Symbol.Set.empty symbol
-          const
+        conv_symbol ~symbols_being_bound:Symbol.Set.empty symbol const
       in
       assert (new_effects = []);
       let body = conv_body env body effects in
@@ -898,7 +895,7 @@ module Conv = struct
         List.fold_left
           (fun (decls, effects) (symbol, const) ->
             let decl, new_effecs =
-              conv_symbol ~top_env:env ~symbols_being_bound symbol const
+              conv_symbol ~symbols_being_bound symbol const
             in
             (decl @ decls, new_effecs @ effects) )
           ([], effects) decls
@@ -963,7 +960,7 @@ module Conv = struct
     let effect = List.map effect !fields_to_update in
     (decl, effect)
 
-  and conv_symbol ~top_env ~symbols_being_bound symbol
+  and conv_symbol ~symbols_being_bound symbol
       (const : Flambda.constant_defining_value) : Decl.t list * Expr.t list =
     match const with
     | Block (tag, fields) ->
@@ -982,51 +979,40 @@ module Conv = struct
       ([ Const { name; descr } ], new_effects)
     | Project_closure (_sym, _closure_id) -> ([], [])
     | Set_of_closures set ->
-      let decl =
-        closed_function_declarations ~top_env symbol set.function_decls
-      in
+      let decl = closed_function_declarations symbol set.function_decls in
       (decl, [])
     | Allocated_const const ->
       let name = Global.of_symbol symbol in
       let descr = conv_allocated_const const in
       ([ Const { name; descr } ], [])
 
-  and closed_function_declarations ~top_env _symbol
+  and closed_function_declarations _symbol
       (declarations : Flambda.function_declarations) : Decl.t list =
     Variable.Map.fold
-      (fun name declaration declarations ->
+      (fun name (declaration : Flambda.function_declaration) declarations ->
         let function_name = Func_id.of_var_closure_id name in
+        let arity = List.length declaration.params in
         let closure =
-          closed_function_declaration ~top_env function_name declaration
+          let fields : Const.field list =
+            State.add_arity arity;
+            State.add_closure_type ~arity ~fields:0;
+            if arity = 1 then [ I8 1; Ref_func function_name ]
+            else
+              [ I8 arity
+              ; Ref_func (Func_id.Caml_curry (arity, 0))
+              ; Ref_func function_name
+              ]
+          in
+          Const.Struct { typ = Type.Var.Closure { arity; fields = 0 }; fields }
         in
-        (* let closure_name = Global.Closure name in *)
         let closure_name =
           let closure_symbol =
             Compilenv.closure_symbol (Closure_id.wrap name)
           in
           Global.of_symbol closure_symbol
         in
-        Decl.Const { name = closure_name; descr = closure }
-        :: declarations )
+        Decl.Const { name = closure_name; descr = closure } :: declarations )
       declarations.funs []
-
-  and closed_function_declaration ~top_env:_ function_name
-      (declaration : Flambda.function_declaration) : Const.t =
-    let arity = List.length declaration.params in
-    let closure =
-      let fields : Const.field list =
-        State.add_arity arity;
-        State.add_closure_type ~arity ~fields:0;
-        if arity = 1 then [ I8 1; Ref_func function_name ]
-        else
-          [ I8 arity
-          ; Ref_func (Func_id.Caml_curry (arity, 0))
-          ; Ref_func function_name
-          ]
-      in
-      Const.Struct { typ = Type.Var.Closure { arity; fields = 0 }; fields }
-    in
-    closure
 
   and conv_set_of_closures env (set_of_closures : Flambda.set_of_closures) :
       Expr.t =
