@@ -92,3 +92,12 @@ let mm =
   let b = (opaque_identity g) 2 3 in
   h b;
   b
+
+let set_one x =
+  let n = x + x in
+  let g y = y + n in
+  g
+[@@inline never]
+
+let () = saucisse (set_one 12 5)
+
