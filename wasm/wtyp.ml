@@ -828,6 +828,32 @@ module Conv = struct
       failwith
         (Format.asprintf "TODO allocated const %a" Allocated_const.print const)
 
+  let closure_type (set_of_closures : Flambda.set_of_closures) =
+    let Flambda.{ function_decls; free_vars } = set_of_closures in
+    let is_recursive = Variable.Map.cardinal function_decls.funs > 1 in
+    if not is_recursive then None else begin
+      let func_types =
+        Variable.Map.fold (fun _id (function_decl : Flambda.function_declaration) acc ->
+            let arity = Flambda_utils.function_arity function_decl in
+            let typ : Type.atom = Rvar (Closure { arity; fields = 1 }) in
+            typ :: acc)
+          function_decls.funs []
+      in
+      let rev_fields =
+        Variable.Map.fold (fun _id _var acc ->
+            let typ : Type.atom = Any in
+            typ :: acc)
+          free_vars func_types
+      in
+      let descr : Type.descr = Struct { sub = None; fields = List.rev rev_fields } in
+      let name : Type.Var.t = Set_of_closures function_decls.set_of_closures_id in
+      Some (Decl.Type (name, descr))
+    end
+
+  let closure_types (program : Flambda.program) =
+    List.filter_map closure_type
+      (Flambda_utils.all_sets_of_closures program)
+
   let rec conv_body (env : top_env) (expr : Flambda.program_body) effects :
       Module.t =
     match expr with
@@ -1740,6 +1766,8 @@ let run ~output_prefix (flambda : Flambda.program) =
   let offsets = Wasm_closure_offsets.compute flambda in
   let top_env = Conv.{ offsets } in
   let m = Conv.conv_body top_env flambda.program_body [] in
+  let closure_types = Conv.closure_types flambda in
+  let m = closure_types @ m in
   if print_everything then
     Format.printf "WASM %s@.%a@." output_prefix Module.print m;
   let common = Conv.make_common () in
