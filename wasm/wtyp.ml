@@ -635,8 +635,8 @@ module Conv = struct
       if arity = 1 then get_gen_func e
       else Unop (Struct_get { typ = Gen_closure { arity }; field = 2 }, e)
 
-    let project_closure ?(cast : unit option) (top_env : top_env) closure_id set_of_closures : Expr.t
-        =
+    let project_closure ?(cast : unit option) (top_env : top_env) closure_id
+        set_of_closures : Expr.t =
       let accessor =
         Closure_id.Map.find closure_id top_env.offsets.function_accessors
       in
@@ -689,9 +689,7 @@ module Conv = struct
         State.add_closure_type ~arity:closure_info.arity ~fields:1;
         let set_typ : Type.Var.t = Set_of_closures closure_info.set in
         let set_of_closures : Expr.t =
-          let field =
-            if closure_info.arity = 1 then 2 else 3
-          in
+          let field = if closure_info.arity = 1 then 2 else 3 in
           Ref_cast
             { typ = set_typ
             ; r = Unop (Struct_get { typ = closure_typ; field }, closure)
@@ -721,9 +719,7 @@ module Conv = struct
         State.add_closure_type ~arity:start_from_info.arity ~fields:1;
         let set_typ : Type.Var.t = Set_of_closures start_from_info.set in
         let set_of_closures : Expr.t =
-          let field =
-            if start_from_info.arity = 1 then 2 else 3
-          in
+          let field = if start_from_info.arity = 1 then 2 else 3 in
           Ref_cast
             { typ = set_typ
             ; r = Unop (Struct_get { typ = closure_typ; field }, closure)
@@ -1146,36 +1142,40 @@ module Conv = struct
         in
         Let { var = Variable func_var; typ = Rvar typ; defining_expr; body }
       in
-      let set_var : Expr.Local.var = Set_of_closures function_decls.set_of_closures_id in
-      let update_fields func_var (function_decl : Flambda.function_declaration) updates : Expr.t list =
+      let set_var : Expr.Local.var =
+        Set_of_closures function_decls.set_of_closures_id
+      in
+      let update_fields func_var (function_decl : Flambda.function_declaration)
+          updates : Expr.t list =
         let arity = Flambda_utils.function_arity function_decl in
         let typ : Type.Var.t = Closure { arity; fields = 1 } in
         let field = if arity = 1 then 2 else 3 in
-        Binop(Struct_set { typ; field }, (Var (V (Variable func_var)), Var (V set_var))) :: updates
+        Binop
+          ( Struct_set { typ; field }
+          , (Var (V (Variable func_var)), Var (V set_var)) )
+        :: updates
       in
       let update_fields =
         Variable.Map.fold update_fields function_decls.funs []
       in
       let build_set body : Expr.t =
-        let typ : Type.Var.t = Set_of_closures function_decls.set_of_closures_id in
+        let typ : Type.Var.t =
+          Set_of_closures function_decls.set_of_closures_id
+        in
         let func_fields =
-          List.map (fun (func_var, _) : Expr.t ->
-              Var (V (Variable func_var))
-            )
+          List.map
+            (fun (func_var, _) : Expr.t -> Var (V (Variable func_var)))
             (Variable.Map.bindings function_decls.funs)
         in
         let free_vars =
-          List.map (fun (_, (var : Flambda.specialised_to)) ->
-              conv_var env var.var
-            )
+          List.map
+            (fun (_, (var : Flambda.specialised_to)) -> conv_var env var.var)
             (Variable.Map.bindings set_of_closures.free_vars)
         in
         let defining_expr = Expr.Struct_new (typ, func_fields @ free_vars) in
         Let { var = set_var; typ = Rvar typ; defining_expr; body }
       in
-      let expr =
-        Expr.Seq (update_fields @ [Expr.Var (V set_var)])
-      in
+      let expr = Expr.Seq (update_fields @ [ Expr.Var (V set_var) ]) in
       let expr = build_set expr in
       Variable.Map.fold add_closure function_decls.funs expr
     end
