@@ -1251,6 +1251,10 @@ module Conv = struct
       let set_of_closures = conv_var env project_closure.set_of_closures in
       Closure.project_closure ~cast:() env.top_env project_closure.closure_id
         set_of_closures
+    | Move_within_set_of_closures move ->
+      let closure = conv_var env move.closure in
+      Closure.move_within_set_of_closures ~cast:() env.top_env
+        ~start_from:move.start_from ~move_to:move.move_to closure
     | Set_of_closures set -> conv_set_of_closures env set
     | _ ->
       let msg = Format.asprintf "TODO named %a" Flambda.print_named named in
