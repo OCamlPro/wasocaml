@@ -275,6 +275,7 @@ module Expr = struct
   module Local = struct
     type var =
       | Variable of Variable.t
+      | Set_of_closures of Set_of_closures_id.t
       | Mutable of Mutable_variable.t
       | Fresh of string * int
       | Partial_closure
@@ -285,6 +286,8 @@ module Expr = struct
       | Variable v ->
         let name, id = Variable.unique_name_id v in
         Format.asprintf "%s_%i" name id
+      | Set_of_closures id ->
+        Format.asprintf "Set_%a" Set_of_closures_id.print id
       | Mutable v ->
         let name, id = Mutable_variable.unique_name_id v in
         Format.asprintf "%s@%i" name id
@@ -586,6 +589,7 @@ module Conv = struct
     { bound_vars : Variable.Set.t
     ; params : Variable.Set.t
     ; closure_vars : Variable.Set.t
+    ; closure_functions : Variable.Set.t
     ; mutables : Mutable_variable.Set.t
     ; current_function : Closure_id.t option
     ; top_env : top_env
@@ -595,21 +599,26 @@ module Conv = struct
     { bound_vars = Variable.Set.empty
     ; params = Variable.Set.empty
     ; closure_vars = Variable.Set.empty
+    ; closure_functions = Variable.Set.empty
     ; mutables = Mutable_variable.Set.empty
     ; current_function = None
     ; top_env
     }
 
-  let enter_function ~top_env ~closure_id ~params ~free_vars =
+  let enter_function ~top_env ~closure_id ~params ~free_vars ~closure_functions
+      =
     let params =
       List.fold_left
         (fun params p -> Variable.Set.add (Parameter.var p) params)
         Variable.Set.empty params
     in
-    let closure_vars = Variable.Set.diff free_vars params in
+    let closure_vars =
+      Variable.Set.diff (Variable.Set.diff free_vars params) closure_functions
+    in
     { bound_vars = Variable.Set.empty
     ; params
     ; closure_vars
+    ; closure_functions
     ; mutables = Mutable_variable.Set.empty
     ; current_function = Some closure_id
     ; top_env
@@ -626,7 +635,7 @@ module Conv = struct
       if arity = 1 then get_gen_func e
       else Unop (Struct_get { typ = Gen_closure { arity }; field = 2 }, e)
 
-    let project_closure (top_env : top_env) closure_id set_of_closures : Expr.t
+    let project_closure ?(cast : unit option) (top_env : top_env) closure_id set_of_closures : Expr.t
         =
       let accessor =
         Closure_id.Map.find closure_id top_env.offsets.function_accessors
@@ -634,12 +643,23 @@ module Conv = struct
       if not accessor.recursive_set then set_of_closures
       else
         let typ : Type.Var.t = Set_of_closures accessor.set in
+        let set_of_closures =
+          match cast with
+          | None -> set_of_closures
+          | Some () -> Expr.Ref_cast { typ; r = set_of_closures }
+        in
         Unop (Struct_get { typ; field = accessor.field }, set_of_closures)
 
     let project_var ?(cast : unit option) (top_env : top_env) closure_id var
         closure : Expr.t =
       let accessor =
-        Var_within_closure.Map.find var top_env.offsets.free_variable_accessors
+        try
+          Var_within_closure.Map.find var
+            top_env.offsets.free_variable_accessors
+        with Not_found ->
+          failwith
+            (Format.asprintf "Missing var_within_closure %a"
+               Var_within_closure.print var )
       in
       let closure_info =
         Closure_id.Map.find closure_id top_env.offsets.function_accessors
@@ -669,13 +689,50 @@ module Conv = struct
         State.add_closure_type ~arity:closure_info.arity ~fields:1;
         let set_typ : Type.Var.t = Set_of_closures closure_info.set in
         let set_of_closures : Expr.t =
+          let field =
+            if closure_info.arity = 1 then 2 else 3
+          in
           Ref_cast
             { typ = set_typ
-            ; r = Unop (Struct_get { typ = closure_typ; field = 1 }, closure)
+            ; r = Unop (Struct_get { typ = closure_typ; field }, closure)
             }
         in
         Unop
           (Struct_get { typ = set_typ; field = accessor.field }, set_of_closures)
+
+    let move_within_set_of_closures ?(cast : unit option) (top_env : top_env)
+        ~start_from ~move_to closure : Expr.t =
+      if Closure_id.equal start_from move_to then closure
+      else begin
+        let start_from_info =
+          Closure_id.Map.find start_from top_env.offsets.function_accessors
+        in
+        let move_to_info =
+          Closure_id.Map.find move_to top_env.offsets.function_accessors
+        in
+        let closure_typ : Type.Var.t =
+          Closure { arity = start_from_info.arity; fields = 1 }
+        in
+        let closure : Expr.t =
+          match cast with
+          | None -> closure
+          | Some () -> Ref_cast { typ = closure_typ; r = closure }
+        in
+        State.add_closure_type ~arity:start_from_info.arity ~fields:1;
+        let set_typ : Type.Var.t = Set_of_closures start_from_info.set in
+        let set_of_closures : Expr.t =
+          let field =
+            if start_from_info.arity = 1 then 2 else 3
+          in
+          Ref_cast
+            { typ = set_typ
+            ; r = Unop (Struct_get { typ = closure_typ; field }, closure)
+            }
+        in
+        Unop
+          ( Struct_get { typ = set_typ; field = move_to_info.field }
+          , set_of_closures )
+      end
   end
 
   module Block = struct
@@ -729,17 +786,24 @@ module Conv = struct
         Var (Expr.Local.Param (Param.of_var var))
       else if Variable.Set.mem var env.bound_vars then
         Var (Expr.Local.of_var var)
-      else if Variable.Set.mem var env.closure_vars then
+      else
         match env.current_function with
         | None -> assert false
         | Some closure_id ->
-          Closure.project_var ~cast:() env.top_env closure_id
-            (Var_within_closure.wrap var)
-            (Var (Param Env))
-      else Misc.fatal_errorf "Unbound variable %a" Variable.print var
+          if Variable.Set.mem var env.closure_vars then
+            Closure.project_var ~cast:() env.top_env closure_id
+              (Var_within_closure.wrap var)
+              (Var (Param Env))
+          else if Variable.Set.mem var env.closure_functions then
+            let move_to = Closure_id.wrap var in
+            Closure.move_within_set_of_closures ~cast:() env.top_env
+              ~start_from:closure_id ~move_to (Var (Param Env))
+          else Misc.fatal_errorf "Unbound variable %a" Variable.print var
     end
 
   let dummy_const = 123456789
+
+  let dummy_value : Expr.t = Unop (I31_new, I32 (Int32.of_int dummy_const))
 
   let unit_value : Expr.t = Unop (I31_new, I32 0l)
 
@@ -1062,10 +1126,61 @@ module Conv = struct
       Expr.Struct_new (typ, head_fields @ List.rev rev_value_fields)
     end
     else begin
-      failwith "Recursive set of closures"
+      let add_closure func_var (function_decl : Flambda.function_declaration)
+          body : Expr.t =
+        let arity = Flambda_utils.function_arity function_decl in
+        let typ : Type.Var.t = Closure { arity; fields = 1 } in
+        let defining_expr : Expr.t =
+          let func_id = Func_id.of_var_closure_id func_var in
+          let fields =
+            if arity = 1 then Expr.[ I32 1l; Ref_func func_id; dummy_value ]
+            else
+              Expr.
+                [ I32 (Int32.of_int arity)
+                ; Ref_func (Func_id.Caml_curry (arity, 0))
+                ; Ref_func func_id
+                ; dummy_value
+                ]
+          in
+          Expr.Struct_new (typ, fields)
+        in
+        Let { var = Variable func_var; typ = Rvar typ; defining_expr; body }
+      in
+      let set_var : Expr.Local.var = Set_of_closures function_decls.set_of_closures_id in
+      let update_fields func_var (function_decl : Flambda.function_declaration) updates : Expr.t list =
+        let arity = Flambda_utils.function_arity function_decl in
+        let typ : Type.Var.t = Closure { arity; fields = 1 } in
+        let field = if arity = 1 then 2 else 3 in
+        Binop(Struct_set { typ; field }, (Var (V (Variable func_var)), Var (V set_var))) :: updates
+      in
+      let update_fields =
+        Variable.Map.fold update_fields function_decls.funs []
+      in
+      let build_set body : Expr.t =
+        let typ : Type.Var.t = Set_of_closures function_decls.set_of_closures_id in
+        let func_fields =
+          List.map (fun (func_var, _) : Expr.t ->
+              Var (V (Variable func_var))
+            )
+            (Variable.Map.bindings function_decls.funs)
+        in
+        let free_vars =
+          List.map (fun (_, (var : Flambda.specialised_to)) ->
+              conv_var env var.var
+            )
+            (Variable.Map.bindings set_of_closures.free_vars)
+        in
+        let defining_expr = Expr.Struct_new (typ, func_fields @ free_vars) in
+        Let { var = set_var; typ = Rvar typ; defining_expr; body }
+      in
+      let expr =
+        Expr.Seq (update_fields @ [Expr.Var (V set_var)])
+      in
+      let expr = build_set expr in
+      Variable.Map.fold add_closure function_decls.funs expr
     end
 
-  and conv_function_declaration ~top_env function_name
+  and conv_function_declaration ~top_env ~closure_functions function_name
       (declaration : Flambda.function_declaration) : Decl.t =
     let arity = List.length declaration.params in
     let closure_id = Closure_id.wrap function_name in
@@ -1077,7 +1192,7 @@ module Conv = struct
     in
     let env =
       enter_function ~closure_id ~params:declaration.params
-        ~free_vars:declaration.free_variables ~top_env
+        ~free_vars:declaration.free_variables ~closure_functions ~top_env
     in
     let body = conv_expr env declaration.body in
     let func =
@@ -1134,7 +1249,7 @@ module Conv = struct
         closure
     | Project_closure project_closure ->
       let set_of_closures = conv_var env project_closure.set_of_closures in
-      Closure.project_closure env.top_env project_closure.closure_id
+      Closure.project_closure ~cast:() env.top_env project_closure.closure_id
         set_of_closures
     | Set_of_closures set -> conv_set_of_closures env set
     | _ ->
@@ -1208,10 +1323,12 @@ module Conv = struct
     List.fold_left
       (fun decls (set_of_closures : Flambda.set_of_closures) ->
         let function_decls = set_of_closures.function_decls in
+        let closure_functions = Variable.Map.keys function_decls.funs in
         Variable.Map.fold
           (fun var function_declaration decls ->
             let decl =
-              conv_function_declaration ~top_env var function_declaration
+              conv_function_declaration ~top_env ~closure_functions var
+                function_declaration
             in
             decl :: decls )
           function_decls.funs decls )
@@ -1288,7 +1405,9 @@ module Conv = struct
             ( Struct_get { typ = partial_closure_arg_typ; field }
             , Expr.Var (Expr.Local.V partial_closure_var) ) )
     in
-    let args = closure_args @ [ Expr.Var param_arg; Expr.Var (V closure_var) ] in
+    let args =
+      closure_args @ [ Expr.Var param_arg; Expr.Var (V closure_var) ]
+    in
     let func : Expr.t =
       Closure.get_direct_func (Expr.Var (Expr.Local.V closure_var)) ~arity:n
     in

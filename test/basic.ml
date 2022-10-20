@@ -95,9 +95,9 @@ let mm =
 
 let set_one x =
   let n = x + x in
-  let g y = y + n in
+  let gooo y = y + n in
   let () = () in
-  g
+  gooo
 [@@inline never]
 
 let () = saucisse (set_one 12 5)
@@ -111,3 +111,10 @@ let set_two x =
 
 let () = saucisse (set_two 12 5 1)
 
+let set x =
+  let rec f a =
+    x + guu a
+  and guu b =
+    1 + f b
+  in
+  f 1
