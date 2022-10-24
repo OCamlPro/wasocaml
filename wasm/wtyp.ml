@@ -358,6 +358,11 @@ module Expr = struct
         ; defining_expr : t
         ; body : t
         }
+    | If_then_else of
+        { var : Local.var
+        ; if_expr : t
+        ; else_expr : t
+        }
     | Binop of binop * (t * t)
     | Unop of unop * t
     | Struct_new of Type.Var.t * t list
@@ -440,6 +445,9 @@ module Expr = struct
     | Assign { being_assigned; new_value } ->
       Format.fprintf ppf "@[<v 2>Assign(%a <- %a)@]" Local.print_var
         being_assigned print new_value
+    | If_then_else { var; if_expr; else_expr } ->
+      Format.fprintf ppf "@[<hov 2>If(%a)Then(%a)Else(%a)@]" Local.print_var var
+        print if_expr print else_expr
 
   let let_ var typ defining_expr body = Let { var; typ; defining_expr; body }
 
@@ -460,6 +468,10 @@ module Expr = struct
       | Binop (_op, (arg1, arg2)) ->
         let acc = loop acc arg1 in
         loop acc arg2
+      | If_then_else { var; if_expr; else_expr } ->
+        let acc = Local.Map.add var (Any : Type.atom) acc in
+        let acc = loop acc if_expr in
+        loop acc else_expr
       | Unop (_op, arg) -> loop acc arg
       | Struct_new (_typ, args) ->
         List.fold_left (fun acc arg -> loop acc arg) acc args
@@ -1226,7 +1238,11 @@ module Conv = struct
       let being_assigned = Expr.Local.var_of_mut_var being_assigned in
       let new_value = conv_var env new_value in
       Seq [ Assign { being_assigned; new_value }; unit_value ]
-    (* | If _ -> I *)
+    | If_then_else (var, if_expr, else_expr) ->
+      let var = Expr.Local.var_of_var var in
+      let if_expr = conv_expr env if_expr in
+      let else_expr = conv_expr env else_expr in
+      If_then_else { var; if_expr; else_expr }
     | _ ->
       let msg = Format.asprintf "TODO (conv_expr) %a" Flambda.print expr in
       failwith msg
@@ -1810,6 +1826,10 @@ module ToWasm = struct
       let res = List.map result res in
       node "func" (name @ List.map param_t params @ res)
 
+    let if_then_else if_expr else_expr =
+      node "if"
+        [ result (Any : Type.atom); node "then" if_expr; node "else" else_expr ]
+
     let type_ name descr = node "type" [ type_name name; descr ]
 
     let sub name descr = node "sub" [ type_name name; descr ]
@@ -1876,6 +1896,10 @@ module ToWasm = struct
     | Seq l -> List.flatten (List.map conv_expr l)
     | Assign { being_assigned; new_value } ->
       conv_expr new_value @ [ C.local_set (Expr.Local.V being_assigned) ]
+    | If_then_else { var; if_expr; else_expr } ->
+      (C.local_get @@ Expr.Local.V var)
+      :: C.ref_cast I31 :: conv_unop Expr.I31_get_s
+      :: [ C.if_then_else (conv_expr if_expr) (conv_expr else_expr) ]
 
   let conv_const name (const : Const.t) =
     match const with
