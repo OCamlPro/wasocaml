@@ -1,4 +1,4 @@
-external saucisse : int -> int -> unit = "saucisse"
+external saucisse : int -> unit = "saucisse"
 
 external ( + ) : int -> int -> int = "%addint"
 
@@ -16,7 +16,7 @@ let g x y = (f [@inlined never]) x x y
 
 let[@inlined never] foo = (f [@inlined never]) 42
 
-let h x = saucisse x x
+let h x = saucisse x
 
 let () = h ((foo [@inlined never]) 1 2)
 
