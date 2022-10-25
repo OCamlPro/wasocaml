@@ -195,6 +195,8 @@ let ref_eq = Type.Rvar Eq
 module Block_id = struct
   type t = string * int
 
+  let not_id (name, n) = ("!" ^ name, n)
+
   let name (name, n) = Format.asprintf "%s_%i" name n
 
   let print ppf id = Format.fprintf ppf "%s" (name id)
@@ -401,6 +403,16 @@ module Expr = struct
         { being_assigned : Local.var
         ; new_value : t
         }
+    | Let_cont of
+        { cont : Block_id.t
+        ; params : (Local.var * Type.atom) list
+        ; handler : t
+        ; body : t
+        }
+    | Apply_cont of
+        { cont : Block_id.t
+        ; args : t list
+        }
 
   let print_binop ppf = function
     | I32_add -> Format.fprintf ppf "I32_add"
@@ -460,6 +472,18 @@ module Expr = struct
     | If_then_else { cond; if_expr; else_expr } ->
       Format.fprintf ppf "@[<hov 2>If(%a)Then(%a)Else(%a)@]" print cond print
         if_expr print else_expr
+    | Let_cont { cont; params; handler; body } ->
+      Format.fprintf ppf "@[<hov 2>Let_cont %a(%a) =@ %a@]@ in@ %a"
+        Block_id.print cont
+        (print_list
+           (fun ppf (local, typ) ->
+             Format.fprintf ppf "%a : %a" Local.print_var local Type.print_atom
+               typ )
+           ", " )
+        params print handler print body
+    | Apply_cont { cont; args } ->
+      Format.fprintf ppf "@[<hov 2>Apply_cont(%a(%a))@]" Block_id.print cont
+        (print_list print ",") args
 
   let let_ var typ defining_expr body = Let { var; typ; defining_expr; body }
 
@@ -497,7 +521,16 @@ module Expr = struct
       | Global_get _ -> acc
       | Seq l -> List.fold_left (fun acc arg -> loop acc arg) acc l
       | Assign { being_assigned = _; new_value } -> loop acc new_value
+      | Let_cont { cont = _; params; handler; body } ->
+        let acc =
+          List.fold_left (fun acc (var, typ) -> add var typ acc) acc params
+        in
+        let acc = loop acc handler in
+        loop acc body
+      | Apply_cont { cont = _; args } ->
+        List.fold_left (fun acc arg -> loop acc arg) acc args
     in
+
     loop Local.Map.empty expr
 end
 
@@ -618,6 +651,7 @@ module Conv = struct
     ; current_function : Closure_id.t option
     ; top_env : top_env
     ; current_block : int
+    ; catch : Block_id.t Static_exception.Map.t
     }
 
   let empty_env ~top_env =
@@ -629,6 +663,7 @@ module Conv = struct
     ; current_function = None
     ; current_block = 0
     ; top_env
+    ; catch = Static_exception.Map.empty
     }
 
   let enter_function ~top_env ~closure_id ~params ~free_vars ~closure_functions
@@ -649,11 +684,17 @@ module Conv = struct
     ; current_function = Some closure_id
     ; current_block = 0
     ; top_env
+    ; catch = Static_exception.Map.empty
     }
 
   let new_block env name : env * Block_id.t =
     let current = env.current_block in
     ({ env with current_block = current + 1 }, (name, current))
+
+  let bind_catch env catch_id : env * Block_id.t =
+    let env, block_id = new_block env "catch" in
+    ( { env with catch = Static_exception.Map.add catch_id block_id env.catch }
+    , block_id )
 
   module Closure = struct
     let cast r : Expr.t = Ref_cast { typ = Env; r }
@@ -1264,6 +1305,24 @@ module Conv = struct
       let if_expr = conv_expr env if_expr in
       let else_expr = conv_expr env else_expr in
       If_then_else { cond; if_expr; else_expr }
+    | Static_catch (id, params, body, handler) ->
+      let body_env, cont = bind_catch env id in
+      let handler_env = List.fold_left bind_var env params in
+      let params =
+        List.map (fun v -> (Expr.Local.var_of_var v, ref_eq)) params
+      in
+      let handler = conv_expr handler_env handler in
+      let body = conv_expr body_env body in
+      Let_cont { cont; params; handler; body }
+    | Static_raise (id, args) ->
+      let cont =
+        try Static_exception.Map.find id env.catch
+        with Not_found ->
+          Misc.fatal_errorf "Unbound static exception %a" Static_exception.print
+            id
+      in
+      let args = List.map (conv_var env) args in
+      Apply_cont { cont; args }
     | _ ->
       let msg = Format.asprintf "TODO (conv_expr) %a" Flambda.print expr in
       failwith msg
@@ -1829,6 +1888,8 @@ module ToWasm = struct
 
     let result t = node "result" [ type_atom t ]
 
+    let results t = node "result" (List.map type_atom t)
+
     let func ~name ~params ~result ~locals ~body =
       let fields = [ !$(Func_id.name name) ] @ params @ result @ locals in
       nodehv "func" fields body
@@ -1852,6 +1913,11 @@ module ToWasm = struct
         ; node "then" if_expr
         ; node "else" else_expr
         ]
+
+    let block id result body =
+      node "block" (!$(Block_id.name id) :: results result :: body)
+
+    let br id = node "br" [ !$(Block_id.name id) ]
 
     let type_ name descr = node "type" [ type_name name; descr ]
 
@@ -1924,6 +1990,19 @@ module ToWasm = struct
     | If_then_else { cond; if_expr; else_expr } ->
       conv_expr cond
       @ [ C.if_then_else (conv_expr if_expr) (conv_expr else_expr) ]
+    | Let_cont { cont; params; handler; body } ->
+      let result_types = List.map snd params in
+      let fallthrough = Block_id.not_id cont in
+      let body = conv_expr body @ [ C.br fallthrough ] in
+      let handler =
+        List.map (fun (var, _typ) -> C.local_set (Expr.Local.V var)) params
+        @ conv_expr handler
+      in
+      [ C.block fallthrough [ ref_eq ]
+          (C.block cont result_types body :: handler)
+      ]
+    | Apply_cont { cont; args } ->
+      List.flatten (List.map conv_expr args) @ [ C.br cont ]
 
   let conv_const name (const : Const.t) =
     match const with
