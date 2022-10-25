@@ -1243,7 +1243,9 @@ module Conv = struct
       let new_value = conv_var env new_value in
       Seq [ Assign { being_assigned; new_value }; unit_value ]
     | If_then_else (var, if_expr, else_expr) ->
-      let cond = conv_var env var in
+      let cond : Expr.t =
+        Unop (Expr.I31_get_s, Ref_cast { typ = I31; r = conv_var env var })
+      in
       let if_expr = conv_expr env if_expr in
       let else_expr = conv_expr env else_expr in
       If_then_else { cond; if_expr; else_expr }
@@ -1903,8 +1905,7 @@ module ToWasm = struct
       conv_expr new_value @ [ C.local_set (Expr.Local.V being_assigned) ]
     | If_then_else { cond; if_expr; else_expr } ->
       conv_expr cond
-      @ C.ref_cast I31 :: conv_unop Expr.I31_get_s
-        :: [ C.if_then_else (conv_expr if_expr) (conv_expr else_expr) ]
+      @ [ C.if_then_else (conv_expr if_expr) (conv_expr else_expr) ]
 
   let conv_const name (const : Const.t) =
     match const with
