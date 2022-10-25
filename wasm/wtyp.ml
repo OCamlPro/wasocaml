@@ -192,6 +192,14 @@ end
 
 let ref_eq = Type.Rvar Eq
 
+module Block_id = struct
+  type t = string * int
+
+  let name (name, n) = Format.asprintf "%s_%i" name n
+
+  let print ppf id = Format.fprintf ppf "%s" (name id)
+end
+
 module Func_id = struct
   type t =
     | V of string * int
@@ -609,6 +617,7 @@ module Conv = struct
     ; mutables : Mutable_variable.Set.t
     ; current_function : Closure_id.t option
     ; top_env : top_env
+    ; current_block : int
     }
 
   let empty_env ~top_env =
@@ -618,6 +627,7 @@ module Conv = struct
     ; closure_functions = Variable.Set.empty
     ; mutables = Mutable_variable.Set.empty
     ; current_function = None
+    ; current_block = 0
     ; top_env
     }
 
@@ -637,8 +647,13 @@ module Conv = struct
     ; closure_functions
     ; mutables = Mutable_variable.Set.empty
     ; current_function = Some closure_id
+    ; current_block = 0
     ; top_env
     }
+
+  let new_block env name : env * Block_id.t =
+    let current = env.current_block in
+    ({ env with current_block = current + 1 }, (name, current))
 
   module Closure = struct
     let cast r : Expr.t = Ref_cast { typ = Env; r }
