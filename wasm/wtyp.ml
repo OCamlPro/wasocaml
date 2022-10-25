@@ -202,6 +202,8 @@ module Block_id = struct
   let print ppf id = Format.fprintf ppf "%s" (name id)
 end
 
+let acceptable_char = function '[' -> '_' | ']' -> '_' | ',' -> '_' | c -> c
+
 module Func_id = struct
   type t =
     | V of string * int
@@ -233,6 +235,7 @@ module Func_id = struct
 
   let of_var_closure_id var =
     let name, id = Variable.unique_name_id var in
+    let name = String.map acceptable_char name in
     V (name, id)
 
   let of_closure_id closure_id =
@@ -282,6 +285,7 @@ module Global = struct
   let of_symbol s =
     let linkage_name = Symbol.label s in
     let name = Linkage_name.to_string linkage_name in
+    let name = String.map acceptable_char name in
     S name
 end
 
