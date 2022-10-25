@@ -3888,33 +3888,70 @@ wasm/emit_wast.cmx : \
     wasm/emit_wast.cmi
 wasm/emit_wast.cmi : \
     middle_end/flambda/flambda.cmi
-wasm/wtyp.cmo : \
+wasm/wasm_closure_offsets.cmo : \
     middle_end/variable.cmi \
+    middle_end/flambda/base_types/var_within_closure.cmi \
+    middle_end/flambda/base_types/set_of_closures_id.cmi \
+    utils/misc.cmi \
+    middle_end/flambda/flambda_utils.cmi \
+    middle_end/flambda/flambda.cmi \
+    middle_end/flambda/base_types/closure_id.cmi \
+    wasm/wasm_closure_offsets.cmi
+wasm/wasm_closure_offsets.cmx : \
+    middle_end/variable.cmx \
+    middle_end/flambda/base_types/var_within_closure.cmx \
+    middle_end/flambda/base_types/set_of_closures_id.cmx \
+    utils/misc.cmx \
+    middle_end/flambda/flambda_utils.cmx \
+    middle_end/flambda/flambda.cmx \
+    middle_end/flambda/base_types/closure_id.cmx \
+    wasm/wasm_closure_offsets.cmi
+wasm/wasm_closure_offsets.cmi : \
+    middle_end/flambda/base_types/var_within_closure.cmi \
+    middle_end/flambda/base_types/set_of_closures_id.cmi \
+    middle_end/flambda/flambda.cmi \
+    middle_end/flambda/base_types/closure_id.cmi
+wasm/wtyp.cmo : \
+    wasm/wasm_closure_offsets.cmi \
+    middle_end/variable.cmi \
+    middle_end/flambda/base_types/var_within_closure.cmi \
     middle_end/flambda/base_types/tag.cmi \
     middle_end/symbol.cmi \
+    middle_end/flambda/base_types/set_of_closures_id.cmi \
     middle_end/printclambda_primitives.cmi \
     typing/primitive.cmi \
     middle_end/flambda/parameter.cmi \
+    middle_end/flambda/base_types/mutable_variable.cmi \
     utils/misc.cmi \
     middle_end/linkage_name.cmi \
+    middle_end/flambda/initialize_symbol_to_let_symbol.cmi \
+    middle_end/flambda/flambda_utils.cmi \
     middle_end/flambda/flambda.cmi \
     middle_end/compilenv.cmi \
     middle_end/flambda/base_types/closure_id.cmi \
     middle_end/clambda_primitives.cmi \
+    middle_end/flambda/allocated_const.cmi \
     wasm/wtyp.cmi
 wasm/wtyp.cmx : \
+    wasm/wasm_closure_offsets.cmx \
     middle_end/variable.cmx \
+    middle_end/flambda/base_types/var_within_closure.cmx \
     middle_end/flambda/base_types/tag.cmx \
     middle_end/symbol.cmx \
+    middle_end/flambda/base_types/set_of_closures_id.cmx \
     middle_end/printclambda_primitives.cmx \
     typing/primitive.cmx \
     middle_end/flambda/parameter.cmx \
+    middle_end/flambda/base_types/mutable_variable.cmx \
     utils/misc.cmx \
     middle_end/linkage_name.cmx \
+    middle_end/flambda/initialize_symbol_to_let_symbol.cmx \
+    middle_end/flambda/flambda_utils.cmx \
     middle_end/flambda/flambda.cmx \
     middle_end/compilenv.cmx \
     middle_end/flambda/base_types/closure_id.cmx \
     middle_end/clambda_primitives.cmx \
+    middle_end/flambda/allocated_const.cmx \
     wasm/wtyp.cmi
 wasm/wtyp.cmi : \
     middle_end/flambda/flambda.cmi
