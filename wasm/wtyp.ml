@@ -105,6 +105,8 @@ module Type = struct
       | String
       | Array
       | FloatArray
+      | Any
+      | Eq
 
     let name = function
       | V (name, n) -> Format.asprintf "$%s_%i" name n
@@ -126,6 +128,8 @@ module Type = struct
       | String -> "$String"
       | Array -> "$Array"
       | FloatArray -> "$FloatArray"
+      | Eq -> "eq"
+      | Any -> "any"
       | I31 -> "i31"
 
     let print ppf v = Format.pp_print_string ppf (name v)
@@ -137,7 +141,6 @@ module Type = struct
     | I32
     | I64
     | F64
-    | Any
     | Rvar of Var.t
 
   type descr =
@@ -160,7 +163,6 @@ module Type = struct
     | I32 -> Format.fprintf ppf "i32"
     | I64 -> Format.fprintf ppf "i64"
     | F64 -> Format.fprintf ppf "f64"
-    | Any -> Format.fprintf ppf "ref_any"
     | Rvar v -> Format.fprintf ppf "ref_%a" Var.print v
 
   let print_descr ppf = function
@@ -187,6 +189,8 @@ module Type = struct
         (print_list print_atom ",")
         params print_atom result
 end
+
+let ref_eq = Type.Rvar Eq
 
 module Func_id = struct
   type t =
@@ -946,7 +950,7 @@ module Conv = struct
       let rev_fields =
         Variable.Map.fold
           (fun _id _var acc ->
-            let typ : Type.atom = Any in
+            let typ : Type.atom = ref_eq in
             typ :: acc )
           free_vars func_types
       in
@@ -1199,7 +1203,7 @@ module Conv = struct
     State.add_arity arity;
     let params =
       List.map
-        (fun p -> (Param.of_var (Parameter.var p), Type.Any))
+        (fun p -> (Param.of_var (Parameter.var p), ref_eq))
         declaration.params
     in
     let env =
@@ -1210,7 +1214,7 @@ module Conv = struct
     let func =
       Func.Decl
         { params = params @ [ (Param.Env, Type.Rvar Type.Var.Env) ]
-        ; result = Some Type.Any
+        ; result = Some ref_eq
         ; body
         }
     in
@@ -1225,14 +1229,14 @@ module Conv = struct
       let local = Expr.Local.var_of_var var in
       let defining_expr = conv_named env defining_expr in
       let body = conv_expr (bind_var env var) body in
-      Let { var = local; typ = Type.Any; defining_expr; body }
+      Let { var = local; typ = ref_eq; defining_expr; body }
     | Var var -> conv_var env var
     | Apply apply -> conv_apply env apply
     | Let_mutable { var; initial_value; contents_kind = _; body } ->
       let local = Expr.Local.var_of_mut_var var in
       let defining_expr = conv_var env initial_value in
       let body = conv_expr (bind_mutable_var env var) body in
-      Let { var = local; typ = Type.Any; defining_expr; body }
+      Let { var = local; typ = ref_eq; defining_expr; body }
     | Assign { being_assigned; new_value } ->
       assert (Mutable_variable.Set.mem being_assigned env.mutables);
       let being_assigned = Expr.Local.var_of_mut_var being_assigned in
@@ -1356,7 +1360,7 @@ module Conv = struct
       (Flambda_utils.all_sets_of_closures flambda)
 
   let block_type size : Type.descr =
-    let fields = List.init size (fun _ -> Type.Any) in
+    let fields = List.init size (fun _ -> ref_eq) in
     let sub : Type.Var.t =
       if size = 1 then Gen_block else Block { size = size - 1 }
     in
@@ -1393,11 +1397,11 @@ module Conv = struct
         ; Rvar (Func { arity }) (* direct call func *)
         ]
     in
-    let fields = List.init fields (fun _ -> Type.Any) in
+    let fields = List.init fields (fun _ -> ref_eq) in
     Struct { sub = Some (Gen_closure { arity }); fields = head @ fields }
 
   let partial_closure_type ~arity ~applied : Type.descr =
-    let args = List.init applied (fun _ -> Type.Any) in
+    let args = List.init applied (fun _ -> ref_eq) in
     let fields : Type.atom list =
       [ Type.I8 (* arity *)
       ; Type.Rvar (Func { arity = 1 }) (* generic func *)
@@ -1408,8 +1412,8 @@ module Conv = struct
     Struct { sub = Some Env; fields }
 
   let func_type size : Type.descr =
-    let params = List.init size (fun _ -> Type.Any) in
-    Func { params = params @ [ Type.Rvar Env ]; result = Some Any }
+    let params = List.init size (fun _ -> ref_eq) in
+    Func { params = params @ [ Type.Rvar Env ]; result = Some ref_eq }
 
   let caml_curry_apply ~param_arg ~env_arg n =
     assert (n > 1);
@@ -1485,8 +1489,8 @@ module Conv = struct
           ~env_arg:(Expr.Local.Param env_arg) n m
     in
     Func.Decl
-      { params = [ (param_arg, Type.Any); (env_arg, Type.Rvar Type.Var.Env) ]
-      ; result = Some Type.Any
+      { params = [ (param_arg, ref_eq); (env_arg, Type.Rvar Type.Var.Env) ]
+      ; result = Some ref_eq
       ; body
       }
 
@@ -1494,7 +1498,7 @@ module Conv = struct
     (* TODO apply direct if right number of arguments *)
     let closure_param = Param.P ("closure", 0) in
     let param_i i = Param.P ("param", i) in
-    let params = List.init n (fun i -> (param_i i, Type.Any)) in
+    let params = List.init n (fun i -> (param_i i, ref_eq)) in
     let rec build closure_var n params : Expr.t =
       let mk_call param =
         Expr.Call_ref
@@ -1515,7 +1519,7 @@ module Conv = struct
     let body = build (Param closure_param) 0 params in
     Func.Decl
       { params = (closure_param, Type.Rvar Env) :: params
-      ; result = Some Type.Any
+      ; result = Some ref_eq
       ; body
       }
 
@@ -1524,7 +1528,7 @@ module Conv = struct
       if descr.prim_native_name = "" then
         assert (t = Primitive.Same_as_ocaml_repr);
       match t with
-      | Same_as_ocaml_repr -> Type.Any
+      | Same_as_ocaml_repr -> ref_eq
       | Unboxed_float -> Type.F64
       | Unboxed_integer Pnativeint -> Type.I32
       | Unboxed_integer Pint32 -> Type.I32
@@ -1570,7 +1574,7 @@ module Conv = struct
     Decl.Type (Type.Var.String, Type.Array { sub = None; fields = I8 })
 
   let array_type =
-    Decl.Type (Type.Var.Array, Type.Array { sub = None; fields = Any })
+    Decl.Type (Type.Var.Array, Type.Array { sub = None; fields = ref_eq })
 
   let floatarray_type =
     Decl.Type (Type.Var.FloatArray, Type.Array { sub = None; fields = F64 })
@@ -1798,7 +1802,6 @@ module ToWasm = struct
       | I32 -> atom "i32"
       | I64 -> atom "i64"
       | F64 -> atom "f64"
-      | Any -> node "ref" [ atom "any" ]
       | Rvar v -> reft v
 
     let local l t = node "local" [ !$(Expr.Local.var_name l); type_atom t ]
@@ -1828,7 +1831,7 @@ module ToWasm = struct
 
     let if_then_else if_expr else_expr =
       node "if"
-        [ result (Any : Type.atom); node "then" if_expr; node "else" else_expr ]
+        [ result (ref_eq : Type.atom); node "then" if_expr; node "else" else_expr ]
 
     let type_ name descr = node "type" [ type_name name; descr ]
 
