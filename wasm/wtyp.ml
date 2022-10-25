@@ -200,6 +200,12 @@ module Block_id = struct
   let name (name, n) = Format.asprintf "%s_%i" name n
 
   let print ppf id = Format.fprintf ppf "%s" (name id)
+
+  let fresh : string -> t =
+    let f = ref 0 in
+    fun name ->
+      incr f;
+      (name, !f)
 end
 
 let acceptable_char = function '[' -> '_' | ']' -> '_' | ',' -> '_' | c -> c
@@ -409,13 +415,19 @@ module Expr = struct
         }
     | Let_cont of
         { cont : Block_id.t
-        ; params : (Local.var * Type.atom) list
+        ; params : (Local.var option * Type.atom) list
         ; handler : t
         ; body : t
         }
     | Apply_cont of
         { cont : Block_id.t
         ; args : t list
+        }
+    | Br_on_cast of
+        { value : t
+        ; typ : Type.Var.t
+        ; if_cast : Block_id.t
+        ; if_else : t
         }
 
   let print_binop ppf = function
@@ -481,13 +493,17 @@ module Expr = struct
         Block_id.print cont
         (print_list
            (fun ppf (local, typ) ->
-             Format.fprintf ppf "%a : %a" Local.print_var local Type.print_atom
-               typ )
+             Format.fprintf ppf "%a : %a"
+               (Format.pp_print_option Local.print_var)
+               local Type.print_atom typ )
            ", " )
         params print handler print body
     | Apply_cont { cont; args } ->
       Format.fprintf ppf "@[<hov 2>Apply_cont(%a(%a))@]" Block_id.print cont
         (print_list print ",") args
+    | Br_on_cast { value; typ; if_cast; if_else } ->
+      Format.fprintf ppf "@[<hov 2>Br_on_cast(%a %a -> (%a) else %a)@]" print
+        value Type.Var.print typ Block_id.print if_cast print if_else
 
   let let_ var typ defining_expr body = Let { var; typ; defining_expr; body }
 
@@ -527,12 +543,18 @@ module Expr = struct
       | Assign { being_assigned = _; new_value } -> loop acc new_value
       | Let_cont { cont = _; params; handler; body } ->
         let acc =
-          List.fold_left (fun acc (var, typ) -> add var typ acc) acc params
+          List.fold_left
+            (fun acc (var, typ) ->
+              match var with None -> acc | Some var -> add var typ acc )
+            acc params
         in
         let acc = loop acc handler in
         loop acc body
       | Apply_cont { cont = _; args } ->
         List.fold_left (fun acc arg -> loop acc arg) acc args
+      | Br_on_cast { value; if_cast = _; if_else } ->
+        let acc = loop acc value in
+        loop acc if_else
     in
 
     loop Local.Map.empty expr
@@ -654,7 +676,6 @@ module Conv = struct
     ; mutables : Mutable_variable.Set.t
     ; current_function : Closure_id.t option
     ; top_env : top_env
-    ; current_block : int
     ; catch : Block_id.t Static_exception.Map.t
     }
 
@@ -665,7 +686,6 @@ module Conv = struct
     ; closure_functions = Variable.Set.empty
     ; mutables = Mutable_variable.Set.empty
     ; current_function = None
-    ; current_block = 0
     ; top_env
     ; catch = Static_exception.Map.empty
     }
@@ -686,17 +706,12 @@ module Conv = struct
     ; closure_functions
     ; mutables = Mutable_variable.Set.empty
     ; current_function = Some closure_id
-    ; current_block = 0
     ; top_env
     ; catch = Static_exception.Map.empty
     }
 
-  let new_block env name : env * Block_id.t =
-    let current = env.current_block in
-    ({ env with current_block = current + 1 }, (name, current))
-
   let bind_catch env catch_id : env * Block_id.t =
-    let env, block_id = new_block env "catch" in
+    let block_id = Block_id.fresh "catch" in
     ( { env with catch = Static_exception.Map.add catch_id block_id env.catch }
     , block_id )
 
@@ -878,6 +893,10 @@ module Conv = struct
   let dummy_value : Expr.t = Unop (I31_new, I32 (Int32.of_int dummy_const))
 
   let unit_value : Expr.t = Unop (I31_new, I32 0l)
+
+  let true_value : Expr.t = Unop (I31_new, I32 1l)
+
+  let false_value : Expr.t = Unop (I31_new, I32 0l)
 
   let rec expr_is_pure (e : Expr.t) =
     match e with
@@ -1313,7 +1332,7 @@ module Conv = struct
       let body_env, cont = bind_catch env id in
       let handler_env = List.fold_left bind_var env params in
       let params =
-        List.map (fun v -> (Expr.Local.var_of_var v, ref_eq)) params
+        List.map (fun v -> (Some (Expr.Local.var_of_var v), ref_eq)) params
       in
       let handler = conv_expr handler_env handler in
       let body = conv_expr body_env body in
@@ -1417,6 +1436,20 @@ module Conv = struct
       let block, value = args2 args in
       Seq [ Block.set_field ~cast:() ~field ~block value; unit_value ]
     | Popaque -> arg1 args
+    | Pisint ->
+      let cont = Block_id.fresh "isint" in
+      Let_cont
+        { cont
+        ; params = [ (None, Type.Rvar I31) ]
+        ; handler = true_value
+        ; body =
+            Br_on_cast
+              { value = arg1 args
+              ; typ = I31
+              ; if_cast = cont
+              ; if_else = false_value
+              }
+        }
     | _ ->
       let msg =
         Format.asprintf "TODO prim %a" Printclambda_primitives.primitive prim
@@ -1854,6 +1887,8 @@ module ToWasm = struct
 
     let i31_new i = node "i31.new" [ i ]
 
+    let drop = atom "drop"
+
     let ref_func f = node "ref.func" [ !$(Func_id.name f) ]
 
     let global_get g = node "global.get" [ !$(Global.name g) ]
@@ -1919,9 +1954,12 @@ module ToWasm = struct
         ]
 
     let block id result body =
-      node "block" (!$(Block_id.name id) :: results result :: body)
+      nodehv "block" [ !$(Block_id.name id); results result ] body
 
     let br id = node "br" [ !$(Block_id.name id) ]
+
+    let br_on_cast id typ =
+      node "br_on_cast" [ !$(Block_id.name id); type_name typ ]
 
     let type_ name descr = node "type" [ type_name name; descr ]
 
@@ -1999,7 +2037,12 @@ module ToWasm = struct
       let fallthrough = Block_id.not_id cont in
       let body = conv_expr body @ [ C.br fallthrough ] in
       let handler =
-        List.map (fun (var, _typ) -> C.local_set (Expr.Local.V var)) params
+        List.map
+          (fun (var, _typ) ->
+            match var with
+            | Some var -> C.local_set (Expr.Local.V var)
+            | None -> C.drop )
+          params
         @ conv_expr handler
       in
       [ C.block fallthrough [ ref_eq ]
@@ -2007,6 +2050,8 @@ module ToWasm = struct
       ]
     | Apply_cont { cont; args } ->
       List.flatten (List.map conv_expr args) @ [ C.br cont ]
+    | Br_on_cast { value; typ; if_cast; if_else } ->
+      conv_expr value @ [ C.br_on_cast if_cast typ ] @ conv_expr if_else
 
   let conv_const name (const : Const.t) =
     match const with
