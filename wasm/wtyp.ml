@@ -1833,7 +1833,10 @@ module ToWasm = struct
 
     let if_then_else if_expr else_expr =
       node "if"
-        [ result (ref_eq : Type.atom); node "then" if_expr; node "else" else_expr ]
+        [ result (ref_eq : Type.atom)
+        ; node "then" if_expr
+        ; node "else" else_expr
+        ]
 
     let type_ name descr = node "type" [ type_name name; descr ]
 
