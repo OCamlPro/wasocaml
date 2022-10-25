@@ -1849,21 +1849,23 @@ module ToWasm = struct
 
   let gvar v = Global.name v
 
-  let conv_binop = function
-    | Expr.I32_add -> Cst.atom "i32.add"
-    | Expr.I32_sub -> Cst.atom "i32.sub"
-    | Expr.I32_mul -> Cst.atom "i32.mul"
-    | Expr.F64_add -> Cst.atom "f64.add"
-    | Expr.F64_sub -> Cst.atom "f64.sub"
-    | Expr.F64_mul -> Cst.atom "f64.mul"
-    | Expr.F64_div -> Cst.atom "f64.div"
-    | Expr.Struct_set { typ; field } -> C.struct_set typ field
+  let conv_binop (op : Expr.binop) =
+    match op with
+    | I32_add -> Cst.atom "i32.add"
+    | I32_sub -> Cst.atom "i32.sub"
+    | I32_mul -> Cst.atom "i32.mul"
+    | F64_add -> Cst.atom "f64.add"
+    | F64_sub -> Cst.atom "f64.sub"
+    | F64_mul -> Cst.atom "f64.mul"
+    | F64_div -> Cst.atom "f64.div"
+    | Struct_set { typ; field } -> C.struct_set typ field
 
-  let conv_unop = function
-    | Expr.I31_get_s -> Cst.atom "i31.get_s"
-    | Expr.I31_new -> Cst.atom "i31.new"
-    | Expr.Drop -> Cst.atom "drop"
-    | Expr.Struct_get { typ; field } -> C.struct_get typ field
+  let conv_unop (op : Expr.unop) =
+    match op with
+    | I31_get_s -> Cst.atom "i31.get_s"
+    | I31_new -> Cst.atom "i31.new"
+    | Drop -> Cst.atom "drop"
+    | Struct_get { typ; field } -> C.struct_get typ field
 
   let rec conv_expr (expr : Expr.t) =
     match expr with
