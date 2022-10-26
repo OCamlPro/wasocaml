@@ -417,11 +417,6 @@ module Expr = struct
         ; handler : t
         ; body : t
         }
-    | Loop of
-        { cont : Block_id.t
-        ; typ : Type.atom
-        ; body : t
-        }
     | Apply_cont of
         { cont : Block_id.t
         ; args : t list
@@ -447,6 +442,20 @@ module Expr = struct
         { being_assigned : Local.var
         ; new_value : t
         }
+    | Loop of
+        { cont : Block_id.t
+        ; body : no_value_expression
+        }
+    | NV_br_if of
+        { cond : t
+        ; if_true : Block_id.t
+        }
+    | NV_if_then_else of
+        { cond : t
+        ; if_expr : no_value_expression
+        ; else_expr : no_value_expression
+        }
+    | NV
 
   let print_binop ppf = function
     | I32_add -> Format.fprintf ppf "I32_add"
@@ -517,8 +526,6 @@ module Expr = struct
                local Type.print_atom typ )
            ", " )
         params print handler print body
-    | Loop { cont; body } ->
-      Format.fprintf ppf "@[<hov 2>Loop %a@ %a@]" Block_id.print cont print body
     | Apply_cont { cont; args } ->
       Format.fprintf ppf "@[<hov 2>Apply_cont(%a(%a))@]" Block_id.print cont
         (print_list print ",") args
@@ -543,6 +550,10 @@ module Expr = struct
     | Assign { being_assigned; new_value } ->
       Format.fprintf ppf "@[<v 2>Assign(%a <- %a)@]" Local.print_var
         being_assigned print new_value
+    | Loop { cont; body } ->
+      Format.fprintf ppf "@[<hov 2>Loop %a@ %a@]" Block_id.print cont
+        print_no_value body
+    | NV | NV_if_then_else _ | NV_br_if _ -> failwith "TODO"
 
   let let_ var typ defining_expr body = Let { var; typ; defining_expr; body }
 
@@ -596,7 +607,6 @@ module Expr = struct
         in
         let acc = loop acc handler in
         loop acc body
-      | Loop { cont = _; body } -> loop acc body
       | Apply_cont { cont = _; args } ->
         List.fold_left (fun acc arg -> loop acc arg) acc args
       | Br_on_cast { value; if_cast = _; if_else } ->
@@ -608,6 +618,7 @@ module Expr = struct
       | Unit nv -> loop_no_value acc nv
     and loop_no_value acc nv =
       match nv with
+      | NV -> acc
       | NV_seq effects ->
         List.fold_left (fun acc arg -> loop_no_value acc arg) acc effects
       | NV_drop e -> loop acc e
@@ -615,6 +626,12 @@ module Expr = struct
         let acc = loop acc arg1 in
         loop acc arg2
       | Assign { being_assigned = _; new_value } -> loop acc new_value
+      | Loop { cont = _; body } -> loop_no_value acc body
+      | NV_br_if { cond; if_true = _ } -> loop acc cond
+      | NV_if_then_else { cond; if_expr; else_expr } ->
+        let acc = loop acc cond in
+        let acc = loop_no_value acc if_expr in
+        loop_no_value acc else_expr
     in
     match body with
     | Value (expr, _typ) -> loop Local.Map.empty expr
@@ -1418,17 +1435,11 @@ module Conv = struct
         Unop (I31_get_s, Ref_cast { typ = I31; r = conv_expr env cond })
       in
       let cont = Block_id.fresh "continue" in
-      let body : Expr.t =
-        seq
-          [ conv_expr env body
-          ; Br_if { cond; if_true = cont; if_else = unit_value }
-          ]
+      let body : Expr.no_value_expression =
+        NV_seq [ drop (conv_expr env body); NV_br_if { cond; if_true = cont } ]
       in
-      If_then_else
-        { cond
-        ; if_expr = Loop { cont; typ = ref_eq; body }
-        ; else_expr = unit_value
-        }
+      Unit
+        (NV_if_then_else { cond; if_expr = Loop { cont; body }; else_expr = NV })
     | _ ->
       let msg = Format.asprintf "TODO (conv_expr) %a" Flambda.print expr in
       failwith msg
@@ -2027,12 +2038,8 @@ module ToWasm = struct
       let res = List.map result res in
       node "func" (name @ List.map param_t params @ res)
 
-    let if_then_else if_expr else_expr =
-      node "if"
-        [ result (ref_eq : Type.atom)
-        ; node "then" if_expr
-        ; node "else" else_expr
-        ]
+    let if_then_else typ if_expr else_expr =
+      node "if" [ results typ; node_p "then" if_expr; node_p "else" else_expr ]
 
     let block id result body =
       nodehv "block" [ !$(Block_id.name id); results result ] body
@@ -2121,7 +2128,7 @@ module ToWasm = struct
       List.flatten effects @ last
     | If_then_else { cond; if_expr; else_expr } ->
       conv_expr cond
-      @ [ C.if_then_else (conv_expr if_expr) (conv_expr else_expr) ]
+      @ [ C.if_then_else [ ref_eq ] (conv_expr if_expr) (conv_expr else_expr) ]
     | Let_cont { cont; params; handler; body } ->
       let result_types = List.map snd params in
       let fallthrough = Block_id.not_id cont in
@@ -2138,7 +2145,6 @@ module ToWasm = struct
       [ C.block fallthrough [ ref_eq ]
           (C.block cont result_types body :: handler)
       ]
-    | Loop { cont; typ; body } -> [ C.loop cont [ typ ] (conv_expr body) ]
     | Apply_cont { cont; args } ->
       List.flatten (List.map conv_expr args) @ [ C.br cont ]
     | Br_on_cast { value; typ; if_cast; if_else } ->
@@ -2157,6 +2163,12 @@ module ToWasm = struct
       conv_expr new_value @ [ C.local_set (Expr.Local.V being_assigned) ]
     | NV_binop (op, (arg1, arg2)) ->
       conv_expr arg1 @ conv_expr arg2 @ conv_nv_binop op
+    | Loop { cont; body } -> [ C.loop cont [] (conv_no_value body) ]
+    | NV_if_then_else { cond; if_expr; else_expr } ->
+      conv_expr cond
+      @ [ C.if_then_else [] (conv_no_value if_expr) (conv_no_value else_expr) ]
+    | NV_br_if { cond; if_true } -> conv_expr cond @ [ C.br_if if_true ]
+    | NV -> []
 
   let conv_const name (const : Const.t) =
     match const with
