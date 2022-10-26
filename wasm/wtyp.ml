@@ -553,7 +553,13 @@ module Expr = struct
     | Loop { cont; body } ->
       Format.fprintf ppf "@[<hov 2>Loop %a@ %a@]" Block_id.print cont
         print_no_value body
-    | NV | NV_if_then_else _ | NV_br_if _ -> failwith "TODO"
+    | NV -> Format.fprintf ppf "Nil"
+    | NV_if_then_else { cond; if_expr; else_expr } ->
+      Format.fprintf ppf "@[<hov 2>If(%a)Then(%a)Else(%a)@]" print cond
+        print_no_value if_expr print_no_value else_expr
+    | NV_br_if { cond; if_true } ->
+      Format.fprintf ppf "@[<hov 2>Br_if(%a -> (%a))@]" print cond
+        Block_id.print if_true
 
   let let_ var typ defining_expr body = Let { var; typ; defining_expr; body }
 
