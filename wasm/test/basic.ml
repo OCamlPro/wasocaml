@@ -6,6 +6,9 @@ external ( - ) : int -> int -> int = "%subint"
 
 external ( * ) : int -> int -> int = "%mulint"
 
+external ( = ) : 'a -> 'a -> bool = "%equal"
+external ( == ) : 'a -> 'a -> bool = "%eq"
+
 (*
 external ( < ) : 'a -> 'a -> bool = "%lessthan"
 *)
@@ -35,6 +38,35 @@ let () =
   h (right 1 2);
   h (left' 3 4);
   h (right' 3 4)
+
+let rec memq i l =
+  match l with
+  | [] -> false
+  | h :: t ->
+      if i == h then true
+      else memq i t
+
+let rec memi (i:int) l =
+  match l with
+  | [] -> false
+  | h :: t ->
+      if i = h then true
+      else memq i t
+
+let int_of_bool = function
+  | false -> 0
+  | true -> 1
+
+let pbool b = saucisse (int_of_bool b)
+
+let () =
+  pbool (memq 1 [1;2;3]);
+  pbool (memq 4 [1;2;3]);
+  pbool (memi 1 [1;2;3]);
+  pbool (memi 4 [1;2;3]);
+  pbool (memq 1. [1.;2.;3.]);
+  ()
+
 
 (*
 let rec fibo x =

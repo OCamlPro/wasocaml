@@ -356,6 +356,7 @@ module Expr = struct
     | F64_sub
     | F64_mul
     | F64_div
+    | Ref_eq
 
   type nv_binop =
     | Struct_set of
@@ -465,6 +466,7 @@ module Expr = struct
     | F64_sub -> Format.fprintf ppf "F64_sub"
     | F64_mul -> Format.fprintf ppf "F64_mul"
     | F64_div -> Format.fprintf ppf "F64_div"
+    | Ref_eq -> Format.fprintf ppf "Ref_eq"
 
   let print_nv_binop ppf = function
     | Struct_set { typ; field } ->
@@ -1554,6 +1556,8 @@ module Conv = struct
               ; if_else = false_value
               }
         }
+    | Pintcomp Ceq ->
+        i31 (Expr.Binop (Ref_eq, args2 args))
     | _ ->
       let msg =
         Format.asprintf "TODO prim %a" Printclambda_primitives.primitive prim
@@ -2094,6 +2098,7 @@ module ToWasm = struct
     | F64_sub -> [ Cst.atom "f64.sub" ]
     | F64_mul -> [ Cst.atom "f64.mul" ]
     | F64_div -> [ Cst.atom "f64.div" ]
+    | Ref_eq -> [ Cst.atom "ref.eq" ]
 
   let conv_nv_binop (op : Expr.nv_binop) =
     match op with Struct_set { typ; field } -> [ C.struct_set typ field ]
