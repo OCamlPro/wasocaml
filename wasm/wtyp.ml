@@ -356,6 +356,8 @@ module Expr = struct
     | F64_sub
     | F64_mul
     | F64_div
+
+  type nv_binop =
     | Struct_set of
         { typ : Type.Var.t
         ; field : int
@@ -409,11 +411,7 @@ module Expr = struct
         ; r : t
         }
     | Global_get of Global.t
-    | Seq of t list
-    | Assign of
-        { being_assigned : Local.var
-        ; new_value : t
-        }
+    | Seq of no_value_expression list * t
     | Let_cont of
         { cont : Block_id.t
         ; params : (Local.var option * Type.atom) list
@@ -440,6 +438,16 @@ module Expr = struct
         ; if_true : Block_id.t
         ; if_else : t
         }
+    | Unit of no_value_expression
+
+  and no_value_expression =
+    | NV_seq of no_value_expression list
+    | NV_drop of t
+    | NV_binop of nv_binop * (t * t)
+    | Assign of
+        { being_assigned : Local.var
+        ; new_value : t
+        }
 
   let print_binop ppf = function
     | I32_add -> Format.fprintf ppf "I32_add"
@@ -449,6 +457,8 @@ module Expr = struct
     | F64_sub -> Format.fprintf ppf "F64_sub"
     | F64_mul -> Format.fprintf ppf "F64_mul"
     | F64_div -> Format.fprintf ppf "F64_div"
+
+  let print_nv_binop ppf = function
     | Struct_set { typ; field } ->
       Format.fprintf ppf "@[<hov 2>Struct_set(%a).(%i)@]" Type.Var.print typ
         field
@@ -492,10 +502,10 @@ module Expr = struct
         r
     | Global_get g ->
       Format.fprintf ppf "@[<hov 2>Global_get(%a)@]" Global.print g
-    | Seq l -> Format.fprintf ppf "@[<v 2>Seq(%a)@]" (print_list print ";") l
-    | Assign { being_assigned; new_value } ->
-      Format.fprintf ppf "@[<v 2>Assign(%a <- %a)@]" Local.print_var
-        being_assigned print new_value
+    | Seq (effects, last) ->
+      Format.fprintf ppf "@[<v 2>Seq(%a;%a)@]"
+        (print_list print_no_value ";")
+        effects print last
     | If_then_else { cond; if_expr; else_expr } ->
       Format.fprintf ppf "@[<hov 2>If(%a)Then(%a)Else(%a)@]" print cond print
         if_expr print else_expr
@@ -520,6 +530,21 @@ module Expr = struct
     | Br_if { cond; if_true; if_else } ->
       Format.fprintf ppf "@[<hov 2>Br_if(%a -> (%a) else %a)@]" print cond
         Block_id.print if_true print if_else
+    | Unit nv -> Format.fprintf ppf "@[<hov 2>Unit (@ %a@ )@]" print_no_value nv
+
+  and print_no_value ppf no_value =
+    match no_value with
+    | NV_seq effects ->
+      Format.fprintf ppf "@[<v 2>Seq(%a)@]"
+        (print_list print_no_value ";")
+        effects
+    | NV_drop e -> Format.fprintf ppf "@[<hov 2>Drop (@ %a@ )@]" print e
+    | NV_binop (binop, (arg1, arg2)) ->
+      Format.fprintf ppf "@[<hov 2>Binop(%a:@ %a,@ %a)@]" print_nv_binop binop
+        print arg1 print arg2
+    | Assign { being_assigned; new_value } ->
+      Format.fprintf ppf "@[<v 2>Assign(%a <- %a)@]" Local.print_var
+        being_assigned print new_value
 
   let let_ var typ defining_expr body = Let { var; typ; defining_expr; body }
 
@@ -555,8 +580,11 @@ module Expr = struct
         List.fold_left (fun acc arg -> loop acc arg) acc args
       | Ref_cast { typ = _; r } -> loop acc r
       | Global_get _ -> acc
-      | Seq l -> List.fold_left (fun acc arg -> loop acc arg) acc l
-      | Assign { being_assigned = _; new_value } -> loop acc new_value
+      | Seq (effects, last) ->
+        let acc =
+          List.fold_left (fun acc arg -> loop_no_value acc arg) acc effects
+        in
+        loop acc last
       | Let_cont { cont = _; params; handler; body } ->
         let acc =
           List.fold_left
@@ -575,6 +603,16 @@ module Expr = struct
       | Br_if { cond; if_true = _; if_else } ->
         let acc = loop acc cond in
         loop acc if_else
+      | Unit nv -> loop_no_value acc nv
+    and loop_no_value acc nv =
+      match nv with
+      | NV_seq effects ->
+        List.fold_left (fun acc arg -> loop_no_value acc arg) acc effects
+      | NV_drop e -> loop acc e
+      | NV_binop (_op, (arg1, arg2)) ->
+        let acc = loop acc arg1 in
+        loop acc arg2
+      | Assign { being_assigned = _; new_value } -> loop acc new_value
     in
 
     loop Local.Map.empty expr
@@ -852,7 +890,8 @@ module Conv = struct
       in
       Unop (Struct_get { typ; field = field + 2 }, e)
 
-    let set_field ?(cast : unit option) ~block value ~field : Expr.t =
+    let set_field ?(cast : unit option) ~block value ~field :
+        Expr.no_value_expression =
       let size = field + 1 in
       State.add_block_size size;
       let typ : Type.Var.t = Block { size } in
@@ -861,7 +900,7 @@ module Conv = struct
         | None -> block
         | Some () -> Expr.(Ref_cast { typ; r = block })
       in
-      Binop (Struct_set { typ; field = field + 2 }, (block, value))
+      NV_binop (Struct_set { typ; field = field + 2 }, (block, value))
   end
 
   let const_float f : Expr.t = Struct_new (Float, [ F64 f ])
@@ -926,7 +965,25 @@ module Conv = struct
       expr_is_pure defining_expr && expr_is_pure body
     | _ -> false
 
-  let seq l : Expr.t = match l with [ e ] -> e | _ -> Seq l
+  let drop (e : Expr.t) : Expr.no_value_expression =
+    match e with
+    | Unit nv -> nv
+    | e -> NV_drop e
+
+  let seq l : Expr.t =
+    match l with
+    | [ e ] -> e
+    | _ ->
+      let rec split_last l =
+        match l with
+        | [] -> assert false
+        | [ v ] -> ([], v)
+        | h :: t ->
+          let l, last = split_last t in
+          (h :: l, last)
+      in
+      let l, last = split_last l in
+      Seq (List.map drop l, last)
 
   let const_block ~symbols_being_bound tag fields :
       Const.t * (int * Symbol.t) list =
@@ -1089,7 +1146,7 @@ module Conv = struct
     | Effect (expr, body) ->
       let expr_env = empty_env ~top_env:env in
       let effect : Expr.t = conv_expr expr_env expr in
-      conv_body env body (effect :: effects)
+      conv_body env body (drop effect :: effects)
     | End _end_symbol ->
       [ Decl.Func
           { name = Start
@@ -1097,12 +1154,13 @@ module Conv = struct
               Decl
                 { params = []
                 ; result = None
-                ; body = Unop (Drop, Seq (List.rev effects))
+                ; body = Unop (Drop, Seq (List.rev effects, unit_value))
                 }
           }
       ]
 
-  and conv_initialize_symbol env symbol tag fields =
+  and conv_initialize_symbol env symbol tag fields :
+      _ * Expr.no_value_expression list =
     let size = List.length fields in
     let fields =
       List.mapi
@@ -1137,7 +1195,7 @@ module Conv = struct
     let decl = Decl.Const { name; descr } in
     let size = List.length fields in
     State.add_block_size size;
-    let effect (field, expr) : Expr.t =
+    let effect (field, expr) : Expr.no_value_expression =
       Block.set_field ~field
         ~block:(Expr.Global_get (Global.of_symbol symbol))
         expr
@@ -1146,7 +1204,8 @@ module Conv = struct
     (decl, effect)
 
   and conv_symbol ~symbols_being_bound symbol
-      (const : Flambda.constant_defining_value) : Decl.t list * Expr.t list =
+      (const : Flambda.constant_defining_value) :
+      Decl.t list * Expr.no_value_expression list =
     match const with
     | Block (tag, fields) ->
       let name = Global.of_symbol symbol in
@@ -1155,7 +1214,7 @@ module Conv = struct
       in
       let new_effects =
         List.map
-          (fun (field_to_update, field_contents) : Expr.t ->
+          (fun (field_to_update, field_contents) : Expr.no_value_expression ->
             Block.set_field ~field:field_to_update
               ~block:(Expr.Global_get (Global.of_symbol symbol))
               (Expr.Global_get (Global.of_symbol field_contents)) )
@@ -1252,11 +1311,11 @@ module Conv = struct
         Set_of_closures function_decls.set_of_closures_id
       in
       let update_fields func_var (function_decl : Flambda.function_declaration)
-          updates : Expr.t list =
+          updates : Expr.no_value_expression list =
         let arity = Flambda_utils.function_arity function_decl in
         let typ : Type.Var.t = Closure { arity; fields = 1 } in
         let field = if arity = 1 then 2 else 3 in
-        Binop
+        NV_binop
           ( Struct_set { typ; field }
           , (Var (V (Variable func_var)), Var (V set_var)) )
         :: updates
@@ -1281,7 +1340,7 @@ module Conv = struct
         let defining_expr = Expr.Struct_new (typ, func_fields @ free_vars) in
         Let { var = set_var; typ = Rvar typ; defining_expr; body }
       in
-      let expr = Expr.Seq (update_fields @ [ Expr.Var (V set_var) ]) in
+      let expr = Expr.Seq (update_fields, Expr.Var (V set_var)) in
       let expr = build_set expr in
       Variable.Map.fold add_closure function_decls.funs expr
     end
@@ -1331,7 +1390,7 @@ module Conv = struct
       assert (Mutable_variable.Set.mem being_assigned env.mutables);
       let being_assigned = Expr.Local.var_of_mut_var being_assigned in
       let new_value = conv_var env new_value in
-      Assign { being_assigned; new_value }
+      Unit (Assign { being_assigned; new_value })
     | If_then_else (var, if_expr, else_expr) ->
       let cond : Expr.t =
         Unop (Expr.I31_get_s, Ref_cast { typ = I31; r = conv_var env var })
@@ -1363,7 +1422,7 @@ module Conv = struct
       in
       let cont = Block_id.fresh "continue" in
       let body : Expr.t =
-        Seq
+        seq
           [ conv_expr env body
           ; Br_if { cond; if_true = cont; if_else = unit_value }
           ]
@@ -1461,7 +1520,7 @@ module Conv = struct
       Block.get_field ~field ~cast:() arg
     | Psetfield (field, _kind, _init) ->
       let block, value = args2 args in
-      Block.set_field ~cast:() ~field ~block value
+      Seq ([ Block.set_field ~cast:() ~field ~block value ], unit_value)
     | Popaque -> arg1 args
     | Pisint ->
       let cont = Block_id.fresh "isint" in
@@ -2023,7 +2082,9 @@ module ToWasm = struct
     | F64_sub -> [ Cst.atom "f64.sub" ]
     | F64_mul -> [ Cst.atom "f64.mul" ]
     | F64_div -> [ Cst.atom "f64.div" ]
-    | Struct_set { typ; field } -> C.struct_set typ field :: unit
+
+  let conv_nv_binop (op : Expr.nv_binop) =
+    match op with Struct_set { typ; field } -> [ C.struct_set typ field ]
 
   let conv_unop (op : Expr.unop) =
     match op with
@@ -2060,18 +2121,10 @@ module ToWasm = struct
       List.flatten (List.map conv_expr args) @ [ C.call func ]
     | Ref_cast { typ; r } -> conv_expr r @ [ C.ref_cast typ ]
     | Global_get g -> [ C.global_get g ]
-    | Seq l ->
-      let rec conv_seq l =
-        match l with
-        | [] -> []
-        | [ e ] -> conv_expr e
-        | h :: t -> (conv_expr h @ [ C.drop ]) @ conv_seq t
-      in
-      conv_seq l
-    | Assign { being_assigned; new_value } ->
-      conv_expr new_value
-      @ [ C.local_set (Expr.Local.V being_assigned) ]
-      @ conv_expr Conv.unit_value
+    | Seq (effects, last) ->
+      let effects = List.map conv_no_value effects in
+      let last = conv_expr last in
+      List.flatten effects @ last
     | If_then_else { cond; if_expr; else_expr } ->
       conv_expr cond
       @ [ C.if_then_else (conv_expr if_expr) (conv_expr else_expr) ]
@@ -2098,6 +2151,18 @@ module ToWasm = struct
       conv_expr value @ [ C.br_on_cast if_cast typ ] @ conv_expr if_else
     | Br_if { cond; if_true; if_else } ->
       conv_expr cond @ [ C.br_if if_true ] @ conv_expr if_else
+    | Unit e -> conv_no_value e @ unit
+
+  and conv_no_value (nv : Expr.no_value_expression) =
+    match nv with
+    | NV_seq effects ->
+      let effects = List.map conv_no_value effects in
+      List.flatten effects
+    | NV_drop e -> conv_expr e @ [ C.drop ]
+    | Assign { being_assigned; new_value } ->
+      conv_expr new_value @ [ C.local_set (Expr.Local.V being_assigned) ]
+    | NV_binop (op, (arg1, arg2)) ->
+      conv_expr arg1 @ conv_expr arg2 @ conv_nv_binop op
 
   let conv_const name (const : Const.t) =
     match const with
