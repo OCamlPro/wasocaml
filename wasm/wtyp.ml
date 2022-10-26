@@ -1090,17 +1090,21 @@ module Conv = struct
       in
       Call { func; args }
 
-  let conv_allocated_const (const : Allocated_const.t) : Const.t =
+  let conv_allocated_const_expr (const : Allocated_const.t) : Type.atom * Expr.t
+      =
     match const with
-    | Float f -> Expr { typ = Rvar Float; e = const_float f }
-    | Int32 i -> Expr { typ = Rvar Int32; e = const_int32 i }
-    | Int64 i -> Expr { typ = Rvar Int64; e = const_int64 i }
-    | Nativeint i -> Expr { typ = Rvar Nativeint; e = const_nativeint i }
-    | Immutable_string s | String s ->
-      Expr { typ = Rvar String; e = const_string s }
+    | Float f -> (Rvar Float, const_float f)
+    | Int32 i -> (Rvar Int32, const_int32 i)
+    | Int64 i -> (Rvar Int64, const_int64 i)
+    | Nativeint i -> (Rvar Nativeint, const_nativeint i)
+    | Immutable_string s | String s -> (Rvar String, const_string s)
     | Float_array _ | Immutable_float_array _ ->
       failwith
         (Format.asprintf "TODO allocated const %a" Allocated_const.print const)
+
+  let conv_allocated_const (const : Allocated_const.t) : Const.t =
+    let typ, e = conv_allocated_const_expr const in
+    Expr { typ; e }
 
   let closure_type (set_of_closures : Flambda.set_of_closures) =
     let Flambda.{ function_decls; free_vars } = set_of_closures in
@@ -1475,9 +1479,9 @@ module Conv = struct
       Closure.move_within_set_of_closures ~cast:() env.top_env
         ~start_from:move.start_from ~move_to:move.move_to closure
     | Set_of_closures set -> conv_set_of_closures env set
-    | _ ->
-      let msg = Format.asprintf "TODO named %a" Flambda.print_named named in
-      failwith msg
+    | Allocated_const const ->
+      let _typ, e = conv_allocated_const_expr const in
+      e
 
   and conv_prim env ~(prim : Clambda_primitives.primitive) ~args : Expr.t =
     let args = List.map (conv_var env) args in
