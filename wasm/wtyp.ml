@@ -366,7 +366,6 @@ module Expr = struct
   type unop =
     | I31_get_s
     | I31_new
-    | Drop
     | Struct_get of
         { typ : Type.Var.t
         ; field : int
@@ -466,7 +465,6 @@ module Expr = struct
   let print_unop ppf = function
     | I31_get_s -> Format.fprintf ppf "I31_get_s"
     | I31_new -> Format.fprintf ppf "I31_new"
-    | Drop -> Format.fprintf ppf "Drop"
     | Struct_get { typ; field } ->
       Format.fprintf ppf "@[<hov 2>Struct_get(%a).(%i)@]" Type.Var.print typ
         field
@@ -548,7 +546,11 @@ module Expr = struct
 
   let let_ var typ defining_expr body = Let { var; typ; defining_expr; body }
 
-  let required_locals expr =
+  type function_body =
+    | Value of t * Type.atom
+    | No_value of no_value_expression
+
+  let required_locals body =
     let add var typ acc =
       match Local.Map.find var acc with
       | prev_typ ->
@@ -614,16 +616,16 @@ module Expr = struct
         loop acc arg2
       | Assign { being_assigned = _; new_value } -> loop acc new_value
     in
-
-    loop Local.Map.empty expr
+    match body with
+    | Value (expr, _typ) -> loop Local.Map.empty expr
+    | No_value expr -> loop_no_value Local.Map.empty expr
 end
 
 module Func = struct
   type t =
     | Decl of
         { params : (Param.t * Type.atom) list
-        ; result : Type.atom option
-        ; body : Expr.t
+        ; body : Expr.function_body
         }
     | Import of
         { params : Type.atom list
@@ -633,16 +635,18 @@ module Func = struct
         }
 
   let print ppf = function
-    | Decl { params; result; body } ->
-      let pr_result ppf = function
-        | None -> ()
-        | Some result -> Format.fprintf ppf " -> %a" Type.print_atom result
-      in
+    | Decl { params; body } ->
       let param ppf (p, typ) =
         Format.fprintf ppf "(%a: %a)" Param.print p Type.print_atom typ
       in
-      Format.fprintf ppf "@[<hov 2>Func (%a)%a@ {@ %a@ }@]"
-        (print_list param ",") params pr_result result Expr.print body
+      let print_body ppf = function
+        | Expr.Value (e, typ) ->
+          Format.fprintf ppf " -> %a@ {@ %a@ }" Type.print_atom typ Expr.print e
+        | Expr.No_value e ->
+          Format.fprintf ppf "@ {@ %a@ }" Expr.print_no_value e
+      in
+      Format.fprintf ppf "@[<hov 2>Func (%a)%a@]" (print_list param ",") params
+        print_body body
     | Import { params; result; module_; name } ->
       Format.fprintf ppf "@[<hov 2>Import %s %s : (%a) -> %a @]" module_ name
         (print_list Type.print_atom ",")
@@ -966,9 +970,7 @@ module Conv = struct
     | _ -> false
 
   let drop (e : Expr.t) : Expr.no_value_expression =
-    match e with
-    | Unit nv -> nv
-    | e -> NV_drop e
+    match e with Unit nv -> nv | e -> NV_drop e
 
   let seq l : Expr.t =
     match l with
@@ -1151,11 +1153,7 @@ module Conv = struct
       [ Decl.Func
           { name = Start
           ; descr =
-              Decl
-                { params = []
-                ; result = None
-                ; body = Unop (Drop, Seq (List.rev effects, unit_value))
-                }
+              Decl { params = []; body = No_value (NV_seq (List.rev effects)) }
           }
       ]
 
@@ -1363,8 +1361,7 @@ module Conv = struct
     let func =
       Func.Decl
         { params = params @ [ (Param.Env, Type.Rvar Type.Var.Env) ]
-        ; result = Some ref_eq
-        ; body
+        ; body = Value (body, ref_eq)
         }
     in
     let name = Func_id.of_var_closure_id function_name in
@@ -1689,8 +1686,7 @@ module Conv = struct
     in
     Func.Decl
       { params = [ (param_arg, ref_eq); (env_arg, Type.Rvar Type.Var.Env) ]
-      ; result = Some ref_eq
-      ; body
+      ; body = Value (body, ref_eq)
       }
 
   let caml_apply n =
@@ -1718,8 +1714,7 @@ module Conv = struct
     let body = build (Param closure_param) 0 params in
     Func.Decl
       { params = (closure_param, Type.Rvar Env) :: params
-      ; result = Some ref_eq
-      ; body
+      ; body = Value (body, ref_eq)
       }
 
   let c_import (descr : Primitive.description) =
@@ -2090,7 +2085,6 @@ module ToWasm = struct
     match op with
     | I31_get_s -> Cst.atom "i31.get_s"
     | I31_new -> Cst.atom "i31.new"
-    | Drop -> Cst.atom "drop"
     | Struct_get { typ; field } -> C.struct_get typ field
 
   let rec conv_expr (expr : Expr.t) =
@@ -2184,16 +2178,17 @@ module ToWasm = struct
     | Import { module_; name = prim_name; params; result } ->
       let typ = C.func_type ~name params result in
       [ C.import module_ prim_name typ ]
-    | Decl { params; result; body } ->
+    | Decl { params; body } ->
       let func =
         let locals = Expr.required_locals body in
         let params = List.map (fun (p, t) -> C.param p t) params in
         let locals =
           Expr.Local.Map.fold (fun v t l -> C.local v t :: l) locals []
         in
-        let body = conv_expr body in
-        let result =
-          match result with None -> [] | Some typ -> [ C.result typ ]
+        let body, result =
+          match body with
+          | Value (body, typ) -> (conv_expr body, [ C.result typ ])
+          | No_value body -> (conv_no_value body, [])
         in
         C.func ~name ~params ~locals ~result ~body
       in
