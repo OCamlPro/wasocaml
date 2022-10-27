@@ -523,10 +523,8 @@ module Expr = struct
       Format.fprintf ppf "@[<hov 2>Let %a =@ %a@]@ in@ %a" Local.print_var var
         print defining_expr print body
     | I_relop (nn, op, (arg1, arg2)) ->
-        Format.fprintf ppf "@[<hov 2>I_relop(%a_%a:@ %a,@ %a)@]"
-          print_irelop op
-          print_nn nn
-          print arg1 print arg2
+      Format.fprintf ppf "@[<hov 2>I_relop(%a_%a:@ %a,@ %a)@]" print_irelop op
+        print_nn nn print arg1 print arg2
     | Binop (binop, (arg1, arg2)) ->
       Format.fprintf ppf "@[<hov 2>Binop(%a:@ %a,@ %a)@]" print_binop binop
         print arg1 print arg2
@@ -621,8 +619,7 @@ module Expr = struct
         let acc = add var typ acc in
         let acc = loop acc defining_expr in
         loop acc body
-      | I_relop (_, _, (arg1, arg2))
-      | Binop (_, (arg1, arg2)) ->
+      | I_relop (_, _, (arg1, arg2)) | Binop (_, (arg1, arg2)) ->
         let acc = loop acc arg1 in
         loop acc arg2
       | If_then_else { cond; if_expr; else_expr } ->
@@ -1024,6 +1021,8 @@ module Conv = struct
   let true_value : Expr.t = Unop (I31_new, I32 1l)
 
   let false_value : Expr.t = Unop (I31_new, I32 0l)
+
+  let bool_not e : Expr.t = Binop (I32_sub, (I32 1l, e))
 
   let rec expr_is_pure (e : Expr.t) =
     match e with
@@ -1595,8 +1594,19 @@ module Conv = struct
               ; if_else = false_value
               }
         }
-    | Pintcomp Ceq ->
-        i31 (Expr.Binop (Ref_eq, args2 args))
+    | Pintcomp Ceq -> i31 (Expr.Binop (Ref_eq, args2 args))
+    | Pintcomp cop -> begin
+      let op : Expr.t =
+        match cop with
+        | Ceq -> Binop (Ref_eq, args2 args)
+        | Cne -> bool_not (Binop (Ref_eq, args2 args))
+        | Clt -> I_relop (S32, Lt S, args2 (List.map i32 args))
+        | Cgt -> I_relop (S32, Gt S, args2 (List.map i32 args))
+        | Cle -> I_relop (S32, Le S, args2 (List.map i32 args))
+        | Cge -> I_relop (S32, Ge S, args2 (List.map i32 args))
+      in
+      i31 op
+    end
     | _ ->
       let msg =
         Format.asprintf "TODO prim %a" Printclambda_primitives.primitive prim
@@ -2148,13 +2158,9 @@ module ToWasm = struct
     | I31_new -> Cst.atom "i31.new"
     | Struct_get { typ; field } -> C.struct_get typ field
 
-  let nn_name (nn : Expr.nn) = match nn with
-    | S32 -> "32"
-    | S64 -> "64"
+  let nn_name (nn : Expr.nn) = match nn with S32 -> "32" | S64 -> "64"
 
-  let sx_name (sx : Expr.sx) = match sx with
-    | S -> "s"
-    | U -> "u"
+  let sx_name (sx : Expr.sx) = match sx with S -> "s" | U -> "u"
 
   let irelop_name nn (op : Expr.irelop) =
     match op with
@@ -2165,8 +2171,7 @@ module ToWasm = struct
     | Le sx -> Format.asprintf "i%s.le_%s" (nn_name nn) (sx_name sx)
     | Ge sx -> Format.asprintf "i%s.ge_%s" (nn_name nn) (sx_name sx)
 
-  let conv_irelop nn op =
-    [ Cst.atom (irelop_name nn op) ]
+  let conv_irelop nn op = [ Cst.atom (irelop_name nn op) ]
 
   let rec conv_expr (expr : Expr.t) =
     match expr with
