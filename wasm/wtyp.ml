@@ -348,6 +348,22 @@ module Expr = struct
     module Map = Map.Make (M)
   end
 
+  type nn =
+    | S32
+    | S64
+
+  type sx =
+    | U
+    | S
+
+  type irelop =
+    | Eq
+    | Ne
+    | Lt of sx
+    | Gt of sx
+    | Le of sx
+    | Ge of sx
+
   type binop =
     | I32_add
     | I32_sub
@@ -390,6 +406,7 @@ module Expr = struct
         ; if_expr : t
         ; else_expr : t
         }
+    | I_relop of nn * irelop * (t * t)
     | Binop of binop * (t * t)
     | Unop of unop * t
     | Struct_new of Type.Var.t * t list
@@ -458,6 +475,22 @@ module Expr = struct
         }
     | NV
 
+  let sx fmt = function
+    | U -> Format.fprintf fmt "u"
+    | S -> Format.fprintf fmt "s"
+
+  let print_irelop fmt : irelop -> Unit.t = function
+    | Eq -> Format.fprintf fmt "eq"
+    | Ne -> Format.fprintf fmt "ne"
+    | Lt s -> Format.fprintf fmt "lt_%a" sx s
+    | Gt s -> Format.fprintf fmt "gt_%a" sx s
+    | Le s -> Format.fprintf fmt "le_%a" sx s
+    | Ge s -> Format.fprintf fmt "ge_%a" sx s
+
+  let print_nn fmt = function
+    | S32 -> Format.fprintf fmt "32"
+    | S64 -> Format.fprintf fmt "64"
+
   let print_binop ppf = function
     | I32_add -> Format.fprintf ppf "I32_add"
     | I32_sub -> Format.fprintf ppf "I32_sub"
@@ -489,6 +522,11 @@ module Expr = struct
     | Let { var; defining_expr; body } ->
       Format.fprintf ppf "@[<hov 2>Let %a =@ %a@]@ in@ %a" Local.print_var var
         print defining_expr print body
+    | I_relop (nn, op, (arg1, arg2)) ->
+        Format.fprintf ppf "@[<hov 2>I_relop(%a_%a:@ %a,@ %a)@]"
+          print_irelop op
+          print_nn nn
+          print arg1 print arg2
     | Binop (binop, (arg1, arg2)) ->
       Format.fprintf ppf "@[<hov 2>Binop(%a:@ %a,@ %a)@]" print_binop binop
         print arg1 print arg2
@@ -583,7 +621,8 @@ module Expr = struct
         let acc = add var typ acc in
         let acc = loop acc defining_expr in
         loop acc body
-      | Binop (_op, (arg1, arg2)) ->
+      | I_relop (_, _, (arg1, arg2))
+      | Binop (_, (arg1, arg2)) ->
         let acc = loop acc arg1 in
         loop acc arg2
       | If_then_else { cond; if_expr; else_expr } ->
@@ -2109,11 +2148,33 @@ module ToWasm = struct
     | I31_new -> Cst.atom "i31.new"
     | Struct_get { typ; field } -> C.struct_get typ field
 
+  let nn_name (nn : Expr.nn) = match nn with
+    | S32 -> "32"
+    | S64 -> "64"
+
+  let sx_name (sx : Expr.sx) = match sx with
+    | S -> "s"
+    | U -> "u"
+
+  let irelop_name nn (op : Expr.irelop) =
+    match op with
+    | Eq -> Format.asprintf "i%s.eq" (nn_name nn)
+    | Ne -> Format.asprintf "i%s.ne" (nn_name nn)
+    | Lt sx -> Format.asprintf "i%s.lt_%s" (nn_name nn) (sx_name sx)
+    | Gt sx -> Format.asprintf "i%s.gt_%s" (nn_name nn) (sx_name sx)
+    | Le sx -> Format.asprintf "i%s.le_%s" (nn_name nn) (sx_name sx)
+    | Ge sx -> Format.asprintf "i%s.ge_%s" (nn_name nn) (sx_name sx)
+
+  let conv_irelop nn op =
+    [ Cst.atom (irelop_name nn op) ]
+
   let rec conv_expr (expr : Expr.t) =
     match expr with
     | Var v -> [ C.local_get v ]
     | Binop (op, (arg1, arg2)) ->
       conv_expr arg1 @ conv_expr arg2 @ conv_binop op
+    | I_relop (nn, op, (arg1, arg2)) ->
+      conv_expr arg1 @ conv_expr arg2 @ conv_irelop nn op
     | Unop (op, arg) -> conv_expr arg @ [ conv_unop op ]
     | Let { var; typ = _; defining_expr; body } ->
       conv_expr defining_expr
