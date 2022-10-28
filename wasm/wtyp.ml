@@ -46,6 +46,20 @@ module C_import = struct
   module Set = MSet (M)
 end
 
+module Runtime_import = struct
+  module M = struct
+    type t =
+      { arity : int
+      ; name : string
+      }
+
+    let compare = compare
+  end
+
+  include M
+  module Set = MSet (M)
+end
+
 module State = struct
   let arities = ref Arity.Set.empty
 
@@ -58,6 +72,8 @@ module State = struct
   let closure_types = ref Closure_type.Set.empty
 
   let c_imports = ref C_import.Set.empty
+
+  let runtime_imports = ref Runtime_import.Set.empty
 
   let add_arity (i : Arity.t) = Arity.Set.(arities += i)
 
@@ -72,13 +88,17 @@ module State = struct
 
   let add_c_import description = C_import.Set.(c_imports += description)
 
+  let add_runtime_import description =
+    Runtime_import.Set.(runtime_imports += description)
+
   let reset () =
     arities := Arity.Set.empty;
     caml_applies := Arity.Set.empty;
     block_sizes := Arity.Set.singleton 0;
     block_float_sizes := Arity.Set.singleton 0;
     closure_types := Closure_type.Set.empty;
-    c_imports := C_import.Set.empty
+    c_imports := C_import.Set.empty;
+    runtime_imports := Runtime_import.Set.empty
 end
 
 module Type = struct
@@ -217,6 +237,7 @@ module Func_id = struct
     | Caml_curry of int * int
     | Caml_apply of int
     | C_import of string
+    | Runtime of string
     | Start
 
   let name = function
@@ -227,6 +248,7 @@ module Func_id = struct
       else Format.asprintf "Caml_curry_%i_%i" n m
     | Caml_apply n -> Format.asprintf "Caml_apply_%i" n
     | C_import s -> Format.asprintf "C_%s" s
+    | Runtime s -> Format.asprintf "R_%s" s
     | Start -> "Start"
 
   let print ppf = function
@@ -237,6 +259,7 @@ module Func_id = struct
       else Format.fprintf ppf "Caml_curry_%i_%i" n m
     | Caml_apply n -> Format.fprintf ppf "Caml_apply_%i" n
     | C_import s -> Format.fprintf ppf "C_%s" s
+    | Runtime s -> Format.fprintf ppf "R_%s" s
     | Start -> Format.pp_print_string ppf "Start"
 
   let of_var_closure_id var =
@@ -1537,6 +1560,12 @@ module Conv = struct
     in
     let i32 v = Expr.Unop (I31_get_s, Ref_cast { typ = I31; r = v }) in
     let i31 v = Expr.Unop (I31_new, v) in
+    let runtime_prim name : Expr.t =
+      let arity = List.length args in
+      State.add_runtime_import { name; arity };
+      let func : Func_id.t = Runtime name in
+      Call { func; args }
+    in
     match prim with
     | Paddint -> i31 (Expr.Binop (I32_add, args2 (List.map i32 args)))
     | Psubint -> i31 (Expr.Binop (I32_sub, args2 (List.map i32 args)))
@@ -1570,6 +1599,7 @@ module Conv = struct
         (Call { args; func = Func_id.prim_name descr })
     | Pmakeblock (tag, _mut, _shape) ->
       let size = List.length args in
+      State.add_block_size size;
       Struct_new
         ( Block { size }
         , I32 (Int32.of_int tag) :: I32 (Int32.of_int size) :: args )
@@ -1607,6 +1637,7 @@ module Conv = struct
       in
       i31 op
     end
+    | Pcompare_ints -> runtime_prim "compare_ints"
     | _ ->
       let msg =
         Format.asprintf "TODO prim %a" Printclambda_primitives.primitive prim
@@ -1632,7 +1663,7 @@ module Conv = struct
   let block_type size : Type.descr =
     let fields = List.init size (fun _ -> ref_eq) in
     let sub : Type.Var.t =
-      if size = 1 then Gen_block else Block { size = size - 1 }
+      if size <= 1 then Gen_block else Block { size = size - 1 }
     in
     Struct { sub = Some sub; fields = (* Tag *)
                                       I8 :: (* size *)
@@ -1812,6 +1843,11 @@ module Conv = struct
       ; name = Func_id.prim_func_name descr
       }
 
+  let runtime_import (descr : Runtime_import.t) =
+    let params = List.init descr.arity (fun _ -> ref_eq) in
+    let result = [ ref_eq ] in
+    Func.Import { params; result; module_ = "runtime"; name = descr.name }
+
   let func_1_and_env =
     let env =
       let fields : Type.atom list =
@@ -1852,7 +1888,7 @@ module Conv = struct
     Decl.Type (Gen_block, Struct { sub = None; fields })
 
   let define_types_smaller ~max_size ~name ~descr ~decls =
-    let sizes = List.init max_size (fun i -> i + 1) in
+    let sizes = List.init (max_size + 1) (fun i -> i) in
     List.fold_left
       (fun decls size ->
         let name = name size in
@@ -1896,6 +1932,14 @@ module Conv = struct
           let descr = c_import descr in
           Decl.Func { name; descr } :: decls )
         !State.c_imports decls
+    in
+    let decls =
+      Runtime_import.Set.fold
+        (fun (descr : Runtime_import.t) decls ->
+          let name = Func_id.Runtime descr.name in
+          let descr = runtime_import descr in
+          Decl.Func { name; descr } :: decls )
+        !State.runtime_imports decls
     in
     let decls =
       define_types_smaller
