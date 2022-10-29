@@ -1638,6 +1638,7 @@ module Conv = struct
       i31 op
     end
     | Pcompare_ints -> runtime_prim "compare_ints"
+    | Pcompare_floats -> runtime_prim "compare_floats"
     | _ ->
       let msg =
         Format.asprintf "TODO prim %a" Printclambda_primitives.primitive prim
