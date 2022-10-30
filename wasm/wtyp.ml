@@ -362,6 +362,12 @@ module Expr = struct
 
     let name = function V v -> var_name v | Param p -> Param.name p
 
+    let fresh : string -> var =
+      let f = ref 0 in
+      fun name ->
+        incr f;
+        Fresh (name, !f)
+
     module M = struct
       type nonrec t = var
 
@@ -409,6 +415,11 @@ module Expr = struct
     | Struct_get of
         { typ : Type.Var.t
         ; field : int
+        }
+    | Struct_get_packed of
+        { typ : Type.Var.t
+        ; field : int
+        ; extend : sx
         }
 
   (* Every expression returns exactly one value *)
@@ -473,6 +484,12 @@ module Expr = struct
         ; if_true : Block_id.t
         ; if_else : t
         }
+    | Br_table of
+        { cond : t
+        ; cases : Block_id.t list
+        ; default : Block_id.t
+        }
+    | NR of no_return
     | Unit of no_value_expression
 
   and no_value_expression =
@@ -497,6 +514,28 @@ module Expr = struct
         ; else_expr : no_value_expression
         }
     | NV
+
+  and no_return =
+    | NR_let_cont of
+        { cont : Block_id.t
+        ; params : (Local.var option * Type.atom) list
+        ; handler : no_return
+        ; body : no_return
+        }
+    | NR_if_then_else of
+        { cond : t
+        ; if_expr : no_return
+        ; else_expr : no_return
+        }
+    | NR_br_table of
+        { cond : t
+        ; cases : Block_id.t list
+        ; default : Block_id.t
+        }
+    | NR_br of
+        { cont : Block_id.t
+        ; arg : t
+        }
 
   let sx fmt = function
     | U -> Format.fprintf fmt "u"
@@ -535,6 +574,10 @@ module Expr = struct
     | Struct_get { typ; field } ->
       Format.fprintf ppf "@[<hov 2>Struct_get(%a).(%i)@]" Type.Var.print typ
         field
+    | Struct_get_packed { typ; field; extend } ->
+      let str = match extend with S -> "_s" | U -> "_u" in
+      Format.fprintf ppf "@[<hov 2>Struct_get%s(%a).(%i)@]" str Type.Var.print
+        typ field
 
   let rec print ppf = function
     | Var l -> Local.print ppf l
@@ -596,7 +639,12 @@ module Expr = struct
     | Br_if { cond; if_true; if_else } ->
       Format.fprintf ppf "@[<hov 2>Br_if(%a -> (%a) else %a)@]" print cond
         Block_id.print if_true print if_else
+    | Br_table { cond; cases; default } ->
+      Format.fprintf ppf "@[<hov 2>Br_table(%a -> (%a) %a@]" print cond
+        (print_list Block_id.print " ")
+        cases Block_id.print default
     | Unit nv -> Format.fprintf ppf "@[<hov 2>Unit (@ %a@ )@]" print_no_value nv
+    | NR nr -> print_no_return ppf nr
 
   and print_no_value ppf no_value =
     match no_value with
@@ -621,6 +669,28 @@ module Expr = struct
     | NV_br_if { cond; if_true } ->
       Format.fprintf ppf "@[<hov 2>Br_if(%a -> (%a))@]" print cond
         Block_id.print if_true
+
+  and print_no_return ppf no_return =
+    match no_return with
+    | NR_if_then_else { cond; if_expr; else_expr } ->
+      Format.fprintf ppf "@[<hov 2>If(%a)Then(%a)Else(%a)@]" print cond
+        print_no_return if_expr print_no_return else_expr
+    | NR_br_table { cond; cases; default } ->
+      Format.fprintf ppf "@[<hov 2>Br_table(%a -> (%a) %a@]" print cond
+        (print_list Block_id.print " ")
+        cases Block_id.print default
+    | NR_let_cont { cont; params; handler; body } ->
+      Format.fprintf ppf "@[<hov 2>Let_cont %a(%a) =@ %a@]@ in@ %a"
+        Block_id.print cont
+        (print_list
+           (fun ppf (local, typ) ->
+             Format.fprintf ppf "%a : %a"
+               (Format.pp_print_option Local.print_var)
+               local Type.print_atom typ )
+           ", " )
+        params print_no_return handler print_no_return body
+    | NR_br { cont; arg } ->
+      Format.fprintf ppf "@[<hov 2>Br(%a, %a)@]" Block_id.print cont print arg
 
   let let_ var typ defining_expr body = Let { var; typ; defining_expr; body }
 
@@ -682,7 +752,9 @@ module Expr = struct
       | Br_if { cond; if_true = _; if_else } ->
         let acc = loop acc cond in
         loop acc if_else
+      | Br_table { cond; cases = _; default = _ } -> loop acc cond
       | Unit nv -> loop_no_value acc nv
+      | NR nr -> loop_no_return acc nr
     and loop_no_value acc nv =
       match nv with
       | NV -> acc
@@ -699,6 +771,23 @@ module Expr = struct
         let acc = loop acc cond in
         let acc = loop_no_value acc if_expr in
         loop_no_value acc else_expr
+    and loop_no_return acc nr =
+      match nr with
+      | NR_if_then_else { cond; if_expr; else_expr } ->
+        let acc = loop acc cond in
+        let acc = loop_no_return acc if_expr in
+        loop_no_return acc else_expr
+      | NR_br_table { cond; cases = _; default = _ } -> loop acc cond
+      | NR_let_cont { cont = _; params; handler; body } ->
+        let acc =
+          List.fold_left
+            (fun acc (var, typ) ->
+              match var with None -> acc | Some var -> add var typ acc )
+            acc params
+        in
+        let acc = loop_no_return acc handler in
+        loop_no_return acc body
+      | NR_br { cont = _; arg } -> loop acc arg
     in
     match body with
     | Value (expr, _typ) -> loop Local.Map.empty expr
@@ -969,6 +1058,14 @@ module Conv = struct
   end
 
   module Block = struct
+    let get_tag ?(cast : unit option) e : Expr.t =
+      let block : Expr.t =
+        match cast with
+        | None -> e
+        | Some () -> Ref_cast { r = e; typ = Gen_block }
+      in
+      Unop (Struct_get_packed { extend = U; typ = Gen_block; field = 0 }, block)
+
     let get_field ?(cast : unit option) e ~field : Expr.t =
       let size = field + 1 in
       State.add_block_size size;
@@ -989,6 +1086,12 @@ module Conv = struct
         | Some () -> Expr.(Ref_cast { typ; r = block })
       in
       NV_binop (Struct_set { typ; field = field + 2 }, (block, value))
+  end
+
+  module WInt = struct
+    let untag e : Expr.t = Unop (I31_get_s, Ref_cast { typ = I31; r = e })
+
+    let tag e : Expr.t = Unop (I31_new, e)
   end
 
   let const_float f : Expr.t = Struct_new (Float, [ F64 f ])
@@ -1197,6 +1300,17 @@ module Conv = struct
       in
       Some (Decl.Type (name, descr))
     end
+
+  let conv_is_int expr : Expr.t =
+    let cont = Block_id.fresh "isint" in
+    Let_cont
+      { cont
+      ; params = [ (None, Type.Rvar I31) ]
+      ; handler = true_value
+      ; body =
+          Br_on_cast
+            { value = expr; typ = I31; if_cast = cont; if_else = false_value }
+      }
 
   let closure_types (program : Flambda.program) =
     List.filter_map closure_type (Flambda_utils.all_sets_of_closures program)
@@ -1479,9 +1593,8 @@ module Conv = struct
       let new_value = conv_var env new_value in
       Unit (Assign { being_assigned; new_value })
     | If_then_else (var, if_expr, else_expr) ->
-      let cond : Expr.t =
-        Unop (Expr.I31_get_s, Ref_cast { typ = I31; r = conv_var env var })
-      in
+      let cond : Expr.t = WInt.untag (conv_var env var) in
+
       let if_expr = conv_expr env if_expr in
       let else_expr = conv_expr env else_expr in
       If_then_else { cond; if_expr; else_expr }
@@ -1504,18 +1617,102 @@ module Conv = struct
       let args = List.map (conv_var env) args in
       Apply_cont { cont; args }
     | While (cond, body) ->
-      let cond : Expr.t =
-        Unop (I31_get_s, Ref_cast { typ = I31; r = conv_expr env cond })
-      in
+      let cond : Expr.t = WInt.untag (conv_expr env cond) in
       let cont = Block_id.fresh "continue" in
       let body : Expr.no_value_expression =
         NV_seq [ drop (conv_expr env body); NV_br_if { cond; if_true = cont } ]
       in
       Unit
         (NV_if_then_else { cond; if_expr = Loop { cont; body }; else_expr = NV })
+    | Switch (cond, switch) ->
+      let cond = conv_var env cond in
+      conv_switch env cond switch
     | _ ->
       let msg = Format.asprintf "TODO (conv_expr) %a" Flambda.print expr in
       failwith msg
+
+  and conv_switch (env : env) (cond : Expr.t) (switch : Flambda.switch) : Expr.t
+      =
+    let default_id = Block_id.fresh "switch_default" in
+    let branches _set cases =
+      let cases, defs =
+        List.fold_left
+          (fun (map, defs) (i, branch) ->
+            let id = Block_id.fresh (Printf.sprintf "switch_%i" i) in
+            (Numbers.Int.Map.add i id map, (id, branch) :: defs) )
+          (Numbers.Int.Map.empty, [])
+          cases
+      in
+      let max_branch, default_branch =
+        let max, max_branch = Numbers.Int.Map.max_binding cases in
+        ( max
+        , match switch.failaction with
+          | None -> max_branch
+          | Some _ -> default_id )
+      in
+      let cases =
+        List.init (max_branch + 1) (fun i ->
+            match Numbers.Int.Map.find_opt i cases with
+            | None -> default_branch
+            | Some branch -> branch )
+      in
+      (cases, defs)
+    in
+    let default_defs =
+      match switch.failaction with
+      | None -> []
+      | Some default -> [ (default_id, default) ]
+    in
+    if Numbers.Int.Set.is_empty switch.numconsts then assert false
+    else if Numbers.Int.Set.is_empty switch.numblocks then assert false
+    else
+      let const_cases, const_defs = branches switch.numconsts switch.consts in
+      let block_cases, block_defs = branches switch.numblocks switch.blocks in
+      let defs = const_defs @ block_defs @ default_defs in
+      let body : Expr.no_return =
+        let if_expr : Expr.no_return =
+          let default_branch : Block_id.t =
+            match switch.failaction with
+            | None -> fst (List.hd const_defs)
+            | Some _ -> default_id
+          in
+          let cond : Expr.t = WInt.untag cond in
+          NR_br_table { cond; cases = const_cases; default = default_branch }
+        in
+        let else_expr : Expr.no_return =
+          let default_branch : Block_id.t =
+            match switch.failaction with
+            | None -> fst (List.hd block_defs)
+            | Some _ -> default_id
+          in
+          let cond : Expr.t = Block.get_tag ~cast:() cond in
+          NR_br_table { cond; cases = block_cases; default = default_branch }
+        in
+        NR_if_then_else
+          { cond =
+              (* TODO refactor things to avoid this tagging/untagging *)
+              WInt.untag (conv_is_int cond)
+          ; if_expr
+          ; else_expr
+          }
+      in
+      let fallthrough = Block_id.fresh "switch_result" in
+      let add_def (body : Expr.no_return) (cont, branch) : Expr.no_return =
+        NR_let_cont
+          { cont
+          ; params = []
+          ; body
+          ; handler = NR_br { cont = fallthrough; arg = conv_expr env branch }
+          }
+      in
+      let body = List.fold_left add_def body defs in
+      let param = Expr.Local.fresh "switch_result" in
+      Let_cont
+        { cont = fallthrough
+        ; params = [ (Some param, ref_eq) ]
+        ; body = NR body
+        ; handler = Var (V param)
+        }
 
   and conv_named (env : env) (named : Flambda.named) : Expr.t =
     match named with
@@ -1558,8 +1755,8 @@ module Conv = struct
       | [ a; b ] -> (a, b)
       | _ -> Misc.fatal_errorf "Wrong number of primitive arguments"
     in
-    let i32 v = Expr.Unop (I31_get_s, Ref_cast { typ = I31; r = v }) in
-    let i31 v = Expr.Unop (I31_new, v) in
+    let i32 v = WInt.untag v in
+    let i31 v = WInt.tag v in
     let runtime_prim name : Expr.t =
       let arity = List.length args in
       State.add_runtime_import { name; arity };
@@ -1610,20 +1807,7 @@ module Conv = struct
       let block, value = args2 args in
       Seq ([ Block.set_field ~cast:() ~field ~block value ], unit_value)
     | Popaque -> arg1 args
-    | Pisint ->
-      let cont = Block_id.fresh "isint" in
-      Let_cont
-        { cont
-        ; params = [ (None, Type.Rvar I31) ]
-        ; handler = true_value
-        ; body =
-            Br_on_cast
-              { value = arg1 args
-              ; typ = I31
-              ; if_cast = cont
-              ; if_else = false_value
-              }
-        }
+    | Pisint -> conv_is_int (arg1 args)
     | Pintcomp Ceq -> i31 (Expr.Binop (Ref_eq, args2 args))
     | Pintcomp cop -> begin
       let op : Expr.t =
@@ -2099,6 +2283,13 @@ module ToWasm = struct
 
     let struct_get typ field = node "struct.get" [ type_name typ; int field ]
 
+    let sx_name (sx : Expr.sx) = match sx with S -> "s" | U -> "u"
+
+    let struct_get_packed extend typ field =
+      node
+        (Printf.sprintf "struct.get_%s" (sx_name extend))
+        [ type_name typ; int field ]
+
     let struct_set typ field = node "struct.set" [ type_name typ; int field ]
 
     let call_ref typ = node "call_ref" [ type_name typ ]
@@ -2162,6 +2353,9 @@ module ToWasm = struct
 
     let br_if id = node "br_if" [ !$(Block_id.name id) ]
 
+    let br_table cases =
+      node "br_table" (List.map (fun id -> !$(Block_id.name id)) cases)
+
     let type_ name descr = node "type" [ type_name name; descr ]
 
     let sub name descr = node "sub" [ type_name name; descr ]
@@ -2202,6 +2396,8 @@ module ToWasm = struct
     | I31_get_s -> Cst.atom "i31.get_s"
     | I31_new -> Cst.atom "i31.new"
     | Struct_get { typ; field } -> C.struct_get typ field
+    | Struct_get_packed { typ; field; extend } ->
+      C.struct_get_packed extend typ field
 
   let nn_name (nn : Expr.nn) = match nn with S32 -> "32" | S64 -> "64"
 
@@ -2277,7 +2473,10 @@ module ToWasm = struct
       conv_expr value @ [ C.br_on_cast if_cast typ ] @ conv_expr if_else
     | Br_if { cond; if_true; if_else } ->
       conv_expr cond @ [ C.br_if if_true ] @ conv_expr if_else
+    | Br_table { cond; cases; default } ->
+      conv_expr cond @ [ C.br_table (cases @ [ default ]) ]
     | Unit e -> conv_no_value e @ unit
+    | NR nr -> conv_no_return nr
 
   and conv_no_value (nv : Expr.no_value_expression) =
     match nv with
@@ -2295,6 +2494,29 @@ module ToWasm = struct
       @ [ C.if_then_else [] (conv_no_value if_expr) (conv_no_value else_expr) ]
     | NV_br_if { cond; if_true } -> conv_expr cond @ [ C.br_if if_true ]
     | NV -> []
+
+  and conv_no_return (nr : Expr.no_return) =
+    match nr with
+    | NR_br_table { cond; cases; default } ->
+      conv_expr cond @ [ C.br_table (cases @ [ default ]) ]
+    | NR_let_cont { cont; params; handler; body } ->
+      let result_types = List.map snd params in
+      let body = conv_no_return body in
+      let handler =
+        List.map
+          (fun (var, _typ) ->
+            match var with
+            | Some var -> C.local_set (Expr.Local.V var)
+            | None -> C.drop )
+          params
+        @ conv_no_return handler
+      in
+      C.block cont result_types body :: handler
+    | NR_if_then_else { cond; if_expr; else_expr } ->
+      conv_expr cond
+      @ [ C.if_then_else [] (conv_no_return if_expr) (conv_no_return else_expr)
+        ]
+    | NR_br { cont; arg } -> conv_expr arg @ [ C.br cont ]
 
   let conv_const name (const : Const.t) =
     match const with
