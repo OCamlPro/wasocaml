@@ -22,4 +22,14 @@ let f x =
   | D n -> n
   | E (n, m) -> n + m
   | F n -> n * 2
+[@@inline never]
 
+let h = saucisse
+
+let () =
+  h (f A);
+  h (f B);
+  h (f C);
+  h (f (D 4));
+  h (f (E (1,4)));
+  h (f (F 3))
