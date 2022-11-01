@@ -1651,6 +1651,8 @@ module Conv = struct
           | Some _ -> default_id )
       in
       let cases =
+        (* TODO max_branch should be sufficient sometimes: the default
+           can replace the last case *)
         List.init (max_branch + 1) (fun i ->
             match Numbers.Int.Map.find_opt i cases with
             | None -> default_branch
@@ -1670,7 +1672,7 @@ module Conv = struct
         | Some _ -> default_id
       in
       let cond : Expr.t = get_int cond in
-      NR_br_table { cond; cases = cases; default = default_branch }
+      NR_br_table { cond; cases; default = default_branch }
     in
     let make_let_conts body defs : Expr.t =
       let fallthrough = Block_id.fresh "switch_result" in
@@ -1694,7 +1696,9 @@ module Conv = struct
     if Numbers.Int.Set.is_empty switch.numconsts then
       let block_cases, block_defs = branches switch.numblocks switch.blocks in
       let defs = block_defs @ default_defs in
-      make_let_conts (br_table (Block.get_tag ~cast:()) block_cases block_defs) defs
+      make_let_conts
+        (br_table (Block.get_tag ~cast:()) block_cases block_defs)
+        defs
     else if Numbers.Int.Set.is_empty switch.numblocks then
       let const_cases, const_defs = branches switch.numconsts switch.consts in
       let defs = const_defs @ default_defs in
@@ -1705,10 +1709,12 @@ module Conv = struct
       let defs = const_defs @ block_defs @ default_defs in
       let body : Expr.no_return =
         let if_expr = br_table WInt.untag const_cases const_defs in
-        let else_expr = br_table (Block.get_tag ~cast:()) block_cases block_defs in
+        let else_expr =
+          br_table (Block.get_tag ~cast:()) block_cases block_defs
+        in
         NR_if_then_else
           { cond =
-              (* TODO refactor things to avoid this tagging/untagging *)
+              (* TODO refactor things to avoid this tagging/untagging and useless branches in is_int*)
               WInt.untag (conv_is_int cond)
           ; if_expr
           ; else_expr
