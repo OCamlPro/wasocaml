@@ -2275,8 +2275,12 @@ module ToWasm = struct
       in
       node name (type_name typ :: fields)
 
-    let array_new_canon_fixed typ size =
-      node "array.new_canon_fixed" [ type_name typ; Int (Int64.of_int size) ]
+    let array_new_canon_fixed typ size args =
+      match mode with
+      | Binarien -> node "array.new" ([ type_name typ ] @ args)
+      | Reference ->
+        node "array.new_canon_fixed"
+          ([ type_name typ; Int (Int64.of_int size) ] @ args)
 
     let int i = Int (Int64.of_int i)
 
@@ -2292,7 +2296,8 @@ module ToWasm = struct
 
     let i31_new i = node "i31.new" [ i ]
 
-    let drop = atom "drop"
+    let drop arg = node "drop" [ arg ]
+    let drop' = atom "drop"
 
     let ref_func f = node "ref.func" [ !$(Func_id.name f) ]
 
@@ -2314,13 +2319,14 @@ module ToWasm = struct
         (Printf.sprintf "struct.get_%s" (sx_name extend))
         [ type_name typ; int field; arg ]
 
-    let struct_set typ field = node "struct.set" [ type_name typ; int field ]
+    let struct_set typ field block value =
+      node "struct.set" [ type_name typ; int field; block; value ]
 
     let call_ref typ args = node "call_ref" ([ type_name typ ] @ args)
 
     let call_ref' typ = node "call_ref" [ type_name typ ]
 
-    let call func = node "call" [ !$(Func_id.name func) ]
+    let call func args = node "call" ([ !$(Func_id.name func) ] @ args)
 
     let ref_cast typ arg =
       let name =
@@ -2417,7 +2423,7 @@ module ToWasm = struct
 
   let gvar v = Global.name v
 
-  let unit = [ C.i32 0l; Cst.atom "i31.new" ]
+  let unit = Cst.node "i31.new" [ C.i32 0l ]
 
   let conv_binop (op : Expr.binop) args =
     match op with
@@ -2430,8 +2436,9 @@ module ToWasm = struct
     | F64_div -> Cst.node "f64.div" args
     | Ref_eq -> Cst.node "ref.eq" args
 
-  let conv_nv_binop (op : Expr.nv_binop) =
-    match op with Struct_set { typ; field } -> [ C.struct_set typ field ]
+  let conv_nv_binop (op : Expr.nv_binop) block value =
+    match op with
+    | Struct_set { typ; field } -> [ C.struct_set typ field block value ]
 
   let conv_unop (op : Expr.unop) arg =
     match op with
@@ -2439,12 +2446,12 @@ module ToWasm = struct
     | I31_new -> Cst.node "i31.new" [ arg ]
     | Struct_get { typ; field } -> C.struct_get typ field arg
     | Struct_get_packed { typ; field; extend } ->
-        C.struct_get_packed extend typ field arg
+      C.struct_get_packed extend typ field arg
     | Ref_cast_i31 -> begin
-        match mode with
-        | Reference -> Cst.node "ref.cast" [ Cst.atom "i31"; arg ]
-        | Binarien -> Cst.node "ref.as_i31" [ arg ]
-      end
+      match mode with
+      | Reference -> Cst.node "ref.cast" [ Cst.atom "i31"; arg ]
+      | Binarien -> Cst.node "ref.as_i31" [ arg ]
+    end
 
   let nn_name (nn : Expr.nn) = match nn with S32 -> "32" | S64 -> "64"
 
@@ -2486,14 +2493,15 @@ module ToWasm = struct
       [ C.struct_new_canon typ fields ]
     | Array_new_fixed { typ; fields } ->
       let size = List.length fields in
-      let fields = List.map conv_expr fields in
-      List.flatten fields @ [ C.array_new_canon_fixed typ size ]
+      let fields = List.map conv_expr_group fields in
+      [ C.array_new_canon_fixed typ size fields ]
     | Ref_func fid -> [ C.ref_func fid ]
     | Call_ref { typ; args; func } ->
       let args = List.map conv_expr_group args @ conv_expr func in
       [ C.call_ref typ args ]
     | Call { args; func } ->
-      List.flatten (List.map conv_expr args) @ [ C.call func ]
+        let args = List.map conv_expr_group args in
+        [ C.call func args ]
     | Ref_cast { typ; r } -> [ C.ref_cast typ [ conv_expr_group r ] ]
     | Global_get g -> [ C.global_get g ]
     | Seq (effects, last) ->
@@ -2512,7 +2520,7 @@ module ToWasm = struct
           (fun (var, _typ) ->
             match var with
             | Some var -> C.local_set' (Expr.Local.V var)
-            | None -> C.drop )
+            | None -> C.drop' )
           params
         @ conv_expr handler
       in
@@ -2528,7 +2536,7 @@ module ToWasm = struct
       conv_expr cond @ [ C.br_if if_true ] @ conv_expr if_else
     | Br_table { cond; cases; default } ->
       conv_expr cond @ [ C.br_table (cases @ [ default ]) ]
-    | Unit e -> conv_no_value e @ unit
+    | Unit e -> conv_no_value e @ [ unit ]
     | NR nr -> conv_no_return nr
 
   and conv_expr_group e = group (conv_expr e)
@@ -2538,11 +2546,11 @@ module ToWasm = struct
     | NV_seq effects ->
       let effects = List.map conv_no_value effects in
       List.flatten effects
-    | NV_drop e -> conv_expr e @ [ C.drop ]
+    | NV_drop e -> [ C.drop (conv_expr_group e) ]
     | Assign { being_assigned; new_value } ->
       [ C.local_set (Expr.Local.V being_assigned) (conv_expr_group new_value) ]
     | NV_binop (op, (arg1, arg2)) ->
-      conv_expr arg1 @ conv_expr arg2 @ conv_nv_binop op
+      conv_nv_binop op (conv_expr_group arg1) (conv_expr_group arg2)
     | Loop { cont; body } -> [ C.loop cont [] (conv_no_value body) ]
     | NV_if_then_else { cond; if_expr; else_expr } ->
       conv_expr cond
@@ -2562,7 +2570,7 @@ module ToWasm = struct
           (fun (var, _typ) ->
             match var with
             | Some var -> C.local_set' (Expr.Local.V var)
-            | None -> C.drop )
+            | None -> C.drop' )
           params
         @ conv_no_return handler
       in
@@ -2666,7 +2674,7 @@ let run ~output_prefix (flambda : Flambda.program) =
   let m = Conv.conv_body top_env flambda.program_body [] in
   let closure_types = Conv.closure_types flambda in
   let functions = Conv.conv_functions ~top_env flambda in
-  let m = closure_types @ functions @ m in
+  let m = closure_types @ m @ functions in
   if print_everything then
     Format.printf "WASM %s@.%a@." output_prefix Module.print m;
   let common = Conv.make_common () in
