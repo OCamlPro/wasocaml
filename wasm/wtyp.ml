@@ -4,6 +4,12 @@
 
 [@@@ocaml.warning "-32"]
 
+type mode =
+  | Reference
+  | Binarien
+
+let mode = Binarien
+
 let print_list f sep ppf l =
   Format.pp_print_list
     ~pp_sep:(fun ppf () -> Format.fprintf ppf "%s@ " sep)
@@ -421,6 +427,7 @@ module Expr = struct
         ; field : int
         ; extend : sx
         }
+    | Ref_cast_i31
 
   (* Every expression returns exactly one value *)
   type t =
@@ -578,6 +585,7 @@ module Expr = struct
       let str = match extend with S -> "_s" | U -> "_u" in
       Format.fprintf ppf "@[<hov 2>Struct_get%s(%a).(%i)@]" str Type.Var.print
         typ field
+    | Ref_cast_i31 -> Format.fprintf ppf "Ref_cast_i31"
 
   let rec print ppf = function
     | Var l -> Local.print ppf l
@@ -1089,7 +1097,7 @@ module Conv = struct
   end
 
   module WInt = struct
-    let untag e : Expr.t = Unop (I31_get_s, Ref_cast { typ = I31; r = e })
+    let untag e : Expr.t = Unop (I31_get_s, Unop (Ref_cast_i31, e))
 
     let tag e : Expr.t = Unop (I31_new, e)
   end
@@ -2260,7 +2268,12 @@ module ToWasm = struct
     let reft name = node "ref" [ type_name name ]
 
     let struct_new_canon typ fields =
-      node "struct.new_canon" (type_name typ :: fields)
+      let name =
+        match mode with
+        | Binarien -> "struct.new"
+        | Reference -> "struct.new_canon"
+      in
+      node name (type_name typ :: fields)
 
     let array_new_canon_fixed typ size =
       node "array.new_canon_fixed" [ type_name typ; Int (Int64.of_int size) ]
@@ -2287,24 +2300,35 @@ module ToWasm = struct
 
     let local_get l = node "local.get" [ !$(Expr.Local.name l) ]
 
-    let local_set l = node "local.set" [ !$(Expr.Local.name l) ]
+    let local_set l arg = node "local.set" [ !$(Expr.Local.name l); arg ]
 
-    let struct_get typ field = node "struct.get" [ type_name typ; int field ]
+    let local_set' l = node "local.set" [ !$(Expr.Local.name l) ]
+
+    let struct_get typ field arg =
+      node "struct.get" [ type_name typ; int field; arg ]
 
     let sx_name (sx : Expr.sx) = match sx with S -> "s" | U -> "u"
 
-    let struct_get_packed extend typ field =
+    let struct_get_packed extend typ field arg =
       node
         (Printf.sprintf "struct.get_%s" (sx_name extend))
-        [ type_name typ; int field ]
+        [ type_name typ; int field; arg ]
 
     let struct_set typ field = node "struct.set" [ type_name typ; int field ]
 
-    let call_ref typ = node "call_ref" [ type_name typ ]
+    let call_ref typ args = node "call_ref" ([ type_name typ ] @ args)
+
+    let call_ref' typ = node "call_ref" [ type_name typ ]
 
     let call func = node "call" [ !$(Func_id.name func) ]
 
-    let ref_cast typ = node "ref.cast" [ type_name typ ]
+    let ref_cast typ arg =
+      let name =
+        match mode with
+        | Binarien -> "ref.cast_static"
+        | Reference -> "ref.cast"
+      in
+      node name ([ type_name typ ] @ arg)
 
     let declare_func f =
       node "elem" [ atom "declare"; atom "func"; !$(Func_id.name f) ]
@@ -2348,6 +2372,8 @@ module ToWasm = struct
     let if_then_else typ if_expr else_expr =
       node "if" [ results typ; node_p "then" if_expr; node_p "else" else_expr ]
 
+    let group_block result body = nodehv "block" [ results result ] body
+
     let block id result body =
       nodehv "block" [ !$(Block_id.name id); results result ] body
 
@@ -2356,8 +2382,13 @@ module ToWasm = struct
 
     let br id = node "br" [ !$(Block_id.name id) ]
 
-    let br_on_cast id typ =
-      node "br_on_cast" [ !$(Block_id.name id); type_name typ ]
+    let br_on_cast id typ arg =
+      let name =
+        match mode with
+        | Binarien -> "br_on_cast_static"
+        | Reference -> "br_on_cast"
+      in
+      node name [ !$(Block_id.name id); type_name typ; arg ]
 
     let br_if id = node "br_if" [ !$(Block_id.name id) ]
 
@@ -2366,7 +2397,10 @@ module ToWasm = struct
 
     let type_ name descr = node "type" [ type_name name; descr ]
 
-    let sub name descr = node "sub" [ type_name name; descr ]
+    let sub name descr =
+      match mode with
+      | Binarien -> descr
+      | Reference -> node "sub" [ type_name name; descr ]
 
     let rec_ l = node "rec" l
 
@@ -2385,27 +2419,32 @@ module ToWasm = struct
 
   let unit = [ C.i32 0l; Cst.atom "i31.new" ]
 
-  let conv_binop (op : Expr.binop) =
+  let conv_binop (op : Expr.binop) args =
     match op with
-    | I32_add -> [ Cst.atom "i32.add" ]
-    | I32_sub -> [ Cst.atom "i32.sub" ]
-    | I32_mul -> [ Cst.atom "i32.mul" ]
-    | F64_add -> [ Cst.atom "f64.add" ]
-    | F64_sub -> [ Cst.atom "f64.sub" ]
-    | F64_mul -> [ Cst.atom "f64.mul" ]
-    | F64_div -> [ Cst.atom "f64.div" ]
-    | Ref_eq -> [ Cst.atom "ref.eq" ]
+    | I32_add -> Cst.node "i32.add" args
+    | I32_sub -> Cst.node "i32.sub" args
+    | I32_mul -> Cst.node "i32.mul" args
+    | F64_add -> Cst.node "f64.add" args
+    | F64_sub -> Cst.node "f64.sub" args
+    | F64_mul -> Cst.node "f64.mul" args
+    | F64_div -> Cst.node "f64.div" args
+    | Ref_eq -> Cst.node "ref.eq" args
 
   let conv_nv_binop (op : Expr.nv_binop) =
     match op with Struct_set { typ; field } -> [ C.struct_set typ field ]
 
-  let conv_unop (op : Expr.unop) =
+  let conv_unop (op : Expr.unop) arg =
     match op with
-    | I31_get_s -> Cst.atom "i31.get_s"
-    | I31_new -> Cst.atom "i31.new"
-    | Struct_get { typ; field } -> C.struct_get typ field
+    | I31_get_s -> Cst.node "i31.get_s" [ arg ]
+    | I31_new -> Cst.node "i31.new" [ arg ]
+    | Struct_get { typ; field } -> C.struct_get typ field arg
     | Struct_get_packed { typ; field; extend } ->
-      C.struct_get_packed extend typ field
+        C.struct_get_packed extend typ field arg
+    | Ref_cast_i31 -> begin
+        match mode with
+        | Reference -> Cst.node "ref.cast" [ Cst.atom "i31"; arg ]
+        | Binarien -> Cst.node "ref.as_i31" [ arg ]
+      end
 
   let nn_name (nn : Expr.nn) = match nn with S32 -> "32" | S64 -> "64"
 
@@ -2422,35 +2461,40 @@ module ToWasm = struct
 
   let conv_irelop nn op = [ Cst.atom (irelop_name nn op) ]
 
+  let group e = match e with [ v ] -> v | _ -> C.group_block [ ref_eq ] e
+
   let rec conv_expr (expr : Expr.t) =
     match expr with
     | Var v -> [ C.local_get v ]
-    | Binop (op, (arg1, arg2)) ->
-      conv_expr arg1 @ conv_expr arg2 @ conv_binop op
+    | Binop (op, (arg1, arg2)) -> begin
+      match mode with
+      | Binarien ->
+        [ conv_binop op [ conv_expr_group arg1; conv_expr_group arg2 ] ]
+      | Reference -> conv_expr arg1 @ conv_expr arg2 @ [ conv_binop op [] ]
+    end
     | I_relop (nn, op, (arg1, arg2)) ->
       conv_expr arg1 @ conv_expr arg2 @ conv_irelop nn op
-    | Unop (op, arg) -> conv_expr arg @ [ conv_unop op ]
+    | Unop (op, arg) -> [ conv_unop op (conv_expr_group arg) ]
     | Let { var; typ = _; defining_expr; body } ->
-      conv_expr defining_expr
-      @ (C.local_set (Expr.Local.V var) :: conv_expr body)
+      C.local_set (Expr.Local.V var) (conv_expr_group defining_expr)
+      :: conv_expr body
     | I32 i -> [ C.i32 i ]
     | I64 i -> [ C.i64 i ]
     | F64 f -> [ C.f64 f ]
     | Struct_new (typ, fields) ->
-      let fields = List.map conv_expr fields in
-      List.flatten fields @ [ C.struct_new_canon typ [] ]
+      let fields = List.map conv_expr_group fields in
+      [ C.struct_new_canon typ fields ]
     | Array_new_fixed { typ; fields } ->
       let size = List.length fields in
       let fields = List.map conv_expr fields in
       List.flatten fields @ [ C.array_new_canon_fixed typ size ]
     | Ref_func fid -> [ C.ref_func fid ]
     | Call_ref { typ; args; func } ->
-      List.flatten (List.map conv_expr args)
-      @ conv_expr func
-      @ [ C.call_ref typ ]
+      let args = List.map conv_expr_group args @ conv_expr func in
+      [ C.call_ref typ args ]
     | Call { args; func } ->
       List.flatten (List.map conv_expr args) @ [ C.call func ]
-    | Ref_cast { typ; r } -> conv_expr r @ [ C.ref_cast typ ]
+    | Ref_cast { typ; r } -> [ C.ref_cast typ [ conv_expr_group r ] ]
     | Global_get g -> [ C.global_get g ]
     | Seq (effects, last) ->
       let effects = List.map conv_no_value effects in
@@ -2467,7 +2511,7 @@ module ToWasm = struct
         List.map
           (fun (var, _typ) ->
             match var with
-            | Some var -> C.local_set (Expr.Local.V var)
+            | Some var -> C.local_set' (Expr.Local.V var)
             | None -> C.drop )
           params
         @ conv_expr handler
@@ -2478,13 +2522,16 @@ module ToWasm = struct
     | Apply_cont { cont; args } ->
       List.flatten (List.map conv_expr args) @ [ C.br cont ]
     | Br_on_cast { value; typ; if_cast; if_else } ->
-      conv_expr value @ [ C.br_on_cast if_cast typ ] @ conv_expr if_else
+      [ C.br_on_cast if_cast typ (group (conv_expr value)) ] @ conv_expr if_else
+      (* conv_expr value @ [ C.br_on_cast if_cast typ ] @ conv_expr if_else *)
     | Br_if { cond; if_true; if_else } ->
       conv_expr cond @ [ C.br_if if_true ] @ conv_expr if_else
     | Br_table { cond; cases; default } ->
       conv_expr cond @ [ C.br_table (cases @ [ default ]) ]
     | Unit e -> conv_no_value e @ unit
     | NR nr -> conv_no_return nr
+
+  and conv_expr_group e = group (conv_expr e)
 
   and conv_no_value (nv : Expr.no_value_expression) =
     match nv with
@@ -2493,7 +2540,7 @@ module ToWasm = struct
       List.flatten effects
     | NV_drop e -> conv_expr e @ [ C.drop ]
     | Assign { being_assigned; new_value } ->
-      conv_expr new_value @ [ C.local_set (Expr.Local.V being_assigned) ]
+      [ C.local_set (Expr.Local.V being_assigned) (conv_expr_group new_value) ]
     | NV_binop (op, (arg1, arg2)) ->
       conv_expr arg1 @ conv_expr arg2 @ conv_nv_binop op
     | Loop { cont; body } -> [ C.loop cont [] (conv_no_value body) ]
@@ -2514,7 +2561,7 @@ module ToWasm = struct
         List.map
           (fun (var, _typ) ->
             match var with
-            | Some var -> C.local_set (Expr.Local.V var)
+            | Some var -> C.local_set' (Expr.Local.V var)
             | None -> C.drop )
           params
         @ conv_no_return handler
