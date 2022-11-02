@@ -2375,8 +2375,9 @@ module ToWasm = struct
       let res = List.map result res in
       node "func" (name @ List.map param_t params @ res)
 
-    let if_then_else typ if_expr else_expr =
-      node "if" [ results typ; node_p "then" if_expr; node_p "else" else_expr ]
+    let if_then_else typ cond if_expr else_expr =
+      node "if"
+        [ results typ; cond; node_p "then" if_expr; node_p "else" else_expr ]
 
     let group_block result body = nodehv "block" [ results result ] body
 
@@ -2386,20 +2387,26 @@ module ToWasm = struct
     let loop id result body =
       nodehv "loop" [ !$(Block_id.name id); results result ] body
 
-    let br id = node "br" [ !$(Block_id.name id) ]
+    let br id args = node "br" ([ !$(Block_id.name id) ] @ args)
+
+    let br' id = node "br" [ !$(Block_id.name id) ]
 
     let br_on_cast id typ arg =
-      let name =
-        match mode with
-        | Binarien -> "br_on_cast_static"
-        | Reference -> "br_on_cast"
-      in
-      node name [ !$(Block_id.name id); type_name typ; arg ]
+      match mode with
+      | Binarien -> begin
+        match typ with
+        | Type.Var.I31 ->
+          node "drop" [ node "br_on_i31" [ !$(Block_id.name id); arg ] ]
+        | _ ->
+          node "br_on_cast_static" [ !$(Block_id.name id); type_name typ; arg ]
+      end
+      | Reference ->
+        node "br_on_cast" [ !$(Block_id.name id); type_name typ; arg ]
 
-    let br_if id = node "br_if" [ !$(Block_id.name id) ]
+    let br_if id cond = node "br_if" [ !$(Block_id.name id); cond ]
 
-    let br_table cases =
-      node "br_table" (List.map (fun id -> !$(Block_id.name id)) cases)
+    let br_table cond cases =
+      node "br_table" (cond :: List.map (fun id -> !$(Block_id.name id)) cases)
 
     let type_ name descr = node "type" [ type_name name; descr ]
 
@@ -2407,6 +2414,10 @@ module ToWasm = struct
       match mode with
       | Binarien -> descr
       | Reference -> node "sub" [ type_name name; descr ]
+
+    let tuple_make fields = node "tuple.make" fields
+
+    let tuple_extract field tuple = node "tuple.extract" [ int field; tuple ]
 
     let rec_ l = node "rec" l
 
@@ -2466,21 +2477,17 @@ module ToWasm = struct
     | Le sx -> Format.asprintf "i%s.le_%s" (nn_name nn) (sx_name sx)
     | Ge sx -> Format.asprintf "i%s.ge_%s" (nn_name nn) (sx_name sx)
 
-  let conv_irelop nn op = [ Cst.atom (irelop_name nn op) ]
+  let conv_irelop nn op a1 a2 = Cst.node (irelop_name nn op) [ a1; a2 ]
 
   let group e = match e with [ v ] -> v | _ -> C.group_block [ ref_eq ] e
 
-  let rec conv_expr (expr : Expr.t) =
+  let rec conv_expr (expr : Expr.t) : Cst.t list =
     match expr with
     | Var v -> [ C.local_get v ]
-    | Binop (op, (arg1, arg2)) -> begin
-      match mode with
-      | Binarien ->
-        [ conv_binop op [ conv_expr_group arg1; conv_expr_group arg2 ] ]
-      | Reference -> conv_expr arg1 @ conv_expr arg2 @ [ conv_binop op [] ]
-    end
+    | Binop (op, (arg1, arg2)) ->
+      [ conv_binop op [ conv_expr_group arg1; conv_expr_group arg2 ] ]
     | I_relop (nn, op, (arg1, arg2)) ->
-      conv_expr arg1 @ conv_expr arg2 @ conv_irelop nn op
+      [ conv_irelop nn op (conv_expr_group arg1) (conv_expr_group arg2) ]
     | Unop (op, arg) -> [ conv_unop op (conv_expr_group arg) ]
     | Let { var; typ = _; defining_expr; body } ->
       C.local_set (Expr.Local.V var) (conv_expr_group defining_expr)
@@ -2497,11 +2504,11 @@ module ToWasm = struct
       [ C.array_new_canon_fixed typ size fields ]
     | Ref_func fid -> [ C.ref_func fid ]
     | Call_ref { typ; args; func } ->
-      let args = List.map conv_expr_group args @ conv_expr func in
+      let args = List.map conv_expr_group args @ [ conv_expr_group func ] in
       [ C.call_ref typ args ]
     | Call { args; func } ->
-        let args = List.map conv_expr_group args in
-        [ C.call func args ]
+      let args = List.map conv_expr_group args in
+      [ C.call func args ]
     | Ref_cast { typ; r } -> [ C.ref_cast typ [ conv_expr_group r ] ]
     | Global_get g -> [ C.global_get g ]
     | Seq (effects, last) ->
@@ -2509,33 +2516,60 @@ module ToWasm = struct
       let last = conv_expr last in
       List.flatten effects @ last
     | If_then_else { cond; if_expr; else_expr } ->
-      conv_expr cond
-      @ [ C.if_then_else [ ref_eq ] (conv_expr if_expr) (conv_expr else_expr) ]
-    | Let_cont { cont; params; handler; body } ->
+      [ C.if_then_else [ ref_eq ] (conv_expr_group cond) (conv_expr if_expr)
+          (conv_expr else_expr)
+      ]
+    | Let_cont { cont; params; handler; body } -> begin
       let result_types = List.map snd params in
       let fallthrough = Block_id.not_id cont in
-      let body = conv_expr body @ [ C.br fallthrough ] in
-      let handler =
-        List.map
-          (fun (var, _typ) ->
-            match var with
-            | Some var -> C.local_set' (Expr.Local.V var)
-            | None -> C.drop' )
-          params
-        @ conv_expr handler
+      let body =
+        C.block cont result_types [ C.br fallthrough [ conv_expr_group body ] ]
       in
-      [ C.block fallthrough [ ref_eq ]
-          (C.block cont result_types body :: handler)
-      ]
-    | Apply_cont { cont; args } ->
-      List.flatten (List.map conv_expr args) @ [ C.br cont ]
+      let handler_expr = conv_expr handler in
+      match mode with
+      | Reference ->
+        let handler =
+          List.map
+            (fun (var, _typ) ->
+              match var with
+              | Some var -> C.local_set' (Expr.Local.V var)
+              | None -> C.drop' )
+            params
+          @ handler_expr
+        in
+        [ C.block fallthrough [ ref_eq ] (body :: handler) ]
+      | Binarien ->
+        let set_locals =
+          match params with
+          | [] -> [ body ]
+          | [ (None, _typ) ] -> [ C.drop body ]
+          | [ (Some var, _typ) ] -> [ C.local_set (Expr.Local.V var) body ]
+          | _ ->
+            let local_tuple = Expr.Local.fresh "tuple" in
+            let _i, assigns =
+              List.fold_left
+                (fun (i, assigns) (var, _typ) ->
+                  match var with
+                  | Some var ->
+                    let project =
+                      C.tuple_extract i (C.local_get (Expr.Local.V local_tuple))
+                    in
+                    let expr = C.local_set (Expr.Local.V var) project in
+                    (i + 1, expr :: assigns)
+                  | None -> (i + 1, assigns) )
+                (0, []) params
+            in
+            [ C.local_set (Expr.Local.V local_tuple) body ] @ assigns
+        in
+        [ C.block fallthrough [ ref_eq ] (set_locals @ handler_expr) ]
+    end
+    | Apply_cont { cont; args } -> [ C.br cont (List.map conv_expr_group args) ]
     | Br_on_cast { value; typ; if_cast; if_else } ->
-      [ C.br_on_cast if_cast typ (group (conv_expr value)) ] @ conv_expr if_else
-      (* conv_expr value @ [ C.br_on_cast if_cast typ ] @ conv_expr if_else *)
+      [ C.br_on_cast if_cast typ (conv_expr_group value) ] @ conv_expr if_else
     | Br_if { cond; if_true; if_else } ->
-      conv_expr cond @ [ C.br_if if_true ] @ conv_expr if_else
+      [ C.br_if if_true (conv_expr_group cond) ] @ conv_expr if_else
     | Br_table { cond; cases; default } ->
-      conv_expr cond @ [ C.br_table (cases @ [ default ]) ]
+      [ C.br_table (conv_expr_group cond) (cases @ [ default ]) ]
     | Unit e -> conv_no_value e @ [ unit ]
     | NR nr -> conv_no_return nr
 
@@ -2553,15 +2587,16 @@ module ToWasm = struct
       conv_nv_binop op (conv_expr_group arg1) (conv_expr_group arg2)
     | Loop { cont; body } -> [ C.loop cont [] (conv_no_value body) ]
     | NV_if_then_else { cond; if_expr; else_expr } ->
-      conv_expr cond
-      @ [ C.if_then_else [] (conv_no_value if_expr) (conv_no_value else_expr) ]
-    | NV_br_if { cond; if_true } -> conv_expr cond @ [ C.br_if if_true ]
+      [ C.if_then_else [] (conv_expr_group cond) (conv_no_value if_expr)
+          (conv_no_value else_expr)
+      ]
+    | NV_br_if { cond; if_true } -> [ C.br_if if_true (conv_expr_group cond) ]
     | NV -> []
 
   and conv_no_return (nr : Expr.no_return) =
     match nr with
     | NR_br_table { cond; cases; default } ->
-      conv_expr cond @ [ C.br_table (cases @ [ default ]) ]
+      [ C.br_table (conv_expr_group cond) (cases @ [ default ]) ]
     | NR_let_cont { cont; params; handler; body } ->
       let result_types = List.map snd params in
       let body = conv_no_return body in
@@ -2576,10 +2611,10 @@ module ToWasm = struct
       in
       C.block cont result_types body :: handler
     | NR_if_then_else { cond; if_expr; else_expr } ->
-      conv_expr cond
-      @ [ C.if_then_else [] (conv_no_return if_expr) (conv_no_return else_expr)
-        ]
-    | NR_br { cont; arg } -> conv_expr arg @ [ C.br cont ]
+      [ C.if_then_else [] (conv_expr_group cond) (conv_no_return if_expr)
+          (conv_no_return else_expr)
+      ]
+    | NR_br { cont; arg } -> [ C.br cont [ conv_expr_group arg ] ]
 
   let conv_const name (const : Const.t) =
     match const with
