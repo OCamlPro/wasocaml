@@ -168,6 +168,7 @@ module Type = struct
     | I64
     | F64
     | Rvar of Var.t
+    | Tuple of atom list
 
   type descr =
     | Struct of
@@ -183,13 +184,14 @@ module Type = struct
         ; result : atom option
         }
 
-  let print_atom ppf = function
+  let rec print_atom ppf = function
     | I8 -> Format.fprintf ppf "i8"
     | I16 -> Format.fprintf ppf "i16"
     | I32 -> Format.fprintf ppf "i32"
     | I64 -> Format.fprintf ppf "i64"
     | F64 -> Format.fprintf ppf "f64"
     | Rvar v -> Format.fprintf ppf "ref_%a" Var.print v
+    | Tuple l -> Format.fprintf ppf "Tuple (%a)" (print_list print_atom " ") l
 
   let print_descr ppf = function
     | Struct { sub; fields = atoms } ->
@@ -334,6 +336,7 @@ module Expr = struct
       | Partial_closure
       | Closure
       | Indirec_call_closure of { arity : int }
+      | Block_result of Block_id.t
 
     let var_name = function
       | Variable v ->
@@ -349,6 +352,7 @@ module Expr = struct
       | Closure -> "Closure"
       | Indirec_call_closure { arity } ->
         Format.asprintf "Indirec_call_closure_%i" arity
+      | Block_result id -> Format.asprintf "Block_%a" Block_id.print id
 
     let print_var ppf var = Format.pp_print_string ppf (var_name var)
 
@@ -716,6 +720,22 @@ module Expr = struct
         acc
       | exception Not_found -> Local.Map.add var typ acc
     in
+    let let_cont_reqs acc ~cont ~params =
+      let acc =
+        List.fold_left
+          (fun acc (var, typ) ->
+            match var with None -> acc | Some var -> add var typ acc )
+          acc params
+      in
+      let acc =
+        match (mode, params) with
+        | Binarien, _ :: _ :: _ ->
+          let var = Local.Block_result cont in
+          add var (Type.Tuple (List.map snd params)) acc
+        | _ -> acc
+      in
+      acc
+    in
     let rec loop acc = function
       | Var _ | I32 _ | I64 _ | F64 _ | Ref_func _ -> acc
       | Let { var; typ; defining_expr; body } ->
@@ -745,13 +765,8 @@ module Expr = struct
           List.fold_left (fun acc arg -> loop_no_value acc arg) acc effects
         in
         loop acc last
-      | Let_cont { cont = _; params; handler; body } ->
-        let acc =
-          List.fold_left
-            (fun acc (var, typ) ->
-              match var with None -> acc | Some var -> add var typ acc )
-            acc params
-        in
+      | Let_cont { cont; params; handler; body } ->
+        let acc = let_cont_reqs acc ~cont ~params in
         let acc = loop acc handler in
         loop acc body
       | Apply_cont { cont = _; args } ->
@@ -788,13 +803,8 @@ module Expr = struct
         let acc = loop_no_return acc if_expr in
         loop_no_return acc else_expr
       | NR_br_table { cond; cases = _; default = _ } -> loop acc cond
-      | NR_let_cont { cont = _; params; handler; body } ->
-        let acc =
-          List.fold_left
-            (fun acc (var, typ) ->
-              match var with None -> acc | Some var -> add var typ acc )
-            acc params
-        in
+      | NR_let_cont { cont; params; handler; body } ->
+        let acc = let_cont_reqs acc ~cont ~params in
         let acc = loop_no_return acc handler in
         loop_no_return acc body
       | NR_br { cont = _; arg } -> loop acc arg
@@ -2302,6 +2312,7 @@ module ToWasm = struct
     let i31_new i = node "i31.new" [ i ]
 
     let drop arg = node "drop" [ arg ]
+
     let drop' = atom "drop"
 
     let ref_func f = node "ref.func" [ !$(Func_id.name f) ]
@@ -2344,7 +2355,7 @@ module ToWasm = struct
     let declare_func f =
       node "elem" [ atom "declare"; atom "func"; !$(Func_id.name f) ]
 
-    let type_atom (t : Type.atom) =
+    let rec type_atom (t : Type.atom) =
       match t with
       | I8 -> atom "i8"
       | I16 -> atom "i16"
@@ -2352,6 +2363,7 @@ module ToWasm = struct
       | I64 -> atom "i64"
       | F64 -> atom "f64"
       | Rvar v -> reft v
+      | Tuple l -> node "" (List.map type_atom l)
 
     let local l t = node "local" [ !$(Expr.Local.var_name l); type_atom t ]
 
@@ -2559,7 +2571,7 @@ module ToWasm = struct
           | [ (None, _typ) ] -> [ C.drop body ]
           | [ (Some var, _typ) ] -> [ C.local_set (Expr.Local.V var) body ]
           | _ ->
-            let local_tuple = Expr.Local.fresh "tuple" in
+            let local_tuple = Expr.Local.Block_result cont in
             let _i, assigns =
               List.fold_left
                 (fun (i, assigns) (var, _typ) ->
