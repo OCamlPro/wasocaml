@@ -2411,7 +2411,11 @@ module ToWasm = struct
     let loop id result body =
       nodehv "loop" [ !$(Block_id.name id); results result ] body
 
-    let br id args = node "br" ([ !$(Block_id.name id) ] @ args)
+    let br id args =
+      match (mode, args) with
+      | Binarien, _ :: _ :: _ ->
+        node "br" [ !$(Block_id.name id); node "tuple.make" args ]
+      | _ -> node "br" ([ !$(Block_id.name id) ] @ args)
 
     let br' id = node "br" [ !$(Block_id.name id) ]
 
