@@ -428,6 +428,7 @@ module Expr = struct
         ; extend : sx
         }
     | Ref_cast_i31
+    | Is_i31
 
   (* Every expression returns exactly one value *)
   type t =
@@ -586,6 +587,7 @@ module Expr = struct
       Format.fprintf ppf "@[<hov 2>Struct_get%s(%a).(%i)@]" str Type.Var.print
         typ field
     | Ref_cast_i31 -> Format.fprintf ppf "Ref_cast_i31"
+    | Is_i31 -> Format.fprintf ppf "Is_i31"
 
   let rec print ppf = function
     | Var l -> Local.print ppf l
@@ -1310,15 +1312,18 @@ module Conv = struct
     end
 
   let conv_is_int expr : Expr.t =
-    let cont = Block_id.fresh "isint" in
-    Let_cont
-      { cont
-      ; params = [ (None, Type.Rvar I31) ]
-      ; handler = true_value
-      ; body =
-          Br_on_cast
-            { value = expr; typ = I31; if_cast = cont; if_else = false_value }
-      }
+    match mode with
+    | Binarien -> Unop (I31_new, Unop (Is_i31, expr))
+    | Reference ->
+      let cont = Block_id.fresh "isint" in
+      Let_cont
+        { cont
+        ; params = [ (None, Type.Rvar I31) ]
+        ; handler = true_value
+        ; body =
+            Br_on_cast
+              { value = expr; typ = I31; if_cast = cont; if_else = false_value }
+        }
 
   let closure_types (program : Flambda.program) =
     List.filter_map closure_type (Flambda_utils.all_sets_of_closures program)
@@ -2463,6 +2468,7 @@ module ToWasm = struct
       | Reference -> Cst.node "ref.cast" [ Cst.atom "i31"; arg ]
       | Binarien -> Cst.node "ref.as_i31" [ arg ]
     end
+    | Is_i31 -> Cst.node "ref.is_i31" [ arg ]
 
   let nn_name (nn : Expr.nn) = match nn with S32 -> "32" | S64 -> "64"
 
