@@ -2381,6 +2381,13 @@ module ToWasm = struct
       node "func" (name @ List.map param_t params @ res)
 
     let if_then_else typ cond if_expr else_expr =
+      let nopise e =
+        match mode with
+        | Reference -> e
+        | Binarien -> ( match e with [] -> [ node_p "nop" [] ] | _ -> e )
+      in
+      let if_expr = nopise if_expr in
+      let else_expr = nopise else_expr in
       node "if"
         [ results typ; cond; node_p "then" if_expr; node_p "else" else_expr ]
 
