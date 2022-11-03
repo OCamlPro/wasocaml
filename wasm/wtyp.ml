@@ -9,6 +9,7 @@ type mode =
   | Binarien
 
 let mode = Binarien
+(* let mode = Reference *)
 
 let print_list f sep ppf l =
   Format.pp_print_list
@@ -501,6 +502,12 @@ module Expr = struct
         ; cases : Block_id.t list
         ; default : Block_id.t
         }
+    | Try of
+        { body : t
+        ; param : Local.var * Type.atom
+        ; handler : t
+        }
+    | Throw of t
     | NR of no_return
     | Unit of no_value_expression
 
@@ -657,6 +664,7 @@ module Expr = struct
       Format.fprintf ppf "@[<hov 2>Br_table(%a -> (%a) %a@]" print cond
         (print_list Block_id.print " ")
         cases Block_id.print default
+    | Try _ | Throw _ -> failwith "TODO print exn"
     | Unit nv -> Format.fprintf ppf "@[<hov 2>Unit (@ %a@ )@]" print_no_value nv
     | NR nr -> print_no_return ppf nr
 
@@ -778,6 +786,11 @@ module Expr = struct
         let acc = loop acc cond in
         loop acc if_else
       | Br_table { cond; cases = _; default = _ } -> loop acc cond
+      | Try { body; handler; param = local, typ } ->
+        let acc = add local typ acc in
+        let acc = loop acc body in
+        loop acc handler
+      | Throw e -> loop acc e
       | Unit nv -> loop_no_value acc nv
       | NR nr -> loop_no_return acc nr
     and loop_no_value acc nv =
@@ -1704,6 +1717,10 @@ module Conv = struct
     | Switch (cond, switch) ->
       let cond = conv_var env cond in
       conv_switch env cond switch
+    | Try_with (body, var, handler) ->
+      let local = Expr.Local.var_of_var var in
+      let handler = conv_expr (bind_var env var) handler in
+      Try { body = conv_expr env body; param = (local, ref_eq); handler }
     | _ ->
       let msg = Format.asprintf "TODO (conv_expr) %a" Flambda.print expr in
       failwith msg
@@ -1908,6 +1925,7 @@ module Conv = struct
     end
     | Pcompare_ints -> runtime_prim "compare_ints"
     | Pcompare_floats -> runtime_prim "compare_floats"
+    | Praise _raise_kind -> Throw (arg1 args)
     | _ ->
       let msg =
         Format.asprintf "TODO prim %a" Printclambda_primitives.primitive prim
@@ -2493,6 +2511,15 @@ module ToWasm = struct
 
     let type_ name descr = node "type" [ type_name name; descr ]
 
+    let unreachable = node_p "unreachable" []
+
+    let pop typ = node "pop" [ type_atom typ ]
+
+    let throw e = node "throw" [ e ]
+
+    let try_ ~body ~typ ~handler =
+      node "try" [ node "do" body; node "catch" (type_atom typ :: handler) ]
+
     let sub name descr =
       match mode with
       | Binarien -> descr
@@ -2654,6 +2681,21 @@ module ToWasm = struct
       [ C.br_if if_true (conv_expr_group cond) ] @ conv_expr if_else
     | Br_table { cond; cases; default } ->
       [ C.br_table (conv_expr_group cond) (cases @ [ default ]) ]
+    | Throw e -> begin
+      match mode with
+      | Reference -> [ C.unreachable ]
+      | Binarien -> [ C.throw (conv_expr_group e) ]
+    end
+    | Try { body; handler; param = local, typ } -> begin
+      match mode with
+      | Reference ->
+        Format.eprintf "Warning exception not supported@.";
+        conv_expr body
+      | Binarien ->
+        let body = conv_expr body in
+        let handler = C.local_set (V local) (C.pop typ) :: conv_expr handler in
+        [ C.try_ ~body ~handler ~typ ]
+    end
     | Unit e -> conv_no_value e @ [ unit ]
     | NR nr -> conv_no_return nr
 
