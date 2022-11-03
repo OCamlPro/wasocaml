@@ -1647,6 +1647,60 @@ module Conv = struct
       in
       Unit
         (NV_if_then_else { cond; if_expr = Loop { cont; body }; else_expr = NV })
+    | For { bound_var; from_value; to_value; direction; body } ->
+      let cont = Block_id.fresh "continue" in
+      let loop_local = Expr.Local.fresh "for_counter" in
+      let local = Expr.Local.var_of_var bound_var in
+      let to_value_local = Expr.Local.fresh "for_end" in
+
+      let next : Expr.t =
+        let op : Expr.binop =
+          match direction with Upto -> I32_add | Downto -> I32_sub
+        in
+        Binop (op, (Var (V loop_local), I32 1l))
+      in
+      let cond : Expr.t =
+        let dir : Expr.irelop =
+          match direction with Upto -> Le S | Downto -> Ge S
+        in
+        I_relop (S32, dir, (Var (V loop_local), Var (V to_value_local)))
+      in
+
+      let body : Expr.no_value_expression =
+        let env = bind_var env bound_var in
+        NV_seq
+          [ drop (conv_expr env body)
+          ; Assign { being_assigned = loop_local; new_value = next }
+          ; Assign
+              { being_assigned = local
+              ; new_value = WInt.tag (Var (V loop_local))
+              }
+          ; NV_br_if { cond; if_true = cont }
+          ]
+      in
+      let body : Expr.t =
+        Unit
+          (NV_if_then_else
+             { cond; if_expr = Loop { cont; body }; else_expr = NV } )
+      in
+      Let
+        { var = local
+        ; typ = ref_eq
+        ; defining_expr = conv_var env from_value
+        ; body =
+            Let
+              { var = to_value_local
+              ; typ = I32
+              ; defining_expr = WInt.untag (conv_var env to_value)
+              ; body =
+                  Let
+                    { var = loop_local
+                    ; typ = I32
+                    ; defining_expr = WInt.untag (Var (V local))
+                    ; body
+                    }
+              }
+        }
     | Switch (cond, switch) ->
       let cond = conv_var env cond in
       conv_switch env cond switch
