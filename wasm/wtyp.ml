@@ -2411,7 +2411,8 @@ module ToWasm = struct
     let br_if id cond = node "br_if" [ !$(Block_id.name id); cond ]
 
     let br_table cond cases =
-      node "br_table" (cond :: List.map (fun id -> !$(Block_id.name id)) cases)
+      node "br_table"
+        (List.map (fun id -> !$(Block_id.name id)) cases @ [ cond ])
 
     let type_ name descr = node "type" [ type_name name; descr ]
 
