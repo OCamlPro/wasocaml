@@ -41,6 +41,10 @@ type nv_binop =
       ; field : int
       }
 
+type num_type =
+  | I of nn
+  | F of nn
+
 type unop =
   | I31_get_s
   | I31_new
@@ -56,6 +60,10 @@ type unop =
   | Ref_cast_i31
   | Is_i31
   | Array_len of Type.Var.t
+  | Reinterpret of
+      { from_type : num_type
+      ; to_type : num_type
+      }
 
 (* Every expression returns exactly one value *)
 type t =
@@ -221,6 +229,10 @@ let print_nv_binop ppf = function
   | Struct_set { typ; field } ->
     Format.fprintf ppf "@[<hov 2>Struct_set(%a).(%i)@]" Type.Var.print typ field
 
+let print_num_type ppf = function
+  | I s -> Format.fprintf ppf "i%a" print_nn s
+  | F s -> Format.fprintf ppf "f%a" print_nn s
+
 let print_unop ppf = function
   | I31_get_s -> Format.fprintf ppf "I31_get_s"
   | I31_new -> Format.fprintf ppf "I31_new"
@@ -234,6 +246,9 @@ let print_unop ppf = function
   | Is_i31 -> Format.fprintf ppf "Is_i31"
   | Array_len typ ->
     Format.fprintf ppf "@[<hov 2>Array_len(%a)@]" Type.Var.print typ
+  | Reinterpret { from_type; to_type } ->
+    Format.fprintf ppf "%a.reinterpret_%a" print_num_type to_type print_num_type
+      from_type
 
 let rec print ppf = function
   | Var l -> Local.print ppf l

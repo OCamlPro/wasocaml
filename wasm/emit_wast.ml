@@ -1041,6 +1041,18 @@ module Conv = struct
     end
     | Pcompare_ints -> runtime_prim "compare_ints"
     | Pcompare_floats -> runtime_prim "compare_floats"
+    | Pcompare_bints Pint64 -> runtime_prim "compare_i64"
+    | Pcompare_bints Pint32 -> runtime_prim "compare_i32"
+    | Pcompare_bints Pnativeint -> runtime_prim "compare_nativeint"
+    | Pbintofint Pint64 ->
+      Struct_new
+        ( Int64
+        , [ Unop
+              ( Reinterpret { from_type = I S32; to_type = I S64 }
+              , i32 (arg1 args) )
+          ] )
+    | Pbintofint Pint32 -> Struct_new (Int32, [ i32 (arg1 args) ])
+    | Pbintofint Pnativeint -> Struct_new (Nativeint, [ i32 (arg1 args) ])
     | Praise _raise_kind -> Throw (arg1 args)
     | Pbyteslength | Pstringlength ->
       let typ : Type.Var.t = String in
@@ -1459,6 +1471,13 @@ module ToWasm = struct
     match op with
     | Struct_set { typ; field } -> [ C.struct_set typ field block value ]
 
+  let num_type_name (n : Expr.num_type) =
+    match n with
+    | I S32 -> "i32"
+    | I S64 -> "i64"
+    | F S32 -> "f32"
+    | F S64 -> "f64"
+
   let conv_unop (op : Expr.unop) arg =
     match op with
     | I31_get_s -> Cst.node "i31.get_s" [ arg ]
@@ -1473,6 +1492,12 @@ module ToWasm = struct
     end
     | Is_i31 -> Cst.node "ref.is_i31" [ arg ]
     | Array_len t -> C.array_len t arg
+    | Reinterpret { from_type; to_type } ->
+      let name =
+        Printf.sprintf "%s.reinterpret_%s" (num_type_name to_type)
+          (num_type_name from_type)
+      in
+      Cst.node name [ arg ]
 
   let irelop_name nn (op : Expr.irelop) =
     match op with
