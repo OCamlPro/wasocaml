@@ -408,6 +408,11 @@ module Expr = struct
     | I32_add
     | I32_sub
     | I32_mul
+    | I32_and
+    | I32_or
+    | I32_xor
+    | I32_shl
+    | I32_shr of sx
     | F64_add
     | F64_sub
     | F64_mul
@@ -434,6 +439,7 @@ module Expr = struct
         }
     | Ref_cast_i31
     | Is_i31
+    | Array_len of Type.Var.t
 
   (* Every expression returns exactly one value *)
   type t =
@@ -576,6 +582,11 @@ module Expr = struct
     | I32_add -> Format.fprintf ppf "I32_add"
     | I32_sub -> Format.fprintf ppf "I32_sub"
     | I32_mul -> Format.fprintf ppf "I32_mul"
+    | I32_and -> Format.fprintf ppf "I32_and"
+    | I32_or -> Format.fprintf ppf "I32_or"
+    | I32_xor -> Format.fprintf ppf "I32_xor"
+    | I32_shl -> Format.fprintf ppf "I32_shl"
+    | I32_shr s -> Format.fprintf ppf "I32_shr_%a" sx s
     | F64_add -> Format.fprintf ppf "F64_add"
     | F64_sub -> Format.fprintf ppf "F64_sub"
     | F64_mul -> Format.fprintf ppf "F64_mul"
@@ -599,6 +610,8 @@ module Expr = struct
         typ field
     | Ref_cast_i31 -> Format.fprintf ppf "Ref_cast_i31"
     | Is_i31 -> Format.fprintf ppf "Is_i31"
+    | Array_len typ ->
+      Format.fprintf ppf "@[<hov 2>Array_len(%a)@]" Type.Var.print typ
 
   let rec print ppf = function
     | Var l -> Local.print ppf l
@@ -1869,6 +1882,7 @@ module Conv = struct
     | Paddint -> i31 (Expr.Binop (I32_add, args2 (List.map i32 args)))
     | Psubint -> i31 (Expr.Binop (I32_sub, args2 (List.map i32 args)))
     | Pmulint -> i31 (Expr.Binop (I32_mul, args2 (List.map i32 args)))
+    | Pnegint -> i31 (Binop (I32_xor, (i32 (arg1 args), I32 (Int32.neg 0l))))
     | Paddfloat ->
       box_float (Expr.Binop (F64_add, args2 (List.map unbox_float args)))
     | Psubfloat ->
@@ -1926,6 +1940,17 @@ module Conv = struct
     | Pcompare_ints -> runtime_prim "compare_ints"
     | Pcompare_floats -> runtime_prim "compare_floats"
     | Praise _raise_kind -> Throw (arg1 args)
+    | Pbyteslength | Pstringlength ->
+      let typ : Type.Var.t = String in
+      i31 (Unop (Array_len typ, Ref_cast { typ; r = arg1 args }))
+    | Parraylength (Paddrarray | Pintarray) ->
+      let typ : Type.Var.t = Array in
+      i31 (Unop (Array_len typ, Ref_cast { typ; r = arg1 args }))
+    | Parraylength Pfloatarray ->
+      let typ : Type.Var.t = FloatArray in
+      i31 (Unop (Array_len typ, Ref_cast { typ; r = arg1 args }))
+    | Parraylength Pgenarray -> runtime_prim "array_length"
+    | Pnot -> i31 (bool_not (i32 (arg1 args)))
     | _ ->
       let msg =
         Format.asprintf "TODO prim %a" Printclambda_primitives.primitive prim
@@ -2400,6 +2425,8 @@ module ToWasm = struct
     let struct_get typ field arg =
       node "struct.get" [ type_name typ; int field; arg ]
 
+    let array_len typ arg = node "array.len" [ type_name typ; arg ]
+
     let sx_name (sx : Expr.sx) = match sx with S -> "s" | U -> "u"
 
     let struct_get_packed extend typ field arg =
@@ -2546,11 +2573,20 @@ module ToWasm = struct
 
   let unit = Cst.node "i31.new" [ C.i32 0l ]
 
+  let nn_name (nn : Expr.nn) = match nn with S32 -> "32" | S64 -> "64"
+
+  let sx_name (sx : Expr.sx) = match sx with S -> "s" | U -> "u"
+
   let conv_binop (op : Expr.binop) args =
     match op with
     | I32_add -> Cst.node "i32.add" args
     | I32_sub -> Cst.node "i32.sub" args
     | I32_mul -> Cst.node "i32.mul" args
+    | I32_and -> Cst.node "i32.and" args
+    | I32_or -> Cst.node "i32.or" args
+    | I32_xor -> Cst.node "i32.xor" args
+    | I32_shl -> Cst.node "i32.shl" args
+    | I32_shr s -> Cst.node (Printf.sprintf "i32.shr_%s" (sx_name s)) args
     | F64_add -> Cst.node "f64.add" args
     | F64_sub -> Cst.node "f64.sub" args
     | F64_mul -> Cst.node "f64.mul" args
@@ -2574,10 +2610,7 @@ module ToWasm = struct
       | Binarien -> Cst.node "ref.as_i31" [ arg ]
     end
     | Is_i31 -> Cst.node "ref.is_i31" [ arg ]
-
-  let nn_name (nn : Expr.nn) = match nn with S32 -> "32" | S64 -> "64"
-
-  let sx_name (sx : Expr.sx) = match sx with S -> "s" | U -> "u"
+    | Array_len t -> C.array_len t arg
 
   let irelop_name nn (op : Expr.irelop) =
     match op with
