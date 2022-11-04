@@ -33,6 +33,7 @@ type binop =
   | F64_mul
   | F64_div
   | Ref_eq
+  | Array_get of Type.Var.t
 
 type nv_binop =
   | Struct_set of
@@ -176,6 +177,7 @@ and no_return =
       { cont : Block_id.t
       ; arg : t
       }
+  | Unreachable
 
 let print_list f sep ppf l =
   Format.pp_print_list
@@ -212,6 +214,8 @@ let print_binop ppf = function
   | F64_mul -> Format.fprintf ppf "F64_mul"
   | F64_div -> Format.fprintf ppf "F64_div"
   | Ref_eq -> Format.fprintf ppf "Ref_eq"
+  | Array_get typ ->
+    Format.fprintf ppf "@[<hov 2>Array_get(%a)@]" Type.Var.print typ
 
 let print_nv_binop ppf = function
   | Struct_set { typ; field } ->
@@ -343,6 +347,7 @@ and print_no_return ppf no_return =
       params print_no_return handler print_no_return body
   | NR_br { cont; arg } ->
     Format.fprintf ppf "@[<hov 2>Br(%a, %a)@]" Block_id.print cont print arg
+  | Unreachable -> Format.fprintf ppf "Unreachable"
 
 let let_ var typ defining_expr body = Let { var; typ; defining_expr; body }
 
@@ -451,6 +456,7 @@ let required_locals body =
       let acc = loop_no_return acc handler in
       loop_no_return acc body
     | NR_br { cont = _; arg } -> loop acc arg
+    | Unreachable -> acc
   in
   match body with
   | Value (expr, _typ) -> loop Local.Map.empty expr

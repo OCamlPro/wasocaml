@@ -112,6 +112,8 @@ module C = struct
 
   let array_len typ arg = node "array.len" [ type_name typ; arg ]
 
+  let array_get typ args = node "array.get" (type_name typ :: args)
+
   let sx_name (sx : Expr.sx) = match sx with S -> "s" | U -> "u"
 
   let struct_get_packed extend typ field arg =

@@ -1,4 +1,3 @@
-
 open Wstate
 module Type = Wtype
 
@@ -16,7 +15,6 @@ let print_list f sep ppf l =
 let ref_eq = Type.Rvar Eq
 
 open Wident
-
 open Wmodule
 
 module Conv = struct
@@ -437,6 +435,12 @@ module Conv = struct
   let closure_types (program : Flambda.program) =
     List.filter_map closure_type (Flambda_utils.all_sets_of_closures program)
 
+  let runtime_prim name args : Expr.t =
+    let arity = List.length args in
+    State.add_runtime_import { name; arity };
+    let func : Func_id.t = Runtime name in
+    Call { func; args }
+
   let rec conv_body (env : top_env) (expr : Flambda.program_body) effects :
       Module.t =
     match expr with
@@ -803,6 +807,30 @@ module Conv = struct
     | Switch (cond, switch) ->
       let cond = conv_var env cond in
       conv_switch env cond switch
+    | String_switch (cond, branches, default) ->
+      let local = Local.fresh "str" in
+      let cond = conv_var env cond in
+      let body : Expr.t =
+        match default with
+        | None -> NR Unreachable
+        | Some default -> conv_expr env default
+      in
+      let body =
+        List.fold_left
+          (fun body (str, branch) : Expr.t ->
+            let cond =
+              runtime_prim "string_eq" [ Expr.Var (V local); const_string str ]
+            in
+            If_then_else
+              { cond; if_expr = conv_expr env branch; else_expr = body } )
+          body branches
+      in
+      Let
+        { var = local
+        ; typ = Rvar String
+        ; defining_expr = Ref_cast { typ = String; r = cond }
+        ; body
+        }
     | Try_with (body, var, handler) ->
       let local = Expr.Local.var_of_var var in
       let handler = conv_expr (bind_var env var) handler in
@@ -943,19 +971,20 @@ module Conv = struct
       | [ a; b ] -> (a, b)
       | _ -> Misc.fatal_errorf "Wrong number of primitive arguments"
     in
+    let runtime_prim name : Expr.t = runtime_prim name args in
     let i32 v = WInt.untag v in
     let i31 v = WInt.tag v in
-    let runtime_prim name : Expr.t =
-      let arity = List.length args in
-      State.add_runtime_import { name; arity };
-      let func : Func_id.t = Runtime name in
-      Call { func; args }
-    in
     match prim with
     | Paddint -> i31 (Expr.Binop (I32_add, args2 (List.map i32 args)))
     | Psubint -> i31 (Expr.Binop (I32_sub, args2 (List.map i32 args)))
     | Pmulint -> i31 (Expr.Binop (I32_mul, args2 (List.map i32 args)))
     | Pnegint -> i31 (Binop (I32_xor, (i32 (arg1 args), I32 (Int32.neg 0l))))
+    | Pandint -> i31 (Binop (I32_and, args2 (List.map i32 args)))
+    | Porint -> i31 (Binop (I32_or, args2 (List.map i32 args)))
+    | Pxorint -> i31 (Binop (I32_xor, args2 (List.map i32 args)))
+    | Plslint -> i31 (Binop (I32_shl, args2 (List.map i32 args)))
+    | Plsrint -> i31 (Binop (I32_shr U, args2 (List.map i32 args)))
+    | Pasrint -> i31 (Binop (I32_shr S, args2 (List.map i32 args)))
     | Paddfloat ->
       box_float (Expr.Binop (F64_add, args2 (List.map unbox_float args)))
     | Psubfloat ->
@@ -1024,6 +1053,11 @@ module Conv = struct
       i31 (Unop (Array_len typ, Ref_cast { typ; r = arg1 args }))
     | Parraylength Pgenarray -> runtime_prim "array_length"
     | Pnot -> i31 (bool_not (i32 (arg1 args)))
+    | Pstringrefs -> runtime_prim "string_get"
+    | Pstringrefu ->
+      let arr, idx = args2 args in
+      i31
+        (Binop (Array_get String, (Ref_cast { typ = String; r = arr }, i32 idx)))
     | _ ->
       let msg =
         Format.asprintf "TODO prim %a" Printclambda_primitives.primitive prim
@@ -1419,6 +1453,7 @@ module ToWasm = struct
     | F64_mul -> Cst.node "f64.mul" args
     | F64_div -> Cst.node "f64.div" args
     | Ref_eq -> Cst.node "ref.eq" args
+    | Array_get typ -> C.array_get typ args
 
   let conv_nv_binop (op : Expr.nv_binop) block value =
     match op with
@@ -1601,6 +1636,7 @@ module ToWasm = struct
           (conv_no_return else_expr)
       ]
     | NR_br { cont; arg } -> [ C.br cont [ conv_expr_group arg ] ]
+    | Unreachable -> [ C.unreachable ]
 
   let conv_const name (const : Const.t) =
     match const with
@@ -1704,5 +1740,4 @@ let run ~output_prefix (flambda : Flambda.program) =
   Format.printf "@.%a@." ToWasm.Cst.emit wasm;
   output_file ~output_prefix wasm
 
-let emit ~output_prefix (flambda : Flambda.program) =
-  run ~output_prefix flambda
+let emit ~output_prefix (flambda : Flambda.program) = run ~output_prefix flambda
