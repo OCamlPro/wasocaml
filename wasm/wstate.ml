@@ -2,8 +2,8 @@ type mode =
   | Reference
   | Binarien
 
-let mode = Binarien
-(* let mode = Reference *)
+(* let mode = Binarien *)
+let mode = Reference
 
 module MSet (M : Set.OrderedType) = struct
   include Set.Make (M)

@@ -418,20 +418,6 @@ module Conv = struct
       Some (Decl.Type (name, descr))
     end
 
-  let conv_is_int expr : Expr.t =
-    match mode with
-    | Binarien -> Unop (I31_new, Unop (Is_i31, expr))
-    | Reference ->
-      let cont = Block_id.fresh "isint" in
-      Let_cont
-        { cont
-        ; params = [ (None, Type.Rvar I31) ]
-        ; handler = true_value
-        ; body =
-            Br_on_cast
-              { value = expr; typ = I31; if_cast = cont; if_else = false_value }
-        }
-
   let closure_types (program : Flambda.program) =
     List.filter_map closure_type (Flambda_utils.all_sets_of_closures program)
 
@@ -922,8 +908,8 @@ module Conv = struct
         in
         NR_if_then_else
           { cond =
-              (* TODO refactor things to avoid this tagging/untagging and useless branches in is_int*)
-              WInt.untag (conv_is_int cond)
+              (* TODO refactor to change this into a br_on_cast to avoid casting on i31 later *)
+              Unop (Is_i31, cond)
           ; if_expr
           ; else_expr
           }
@@ -1025,7 +1011,7 @@ module Conv = struct
       let block, value = args2 args in
       Seq ([ Block.set_field ~cast:() ~field ~block value ], unit_value)
     | Popaque -> arg1 args
-    | Pisint -> conv_is_int (arg1 args)
+    | Pisint -> WInt.tag (Unop (Is_i31, (arg1 args)))
     | Pintcomp Ceq -> i31 (Expr.Binop (Ref_eq, args2 args))
     | Pintcomp cop -> begin
       let op : Expr.t =
@@ -1490,7 +1476,13 @@ module ToWasm = struct
       | Reference -> Cst.node "ref.cast" [ Cst.atom "i31"; arg ]
       | Binarien -> Cst.node "ref.as_i31" [ arg ]
     end
-    | Is_i31 -> Cst.node "ref.is_i31" [ arg ]
+    | Is_i31 ->
+        begin match mode with
+        | Binarien ->
+            Cst.node "ref.is_i31" [ arg ]
+        | Reference ->
+            Cst.node "ref.test" [ Cst.atom "i31"; arg ]
+        end
     | Array_len t -> C.array_len t arg
     | Reinterpret { from_type; to_type } ->
       let name =
