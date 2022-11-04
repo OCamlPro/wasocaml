@@ -142,7 +142,12 @@ LAMBDA_CMI =
 
 WASM = \
   wasm/wasm_closure_offsets.cmo \
-  wasm/wtyp.cmo \
+  wasm/wstate.cmo \
+  wasm/wtype.cmo \
+  wasm/wident.cmo \
+  wasm/wexpr.cmo \
+  wasm/wmodule.cmo \
+  wasm/wast.cmo \
   wasm/emit_wast.cmo
 WASM_CMI =
 

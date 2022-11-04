@@ -141,7 +141,13 @@
 
    ;; wasm/
    wasm_closure_offsets
-   wtyp emit_wast
+   wstate
+   wtype
+   wident
+   wexpr
+   wmodule
+   wast
+   emit_wast
  )
 )
 
