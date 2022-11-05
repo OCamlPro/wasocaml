@@ -265,7 +265,7 @@ module Conv = struct
 
   let false_value : Expr.t = Unop (I31_new, I32 0l)
 
-  let bool_not e : Expr.t = Binop (I32_sub, (I32 1l, e))
+  let bool_not e : Expr.t = Binop (Expr.i32_sub, (I32 1l, e))
 
   let rec expr_is_pure (e : Expr.t) =
     match e with
@@ -744,7 +744,7 @@ module Conv = struct
 
       let next : Expr.t =
         let op : Expr.binop =
-          match direction with Upto -> I32_add | Downto -> I32_sub
+          match direction with Upto -> Expr.i32_add | Downto -> Expr.i32_sub
         in
         Binop (op, (Var (V loop_local), I32 1l))
       in
@@ -961,24 +961,25 @@ module Conv = struct
     let i32 v = WInt.untag v in
     let i31 v = WInt.tag v in
     match prim with
-    | Paddint -> i31 (Expr.Binop (I32_add, args2 (List.map i32 args)))
-    | Psubint -> i31 (Expr.Binop (I32_sub, args2 (List.map i32 args)))
-    | Pmulint -> i31 (Expr.Binop (I32_mul, args2 (List.map i32 args)))
-    | Pnegint -> i31 (Binop (I32_xor, (i32 (arg1 args), I32 (Int32.neg 0l))))
-    | Pandint -> i31 (Binop (I32_and, args2 (List.map i32 args)))
-    | Porint -> i31 (Binop (I32_or, args2 (List.map i32 args)))
-    | Pxorint -> i31 (Binop (I32_xor, args2 (List.map i32 args)))
-    | Plslint -> i31 (Binop (I32_shl, args2 (List.map i32 args)))
-    | Plsrint -> i31 (Binop (I32_shr U, args2 (List.map i32 args)))
-    | Pasrint -> i31 (Binop (I32_shr S, args2 (List.map i32 args)))
+    | Paddint -> i31 (Expr.Binop (Expr.i32_add, args2 (List.map i32 args)))
+    | Psubint -> i31 (Expr.Binop (Expr.i32_sub, args2 (List.map i32 args)))
+    | Pmulint -> i31 (Expr.Binop (Expr.i32_mul, args2 (List.map i32 args)))
+    | Pnegint ->
+      i31 (Binop (Expr.i32_xor, (i32 (arg1 args), I32 (Int32.neg 0l))))
+    | Pandint -> i31 (Binop (Expr.i32_and, args2 (List.map i32 args)))
+    | Porint -> i31 (Binop (Expr.i32_or, args2 (List.map i32 args)))
+    | Pxorint -> i31 (Binop (Expr.i32_xor, args2 (List.map i32 args)))
+    | Plslint -> i31 (Binop (Expr.i32_shl, args2 (List.map i32 args)))
+    | Plsrint -> i31 (Binop (Expr.i32_shr_u, args2 (List.map i32 args)))
+    | Pasrint -> i31 (Binop (Expr.i32_shr_s, args2 (List.map i32 args)))
     | Paddfloat ->
-      box_float (Expr.Binop (F64_add, args2 (List.map unbox_float args)))
+      box_float (Expr.Binop (Expr.f64_add, args2 (List.map unbox_float args)))
     | Psubfloat ->
-      box_float (Expr.Binop (F64_sub, args2 (List.map unbox_float args)))
+      box_float (Expr.Binop (Expr.f64_sub, args2 (List.map unbox_float args)))
     | Pmulfloat ->
-      box_float (Expr.Binop (F64_mul, args2 (List.map unbox_float args)))
+      box_float (Expr.Binop (Expr.f64_mul, args2 (List.map unbox_float args)))
     | Pdivfloat ->
-      box_float (Expr.Binop (F64_div, args2 (List.map unbox_float args)))
+      box_float (Expr.Binop (Expr.f64_div, args2 (List.map unbox_float args)))
     | Pccall descr ->
       let unbox_arg (t : Primitive.native_repr) arg =
         match t with
@@ -1011,7 +1012,7 @@ module Conv = struct
       let block, value = args2 args in
       Seq ([ Block.set_field ~cast:() ~field ~block value ], unit_value)
     | Popaque -> arg1 args
-    | Pisint -> WInt.tag (Unop (Is_i31, (arg1 args)))
+    | Pisint -> WInt.tag (Unop (Is_i31, arg1 args))
     | Pintcomp Ceq -> i31 (Expr.Binop (Ref_eq, args2 args))
     | Pintcomp cop -> begin
       let op : Expr.t =
@@ -1436,20 +1437,39 @@ module ToWasm = struct
 
   let sx_name (sx : Expr.sx) = match sx with S -> "s" | U -> "u"
 
+  let ibinop_name (op : Expr.ibinop) =
+    match op with
+    | Add -> "add"
+    | Sub -> "sub"
+    | Mul -> "mul"
+    | Div s -> Printf.sprintf "div_%s" (sx_name s)
+    | Rem s -> Printf.sprintf "rem_%s" (sx_name s)
+    | And -> "and"
+    | Or -> "or"
+    | Xor -> "xor"
+    | Shl -> "shl"
+    | Shr s -> Printf.sprintf "shr_%s" (sx_name s)
+    | Rotl -> "rotl"
+    | Rotr -> "rotr"
+
+  let fbinop_name (op : Expr.fbinop) =
+    match op with
+    | Add -> "add"
+    | Sub -> "sub"
+    | Mul -> "mul"
+    | Div -> "div"
+    | Min -> "min"
+    | Max -> "max"
+    | Copysign -> "copysign"
+
   let conv_binop (op : Expr.binop) args =
     match op with
-    | I32_add -> Cst.node "i32.add" args
-    | I32_sub -> Cst.node "i32.sub" args
-    | I32_mul -> Cst.node "i32.mul" args
-    | I32_and -> Cst.node "i32.and" args
-    | I32_or -> Cst.node "i32.or" args
-    | I32_xor -> Cst.node "i32.xor" args
-    | I32_shl -> Cst.node "i32.shl" args
-    | I32_shr s -> Cst.node (Printf.sprintf "i32.shr_%s" (sx_name s)) args
-    | F64_add -> Cst.node "f64.add" args
-    | F64_sub -> Cst.node "f64.sub" args
-    | F64_mul -> Cst.node "f64.mul" args
-    | F64_div -> Cst.node "f64.div" args
+    | I_binop (op, size) ->
+      let name = Printf.sprintf "i%s.%s" (nn_name size) (ibinop_name op) in
+      Cst.node name args
+    | F_binop (op, size) ->
+      let name = Printf.sprintf "f%s.%s" (nn_name size) (fbinop_name op) in
+      Cst.node name args
     | Ref_eq -> Cst.node "ref.eq" args
     | Array_get typ -> C.array_get typ args
 
@@ -1476,13 +1496,11 @@ module ToWasm = struct
       | Reference -> Cst.node "ref.cast" [ Cst.atom "i31"; arg ]
       | Binarien -> Cst.node "ref.as_i31" [ arg ]
     end
-    | Is_i31 ->
-        begin match mode with
-        | Binarien ->
-            Cst.node "ref.is_i31" [ arg ]
-        | Reference ->
-            Cst.node "ref.test" [ Cst.atom "i31"; arg ]
-        end
+    | Is_i31 -> begin
+      match mode with
+      | Binarien -> Cst.node "ref.is_i31" [ arg ]
+      | Reference -> Cst.node "ref.test" [ Cst.atom "i31"; arg ]
+    end
     | Array_len t -> C.array_len t arg
     | Reinterpret { from_type; to_type } ->
       let name =

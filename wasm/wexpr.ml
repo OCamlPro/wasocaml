@@ -19,19 +19,32 @@ type irelop =
   | Le of sx
   | Ge of sx
 
+type ibinop =
+  | Add
+  | Sub
+  | Mul
+  | Div of sx
+  | Rem of sx
+  | And
+  | Or
+  | Xor
+  | Shl
+  | Shr of sx
+  | Rotl
+  | Rotr
+
+type fbinop =
+  | Add
+  | Sub
+  | Mul
+  | Div
+  | Min
+  | Max
+  | Copysign
+
 type binop =
-  | I32_add
-  | I32_sub
-  | I32_mul
-  | I32_and
-  | I32_or
-  | I32_xor
-  | I32_shl
-  | I32_shr of sx
-  | F64_add
-  | F64_sub
-  | F64_mul
-  | F64_div
+  | I_binop of ibinop * nn
+  | F_binop of fbinop * nn
   | Ref_eq
   | Array_get of Type.Var.t
 
@@ -208,19 +221,36 @@ let print_nn fmt = function
   | S32 -> Format.fprintf fmt "32"
   | S64 -> Format.fprintf fmt "64"
 
+let print_ibinop ppf (op : ibinop) =
+  match op with
+  | Add -> Format.fprintf ppf "add"
+  | Sub -> Format.fprintf ppf "sub"
+  | Mul -> Format.fprintf ppf "mul"
+  | Div s -> Format.fprintf ppf "div_%a" sx s
+  | Rem s -> Format.fprintf ppf "rem_%a" sx s
+  | And -> Format.fprintf ppf "and"
+  | Or -> Format.fprintf ppf "or"
+  | Xor -> Format.fprintf ppf "xor"
+  | Shl -> Format.fprintf ppf "shl"
+  | Shr s -> Format.fprintf ppf "shr_%a" sx s
+  | Rotl -> Format.fprintf ppf "rotl"
+  | Rotr -> Format.fprintf ppf "rotr"
+
+let print_fbinop ppf (op : fbinop) =
+  match op with
+  | Add -> Format.fprintf ppf "add"
+  | Sub -> Format.fprintf ppf "sub"
+  | Mul -> Format.fprintf ppf "mul"
+  | Div -> Format.fprintf ppf "div"
+  | Min -> Format.fprintf ppf "min"
+  | Max -> Format.fprintf ppf "max"
+  | Copysign -> Format.fprintf ppf "copysign"
+
 let print_binop ppf = function
-  | I32_add -> Format.fprintf ppf "I32_add"
-  | I32_sub -> Format.fprintf ppf "I32_sub"
-  | I32_mul -> Format.fprintf ppf "I32_mul"
-  | I32_and -> Format.fprintf ppf "I32_and"
-  | I32_or -> Format.fprintf ppf "I32_or"
-  | I32_xor -> Format.fprintf ppf "I32_xor"
-  | I32_shl -> Format.fprintf ppf "I32_shl"
-  | I32_shr s -> Format.fprintf ppf "I32_shr_%a" sx s
-  | F64_add -> Format.fprintf ppf "F64_add"
-  | F64_sub -> Format.fprintf ppf "F64_sub"
-  | F64_mul -> Format.fprintf ppf "F64_mul"
-  | F64_div -> Format.fprintf ppf "F64_div"
+  | I_binop (op, size) ->
+    Format.fprintf ppf "I%a_%a" print_nn size print_ibinop op
+  | F_binop (op, size) ->
+    Format.fprintf ppf "F%a_%a" print_nn size print_fbinop op
   | Ref_eq -> Format.fprintf ppf "Ref_eq"
   | Array_get typ ->
     Format.fprintf ppf "@[<hov 2>Array_get(%a)@]" Type.Var.print typ
@@ -476,3 +506,20 @@ let required_locals body =
   match body with
   | Value (expr, _typ) -> loop Local.Map.empty expr
   | No_value expr -> loop_no_value Local.Map.empty expr
+
+[@@@ocaml.warning "-32"]
+
+let i32_add = I_binop (Add, S32)
+let i32_add = I_binop (Add, S32)
+let i32_sub = I_binop (Sub, S32)
+let i32_mul = I_binop (Mul, S32)
+let i32_and = I_binop (And, S32)
+let i32_or = I_binop (Or, S32)
+let i32_xor = I_binop (Xor, S32)
+let i32_shl = I_binop (Shl, S32)
+let i32_shr_s = I_binop (Shr S, S32)
+let i32_shr_u = I_binop (Shr U, S32)
+let f64_add = F_binop (Add, S64)
+let f64_sub = F_binop (Sub, S64)
+let f64_mul = F_binop (Mul, S64)
+let f64_div = F_binop (Div, S64)
