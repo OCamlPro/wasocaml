@@ -840,6 +840,8 @@ module Conv = struct
       let local = Expr.Local.var_of_var var in
       let handler = conv_expr (bind_var env var) handler in
       Try { body = conv_expr env body; param = (local, ref_eq); handler }
+    | Proved_unreachable ->
+      NR Unreachable
     | _ ->
       let msg = Format.asprintf "TODO (conv_expr) %a" Flambda.print expr in
       failwith msg
