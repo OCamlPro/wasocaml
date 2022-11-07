@@ -211,6 +211,25 @@ module Conv = struct
     let tag e : Expr.t = Unop (I31_new, e)
   end
 
+  module WBint = struct
+    let box_type (t : Primitive.boxed_integer) : Type.Var.t =
+      match t with Pint32 -> Int32 | Pint64 -> Int64 | Pnativeint -> Nativeint
+
+    let unbox t e : Expr.t =
+      let typ = box_type t in
+      Unop (Struct_get { typ; field = 0 }, Ref_cast { typ; r = e })
+
+    let box t e : Expr.t =
+      let typ = box_type t in
+      Struct_new (typ, [ e ])
+
+    let binop (t : Primitive.boxed_integer)  op (a1, a2) : Expr.t =
+      let size : Expr.nn = match t with Pint32 -> S32 | Pint64 -> S64 | Pnativeint -> S32 in
+      let args = unbox t a1, unbox t a2 in
+      box t (Binop (I_binop (op, size), args))
+
+  end
+
   let const_float f : Expr.t = Struct_new (Float, [ F64 f ])
 
   let const_int32 i : Expr.t = Struct_new (Int32, [ I32 i ])
@@ -1040,6 +1059,12 @@ module Conv = struct
           ] )
     | Pbintofint Pint32 -> Struct_new (Int32, [ i32 (arg1 args) ])
     | Pbintofint Pnativeint -> Struct_new (Nativeint, [ i32 (arg1 args) ])
+    | Paddbint t -> WBint.binop t Add (args2 args)
+    | Psubbint t -> WBint.binop t Sub (args2 args)
+    | Pmulbint t -> WBint.binop t Mul (args2 args)
+    | Pandbint t -> WBint.binop t And (args2 args)
+    | Porbint t -> WBint.binop t Or (args2 args)
+    | Pxorbint t -> WBint.binop t Xor (args2 args)
     | Praise _raise_kind -> Throw (arg1 args)
     | Pbyteslength | Pstringlength ->
       let typ : Type.Var.t = String in
