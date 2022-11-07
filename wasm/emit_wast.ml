@@ -259,6 +259,23 @@ module Conv = struct
       WInt.tag (I_relop (size t, integer_comparision op, args))
   end
 
+  type is_not =
+    | Not
+    | Id
+
+  let float_comparision (c : Lambda.float_comparison) : Expr.frelop * is_not =
+    match c with
+    | CFeq -> (Eq, Id)
+    | CFneq -> (Eq, Not)
+    | CFlt -> (Lt, Id)
+    | CFnlt -> (Lt, Not)
+    | CFgt -> (Gt, Id)
+    | CFngt -> (Gt, Not)
+    | CFle -> (Le, Id)
+    | CFnle -> (Le, Not)
+    | CFge -> (Ge, Id)
+    | CFnge -> (Ge, Not)
+
   let const_float f : Expr.t = Struct_new (Float, [ F64 f ])
 
   let const_int32 i : Expr.t = Struct_new (Int32, [ I32 i ])
@@ -991,6 +1008,11 @@ module Conv = struct
       | [ a; b ] -> (a, b)
       | _ -> Misc.fatal_errorf "Wrong number of primitive arguments"
     in
+    let args3 args =
+      match args with
+      | [ a; b; c ] -> (a, b, c)
+      | _ -> Misc.fatal_errorf "Wrong number of primitive arguments"
+    in
     let runtime_prim name : Expr.t = runtime_prim name args in
     let i32 v = WInt.untag v in
     let i31 v = WInt.tag v in
@@ -998,6 +1020,10 @@ module Conv = struct
     | Paddint -> i31 (Expr.Binop (Expr.i32_add, args2 (List.map i32 args)))
     | Psubint -> i31 (Expr.Binop (Expr.i32_sub, args2 (List.map i32 args)))
     | Pmulint -> i31 (Expr.Binop (Expr.i32_mul, args2 (List.map i32 args)))
+    | Pdivint Unsafe ->
+      i31 (Expr.Binop (I_binop (Div S, S32), args2 (List.map i32 args)))
+    | Pmodint Unsafe ->
+      i31 (Expr.Binop (I_binop (Rem S, S32), args2 (List.map i32 args)))
     | Pnegint ->
       i31 (Binop (Expr.i32_xor, (i32 (arg1 args), I32 (Int32.neg 0l))))
     | Pandint -> i31 (Binop (Expr.i32_and, args2 (List.map i32 args)))
@@ -1008,6 +1034,7 @@ module Conv = struct
     | Pasrint -> i31 (Binop (Expr.i32_shr_s, args2 (List.map i32 args)))
     | Poffsetint n ->
       i31 (Expr.Binop (Expr.i32_add, (i32 (arg1 args), I32 (Int32.of_int n))))
+    | Pisout -> i31 (I_relop (S32, Lt U, args2 (List.map i32 args)))
     | Paddfloat ->
       box_float (Expr.Binop (Expr.f64_add, args2 (List.map unbox_float args)))
     | Psubfloat ->
@@ -1016,6 +1043,14 @@ module Conv = struct
       box_float (Expr.Binop (Expr.f64_mul, args2 (List.map unbox_float args)))
     | Pdivfloat ->
       box_float (Expr.Binop (Expr.f64_div, args2 (List.map unbox_float args)))
+    | Pfloatcomp cmp -> begin
+      let relop, is_not = float_comparision cmp in
+      let cmp_op : Expr.t =
+        F_relop (S64, relop, args2 (List.map unbox_float args))
+      in
+      let op = match is_not with Id -> cmp_op | Not -> bool_not cmp_op in
+      i31 op
+    end
     | Pccall descr ->
       let unbox_arg (t : Primitive.native_repr) arg =
         match t with
@@ -1100,12 +1135,65 @@ module Conv = struct
       let typ : Type.Var.t = FloatArray in
       i31 (Unop (Array_len typ, Ref_cast { typ; r = arg1 args }))
     | Parraylength Pgenarray -> runtime_prim "array_length"
+    | Parrayrefu (Paddrarray | Pintarray) ->
+      let typ : Type.Var.t = Array in
+      let array, field = args2 args in
+      Binop (Array_get typ, (Ref_cast { typ; r = array }, i32 field))
+    | Parrayrefu Pfloatarray ->
+      let typ : Type.Var.t = FloatArray in
+      let array, field = args2 args in
+      Binop (Array_get typ, (Ref_cast { typ; r = array }, i32 field))
+    | Parrayrefu Pgenarray -> runtime_prim "array_get_unsafe"
+    | Parrayrefs (Paddrarray | Pintarray) ->
+      runtime_prim "array_get_int_or_addr_safe"
+    | Parrayrefs Pfloatarray -> runtime_prim "array_get_float_safe"
+    | Parrayrefs Pgenarray -> runtime_prim "array_get_safe"
+    | Parraysetu (Paddrarray | Pintarray) ->
+      let typ : Type.Var.t = Array in
+      let array, field, value = args3 args in
+      Unit
+        (Array_set
+           { typ
+           ; array = Ref_cast { typ; r = array }
+           ; field = i32 field
+           ; value
+           } )
+    | Parraysetu Pfloatarray ->
+      let typ : Type.Var.t = FloatArray in
+      let array, field, value = args3 args in
+      Unit
+        (Array_set
+           { typ
+           ; array = Ref_cast { typ; r = array }
+           ; field = i32 field
+           ; value
+           } )
+    | Parraysetu Pgenarray -> runtime_prim "array_set_unsafe"
+    | Parraysets (Paddrarray | Pintarray) ->
+      runtime_prim "array_set_int_or_addr_safe"
+    | Parraysets Pfloatarray -> runtime_prim "array_set_float_safe"
+    | Parraysets Pgenarray -> runtime_prim "array_set_safe"
     | Pnot -> i31 (bool_not (i32 (arg1 args)))
-    | Pstringrefs -> runtime_prim "string_get"
-    | Pstringrefu ->
+    | Pbytesrefs | Pstringrefs -> runtime_prim "string_get"
+    | Pbytesrefu | Pstringrefu ->
       let arr, idx = args2 args in
       i31
-        (Binop (Array_get String, (Ref_cast { typ = String; r = arr }, i32 idx)))
+        (Binop
+           ( Array_get_packed { typ = String; extend = S }
+           , (Ref_cast { typ = String; r = arr }, i32 idx) ) )
+    | Pbytessets -> runtime_prim "bytes_set"
+    | Pbytessetu ->
+      let array, field, value = args3 args in
+      Unit
+        (Array_set
+           { typ = String
+           ; array = Ref_cast { typ = String; r = array }
+           ; field = i32 field
+           ; value = i32 value
+           } )
+    | Pstring_load _ | Pbytes_load _ | Pbytes_set _ | Pbswap16 | Pbbswap _
+    | Pint_as_pointer ->
+      runtime_prim "unimplemented"
     | _ ->
       let msg =
         Format.asprintf "TODO prim %a" Printclambda_primitives.primitive prim
@@ -1521,6 +1609,7 @@ module ToWasm = struct
       Cst.node name args
     | Ref_eq -> Cst.node "ref.eq" args
     | Array_get typ -> C.array_get typ args
+    | Array_get_packed { typ; extend } -> C.array_get_packed typ extend args
 
   let conv_nv_binop (op : Expr.nv_binop) block value =
     match op with
@@ -1569,6 +1658,17 @@ module ToWasm = struct
 
   let conv_irelop nn op a1 a2 = Cst.node (irelop_name nn op) [ a1; a2 ]
 
+  let frelop_name nn (op : Expr.frelop) =
+    match op with
+    | Eq -> Format.asprintf "f%s.eq" (nn_name nn)
+    | Ne -> Format.asprintf "f%s.ne" (nn_name nn)
+    | Lt -> Format.asprintf "f%s.lt" (nn_name nn)
+    | Gt -> Format.asprintf "f%s.gt" (nn_name nn)
+    | Le -> Format.asprintf "f%s.le" (nn_name nn)
+    | Ge -> Format.asprintf "f%s.ge" (nn_name nn)
+
+  let conv_frelop nn op a1 a2 = Cst.node (frelop_name nn op) [ a1; a2 ]
+
   let group e = match e with [ v ] -> v | _ -> C.group_block [ ref_eq ] e
 
   let rec conv_expr (expr : Expr.t) : Cst.t list =
@@ -1578,6 +1678,8 @@ module ToWasm = struct
       [ conv_binop op [ conv_expr_group arg1; conv_expr_group arg2 ] ]
     | I_relop (nn, op, (arg1, arg2)) ->
       [ conv_irelop nn op (conv_expr_group arg1) (conv_expr_group arg2) ]
+    | F_relop (nn, op, (arg1, arg2)) ->
+      [ conv_frelop nn op (conv_expr_group arg1) (conv_expr_group arg2) ]
     | Unop (op, arg) -> [ conv_unop op (conv_expr_group arg) ]
     | Let { var; typ = _; defining_expr; body } ->
       C.local_set (Expr.Local.V var) (conv_expr_group defining_expr)
@@ -1688,6 +1790,13 @@ module ToWasm = struct
     | NV_drop e -> [ C.drop (conv_expr_group e) ]
     | Assign { being_assigned; new_value } ->
       [ C.local_set (Expr.Local.V being_assigned) (conv_expr_group new_value) ]
+    | Array_set { typ; array; field; value } ->
+      [ C.array_set typ
+          [ conv_expr_group array
+          ; conv_expr_group field
+          ; conv_expr_group value
+          ]
+      ]
     | NV_binop (op, (arg1, arg2)) ->
       conv_nv_binop op (conv_expr_group arg1) (conv_expr_group arg2)
     | Loop { cont; body } -> [ C.loop cont [] (conv_no_value body) ]

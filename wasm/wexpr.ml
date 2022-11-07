@@ -33,6 +33,14 @@ type ibinop =
   | Rotl
   | Rotr
 
+type frelop =
+  | Eq
+  | Ne
+  | Lt
+  | Gt
+  | Le
+  | Ge
+
 type fbinop =
   | Add
   | Sub
@@ -47,6 +55,10 @@ type binop =
   | F_binop of fbinop * nn
   | Ref_eq
   | Array_get of Type.Var.t
+  | Array_get_packed of
+      { typ : Type.Var.t
+      ; extend : sx
+      }
 
 type nv_binop =
   | Struct_set of
@@ -97,6 +109,7 @@ type t =
       ; else_expr : t
       }
   | I_relop of nn * irelop * (t * t)
+  | F_relop of nn * frelop * (t * t)
   | Binop of binop * (t * t)
   | Unop of unop * t
   | Struct_new of Type.Var.t * t list
@@ -161,6 +174,12 @@ and no_value_expression =
   | Assign of
       { being_assigned : Local.var
       ; new_value : t
+      }
+  | Array_set of
+      { typ : Type.Var.t
+      ; array : t
+      ; field : t
+      ; value : t
       }
   | Loop of
       { cont : Block_id.t
@@ -236,6 +255,14 @@ let print_ibinop ppf (op : ibinop) =
   | Rotl -> Format.fprintf ppf "rotl"
   | Rotr -> Format.fprintf ppf "rotr"
 
+let print_frelop fmt : frelop -> Unit.t = function
+  | Eq -> Format.fprintf fmt "eq"
+  | Ne -> Format.fprintf fmt "ne"
+  | Lt -> Format.fprintf fmt "lt"
+  | Gt -> Format.fprintf fmt "gt"
+  | Le -> Format.fprintf fmt "le"
+  | Ge -> Format.fprintf fmt "ge"
+
 let print_fbinop ppf (op : fbinop) =
   match op with
   | Add -> Format.fprintf ppf "add"
@@ -254,6 +281,9 @@ let print_binop ppf = function
   | Ref_eq -> Format.fprintf ppf "Ref_eq"
   | Array_get typ ->
     Format.fprintf ppf "@[<hov 2>Array_get(%a)@]" Type.Var.print typ
+  | Array_get_packed { typ; extend } ->
+    let str = match extend with S -> "_s" | U -> "_u" in
+    Format.fprintf ppf "@[<hov 2>Array_get%s(%a)@]" str Type.Var.print typ
 
 let print_nv_binop ppf = function
   | Struct_set { typ; field } ->
@@ -291,6 +321,9 @@ let rec print ppf = function
       print defining_expr print body
   | I_relop (nn, op, (arg1, arg2)) ->
     Format.fprintf ppf "@[<hov 2>I_relop(%a_%a:@ %a,@ %a)@]" print_irelop op
+      print_nn nn print arg1 print arg2
+  | F_relop (nn, op, (arg1, arg2)) ->
+    Format.fprintf ppf "@[<hov 2>F_relop(%a_%a:@ %a,@ %a)@]" print_frelop op
       print_nn nn print arg1 print arg2
   | Binop (binop, (arg1, arg2)) ->
     Format.fprintf ppf "@[<hov 2>Binop(%a:@ %a,@ %a)@]" print_binop binop print
@@ -360,6 +393,9 @@ and print_no_value ppf no_value =
   | Assign { being_assigned; new_value } ->
     Format.fprintf ppf "@[<v 2>Assign(%a <- %a)@]" Local.print_var
       being_assigned print new_value
+  | Array_set { typ; array; field; value } ->
+    Format.fprintf ppf "@[<hov 2>Array_set(%a:@ %a.(%a) <- %a)@]" Type.Var.print
+      typ print array print field print value
   | Loop { cont; body } ->
     Format.fprintf ppf "@[<hov 2>Loop %a@ %a@]" Block_id.print cont
       print_no_value body
@@ -430,7 +466,9 @@ let required_locals body =
       let acc = add var typ acc in
       let acc = loop acc defining_expr in
       loop acc body
-    | I_relop (_, _, (arg1, arg2)) | Binop (_, (arg1, arg2)) ->
+    | I_relop (_, _, (arg1, arg2))
+    | F_relop (_, _, (arg1, arg2))
+    | Binop (_, (arg1, arg2)) ->
       let acc = loop acc arg1 in
       loop acc arg2
     | If_then_else { cond; if_expr; else_expr } ->
@@ -483,6 +521,10 @@ let required_locals body =
       let acc = loop acc arg1 in
       loop acc arg2
     | Assign { being_assigned = _; new_value } -> loop acc new_value
+    | Array_set { typ = _; array; field; value } ->
+      let acc = loop acc array in
+      let acc = loop acc field in
+      loop acc value
     | Loop { cont = _; body } -> loop_no_value acc body
     | NV_br_if { cond; if_true = _ } -> loop acc cond
     | NV_if_then_else { cond; if_expr; else_expr } ->

@@ -116,6 +116,11 @@ module C = struct
 
   let sx_name (sx : Expr.sx) = match sx with S -> "s" | U -> "u"
 
+  let array_get_packed typ extend args =
+    node (Printf.sprintf "array.get_%s" (sx_name extend)) (type_name typ :: args)
+
+  let array_set typ args = node "array.set" (type_name typ :: args)
+
   let struct_get_packed extend typ field arg =
     node
       (Printf.sprintf "struct.get_%s" (sx_name extend))
