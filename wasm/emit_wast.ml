@@ -205,6 +205,15 @@ module Conv = struct
       NV_binop (Struct_set { typ; field = field + 2 }, (block, value))
   end
 
+  let integer_comparision (c : Lambda.integer_comparison) : Expr.irelop =
+    match c with
+    | Ceq -> Eq
+    | Cne -> Ne
+    | Clt -> Lt S
+    | Cgt -> Gt S
+    | Cle -> Le S
+    | Cge -> Ge S
+
   module WInt = struct
     let untag e : Expr.t = Unop (I31_get_s, Unop (Ref_cast_i31, e))
 
@@ -215,6 +224,20 @@ module Conv = struct
     let box_type (t : Primitive.boxed_integer) : Type.Var.t =
       match t with Pint32 -> Int32 | Pint64 -> Int64 | Pnativeint -> Nativeint
 
+    let size (t : Primitive.boxed_integer) : Expr.nn =
+      match t with Pint32 -> S32 | Pint64 -> S64 | Pnativeint -> S32
+
+    let unboxed_const (t : Primitive.boxed_integer) n : Expr.t =
+      match size t with
+      | S32 -> I32 (Int32.of_int n)
+      | S64 -> I64 (Int64.of_int n)
+
+    let conv ~from ~to_ e : Expr.t =
+      match (size from, size to_) with
+      | S32, S32 | S64, S64 -> e
+      | sfrom, sto ->
+        Unop (Reinterpret { from_type = I sfrom; to_type = I sto }, e)
+
     let unbox t e : Expr.t =
       let typ = box_type t in
       Unop (Struct_get { typ; field = 0 }, Ref_cast { typ; r = e })
@@ -223,11 +246,17 @@ module Conv = struct
       let typ = box_type t in
       Struct_new (typ, [ e ])
 
-    let binop (t : Primitive.boxed_integer)  op (a1, a2) : Expr.t =
-      let size : Expr.nn = match t with Pint32 -> S32 | Pint64 -> S64 | Pnativeint -> S32 in
-      let args = unbox t a1, unbox t a2 in
-      box t (Binop (I_binop (op, size), args))
+    let binop (t : Primitive.boxed_integer) op (a1, a2) : Expr.t =
+      let args = (unbox t a1, unbox t a2) in
+      box t (Binop (I_binop (op, size t), args))
 
+    let binop_with_int (t : Primitive.boxed_integer) op (a1, a2) : Expr.t =
+      let args = (unbox t a1, WInt.untag a2) in
+      box t (Binop (I_binop (op, size t), args))
+
+    let relop (t : Primitive.boxed_integer) op (a1, a2) : Expr.t =
+      let args = (unbox t a1, unbox t a2) in
+      WInt.tag (I_relop (size t, integer_comparision op, args))
   end
 
   let const_float f : Expr.t = Struct_new (Float, [ F64 f ])
@@ -338,24 +367,6 @@ module Conv = struct
 
   let unbox_float x : Expr.t =
     let typ = Type.Var.Float in
-    Unop (Struct_get { typ; field = 0 }, Ref_cast { typ; r = x })
-
-  let box_int (kind : Primitive.boxed_integer) x : Expr.t =
-    let typ : Type.Var.t =
-      match kind with
-      | Pint32 -> Int32
-      | Pint64 -> Int64
-      | Pnativeint -> Nativeint
-    in
-    Struct_new (typ, [ x ])
-
-  let unbox_int (kind : Primitive.boxed_integer) x : Expr.t =
-    let typ : Type.Var.t =
-      match kind with
-      | Pint32 -> Int32
-      | Pint64 -> Int64
-      | Pnativeint -> Nativeint
-    in
     Unop (Struct_get { typ; field = 0 }, Ref_cast { typ; r = x })
 
   let conv_apply env (apply : Flambda.apply) : Expr.t =
@@ -840,8 +851,7 @@ module Conv = struct
       let local = Expr.Local.var_of_var var in
       let handler = conv_expr (bind_var env var) handler in
       Try { body = conv_expr env body; param = (local, ref_eq); handler }
-    | Proved_unreachable ->
-      NR Unreachable
+    | Proved_unreachable -> NR Unreachable
     | Let_rec (_bindings, _body) ->
       let msg = Format.asprintf "Value letrec not implemented (yet ?)" in
       failwith msg
@@ -996,6 +1006,8 @@ module Conv = struct
     | Plslint -> i31 (Binop (Expr.i32_shl, args2 (List.map i32 args)))
     | Plsrint -> i31 (Binop (Expr.i32_shr_u, args2 (List.map i32 args)))
     | Pasrint -> i31 (Binop (Expr.i32_shr_s, args2 (List.map i32 args)))
+    | Poffsetint n ->
+      i31 (Expr.Binop (Expr.i32_add, (i32 (arg1 args), I32 (Int32.of_int n))))
     | Paddfloat ->
       box_float (Expr.Binop (Expr.f64_add, args2 (List.map unbox_float args)))
     | Psubfloat ->
@@ -1009,14 +1021,14 @@ module Conv = struct
         match t with
         | Same_as_ocaml_repr -> arg
         | Unboxed_float -> unbox_float arg
-        | Unboxed_integer kind -> unbox_int kind arg
+        | Unboxed_integer kind -> WBint.unbox kind arg
         | Untagged_int -> i32 arg
       in
       let box_result (t : Primitive.native_repr) res =
         match t with
         | Same_as_ocaml_repr -> res
         | Unboxed_float -> box_float res
-        | Unboxed_integer kind -> box_int kind res
+        | Unboxed_integer kind -> WBint.box kind res
         | Untagged_int -> i31 res
       in
       State.add_c_import descr;
@@ -1043,10 +1055,9 @@ module Conv = struct
         match cop with
         | Ceq -> Binop (Ref_eq, args2 args)
         | Cne -> bool_not (Binop (Ref_eq, args2 args))
-        | Clt -> I_relop (S32, Lt S, args2 (List.map i32 args))
-        | Cgt -> I_relop (S32, Gt S, args2 (List.map i32 args))
-        | Cle -> I_relop (S32, Le S, args2 (List.map i32 args))
-        | Cge -> I_relop (S32, Ge S, args2 (List.map i32 args))
+        | Clt | Cgt | Cle | Cge ->
+          let cmp = integer_comparision cop in
+          I_relop (S32, cmp, args2 (List.map i32 args))
       in
       i31 op
     end
@@ -1055,21 +1066,29 @@ module Conv = struct
     | Pcompare_bints Pint64 -> runtime_prim "compare_i64"
     | Pcompare_bints Pint32 -> runtime_prim "compare_i32"
     | Pcompare_bints Pnativeint -> runtime_prim "compare_nativeint"
-    | Pbintofint Pint64 ->
-      Struct_new
-        ( Int64
-        , [ Unop
-              ( Reinterpret { from_type = I S32; to_type = I S64 }
-              , i32 (arg1 args) )
-          ] )
-    | Pbintofint Pint32 -> Struct_new (Int32, [ i32 (arg1 args) ])
-    | Pbintofint Pnativeint -> Struct_new (Nativeint, [ i32 (arg1 args) ])
+    | Pbintofint t ->
+      WBint.box t (WBint.conv ~from:Pint32 ~to_:t (i32 (arg1 args)))
+    | Pintofbint t ->
+      i31 (WBint.conv ~from:t ~to_:Pint32 (WBint.unbox t (arg1 args)))
+    | Pcvtbint (from, to_) ->
+      WBint.box to_ (WBint.conv ~from ~to_ (WBint.unbox from (arg1 args)))
+    | Pnegbint t ->
+      let args = (WBint.unbox t (arg1 args), WBint.unboxed_const t 0) in
+      WBint.box t (Binop (I_binop (Xor, WBint.size t), args))
     | Paddbint t -> WBint.binop t Add (args2 args)
     | Psubbint t -> WBint.binop t Sub (args2 args)
     | Pmulbint t -> WBint.binop t Mul (args2 args)
     | Pandbint t -> WBint.binop t And (args2 args)
     | Porbint t -> WBint.binop t Or (args2 args)
     | Pxorbint t -> WBint.binop t Xor (args2 args)
+    | Pdivbint { size = t; is_safe = Unsafe } ->
+      WBint.binop t (Div S) (args2 args)
+    | Pmodbint { size = t; is_safe = Unsafe } ->
+      WBint.binop t (Rem S) (args2 args)
+    | Plslbint t -> WBint.binop_with_int t Shl (args2 args)
+    | Plsrbint t -> WBint.binop_with_int t (Shr U) (args2 args)
+    | Pasrbint t -> WBint.binop_with_int t (Shr S) (args2 args)
+    | Pbintcomp (t, cop) -> WBint.relop t cop (args2 args)
     | Praise _raise_kind -> Throw (arg1 args)
     | Pbyteslength | Pstringlength ->
       let typ : Type.Var.t = String in
