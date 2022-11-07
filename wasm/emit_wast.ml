@@ -842,8 +842,11 @@ module Conv = struct
       Try { body = conv_expr env body; param = (local, ref_eq); handler }
     | Proved_unreachable ->
       NR Unreachable
-    | _ ->
-      let msg = Format.asprintf "TODO (conv_expr) %a" Flambda.print expr in
+    | Let_rec (_bindings, _body) ->
+      let msg = Format.asprintf "Value letrec not implemented (yet ?)" in
+      failwith msg
+    | Send _ ->
+      let msg = Format.asprintf "SEND: objects not implemented (yet ?)" in
       failwith msg
 
   and conv_switch (env : env) (cond : Expr.t) (switch : Flambda.switch) : Expr.t
