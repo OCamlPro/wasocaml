@@ -16,6 +16,8 @@ module Var = struct
     | Env
     | Block of { size : int }
     | BlockFloat of { size : int }
+      (* This may not work, it is not always possible to distinghuish float
+         blocks from float array. This should probaly be replaced by FloatArray *)
     | Set_of_closures of Set_of_closures_id.t
     | Gen_block
     | I31

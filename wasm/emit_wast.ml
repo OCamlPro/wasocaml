@@ -205,6 +205,28 @@ module Conv = struct
       NV_binop (Struct_set { typ; field = field + 2 }, (block, value))
   end
 
+  module FloatBlock = struct
+    let make fields : Expr.t =
+      let size = List.length fields in
+      State.add_block_float_size size;
+      Struct_new (BlockFloat { size }, Expr.I32 (Int32.of_int size) :: fields)
+
+    let get_field e ~field : Expr.t =
+      let size = field + 1 in
+      State.add_block_float_size size;
+      let typ : Type.Var.t = BlockFloat { size } in
+      Unop
+        (Struct_get { typ; field = field + 1 }, Expr.(Ref_cast { typ; r = e }))
+
+    let set_field ~block value ~field : Expr.no_value_expression =
+      let size = field + 1 in
+      State.add_block_float_size size;
+      let typ : Type.Var.t = BlockFloat { size } in
+      NV_binop
+        ( Struct_set { typ; field = field + 1 }
+        , (Expr.(Ref_cast { typ; r = block }), value) )
+  end
+
   let integer_comparision (c : Lambda.integer_comparison) : Expr.irelop =
     match c with
     | Ceq -> Eq
@@ -292,6 +314,13 @@ module Conv = struct
         s []
     in
     Array_new_fixed { typ = String; fields }
+
+  let const_float_block a : Expr.t =
+    FloatBlock.make (List.map (fun f -> Expr.F64 f) a)
+
+  let const_float_array a : Expr.t =
+    let fields = List.map (fun f -> Expr.F64 f) a in
+    Array_new_fixed { typ = FloatArray; fields }
 
   let bind_var env var =
     { env with bound_vars = Variable.Set.add var env.bound_vars }
@@ -428,9 +457,15 @@ module Conv = struct
     | Int64 i -> (Rvar Int64, const_int64 i)
     | Nativeint i -> (Rvar Nativeint, const_nativeint i)
     | Immutable_string s | String s -> (Rvar String, const_string s)
-    | Float_array _ | Immutable_float_array _ ->
-      failwith
-        (Format.asprintf "TODO allocated const %a" Allocated_const.print const)
+    | Immutable_float_array a ->
+      (Rvar (BlockFloat { size = List.length a }), const_float_block a)
+    | Float_array a ->
+      (* TODO/WARNING: this is partially incorrect. Both float
+         arrays and mutable blocks containing only floats ends up in
+         that case.
+         We could either fix the frontend to actually distinguish those cases,
+         or fix here and compile BlockFloat as FloatArray *)
+      (Rvar FloatArray, const_float_block a)
 
   let conv_allocated_const (const : Allocated_const.t) : Const.t =
     let typ, e = conv_allocated_const_expr const in
@@ -889,11 +924,13 @@ module Conv = struct
           cases
       in
       let max_branch, default_branch =
-        let max, max_branch = Numbers.Int.Map.max_binding cases in
-        ( max
-        , match switch.failaction with
-          | None -> max_branch
-          | Some _ -> default_id )
+        if Numbers.Int.Map.is_empty cases then (-1, default_id)
+        else
+          let max, max_branch = Numbers.Int.Map.max_binding cases in
+          ( max
+          , match switch.failaction with
+            | None -> max_branch
+            | Some _ -> default_id )
       in
       let cases =
         (* TODO max_branch should be sufficient sometimes: the default
@@ -1034,6 +1071,12 @@ module Conv = struct
     | Pasrint -> i31 (Binop (Expr.i32_shr_s, args2 (List.map i32 args)))
     | Poffsetint n ->
       i31 (Expr.Binop (Expr.i32_add, (i32 (arg1 args), I32 (Int32.of_int n))))
+    | Poffsetref n ->
+      let ref_val = Block.get_field ~cast:() (arg1 args) ~field:0 in
+      let value =
+        i31 (Expr.Binop (Expr.i32_add, (i32 ref_val, I32 (Int32.of_int n))))
+      in
+      Unit (Block.set_field ~cast:() ~block:(arg1 args) ~field:0 value)
     | Pisout -> i31 (I_relop (S32, Lt U, args2 (List.map i32 args)))
     | Paddfloat ->
       box_float (Expr.Binop (Expr.f64_add, args2 (List.map unbox_float args)))
@@ -1082,6 +1125,15 @@ module Conv = struct
     | Psetfield (field, _kind, _init) ->
       let block, value = args2 args in
       Seq ([ Block.set_field ~cast:() ~field ~block value ], unit_value)
+    | Pmakearray (Pfloatarray, Immutable) ->
+      FloatBlock.make (List.map unbox_float args)
+    | Pfloatfield field ->
+      let arg = arg1 args in
+      box_float (FloatBlock.get_field ~field arg)
+    | Psetfloatfield (field, _init) ->
+      let block, value = args2 args in
+      Seq
+        ([ FloatBlock.set_field ~field ~block (unbox_float value) ], unit_value)
     | Popaque -> arg1 args
     | Pisint -> WInt.tag (Unop (Is_i31, arg1 args))
     | Pintcomp Ceq -> i31 (Expr.Binop (Ref_eq, args2 args))
