@@ -1127,6 +1127,28 @@ module Conv = struct
       Seq ([ Block.set_field ~cast:() ~field ~block value ], unit_value)
     | Pmakearray (Pfloatarray, Immutable) ->
       FloatBlock.make (List.map unbox_float args)
+    | Pmakearray (Pfloatarray, Mutable) ->
+      Array_new_fixed { typ = FloatArray; fields = List.map unbox_float args }
+    | Pmakearray ((Pintarray | Paddrarray), _) ->
+      Array_new_fixed { typ = Array; fields = args }
+    | Pmakearray (Pgenarray, _) -> begin
+      match args with
+      | [] -> Array_new_fixed { typ = Array; fields = [] }
+      | first :: _ ->
+        let cont = Block_id.fresh "make_float_array" in
+        let handler : Expr.t =
+          Array_new_fixed
+            { typ = FloatArray; fields = List.map unbox_float args }
+        in
+        let if_else : Expr.t = Array_new_fixed { typ = Array; fields = args } in
+        Let_cont
+          { cont
+          ; params = []
+          ; handler
+          ; body =
+              Br_on_cast { value = first; typ = Float; if_cast = cont; if_else }
+          }
+    end
     | Pfloatfield field ->
       let arg = arg1 args in
       box_float (FloatBlock.get_field ~field arg)
