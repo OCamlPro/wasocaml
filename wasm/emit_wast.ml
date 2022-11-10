@@ -1094,6 +1094,16 @@ module Conv = struct
       let op = match is_not with Id -> cmp_op | Not -> bool_not cmp_op in
       i31 op
     end
+    | Pintoffloat ->
+      i31
+        (Unop
+           ( Trunc { from_type = S64; to_type = S32; sign = S }
+           , unbox_float (arg1 args) ) )
+    | Pfloatofint ->
+      box_float
+        (Unop
+           ( Convert { from_type = S32; to_type = S64; sign = S }
+           , i32 (arg1 args) ) )
     | Pccall descr ->
       let unbox_arg (t : Primitive.native_repr) arg =
         match t with
@@ -1143,12 +1153,13 @@ module Conv = struct
         let if_else : Expr.t = Array_new_fixed { typ = Array; fields = args } in
         Let_cont
           { cont
-          ; params = [None, Rvar Float]
+          ; params = [ (None, Rvar Float) ]
           ; handler
           ; body =
               Br_on_cast { value = first; typ = Float; if_cast = cont; if_else }
           }
     end
+    | Pduparray (_, _) -> runtime_prim "duparray"
     | Pfloatfield field ->
       let arg = arg1 args in
       box_float (FloatBlock.get_field ~field arg)
@@ -1696,6 +1707,10 @@ module ToWasm = struct
     | F S32 -> "f32"
     | F S64 -> "f64"
 
+  let size_name (nn : Expr.nn) = match nn with S64 -> "64" | S32 -> "32"
+
+  let sign_name (sx : Expr.sx) = match sx with S -> "s" | U -> "u"
+
   let conv_unop (op : Expr.unop) arg =
     match op with
     | I31_get_s -> Cst.node "i31.get_s" [ arg ]
@@ -1718,6 +1733,18 @@ module ToWasm = struct
       let name =
         Printf.sprintf "%s.reinterpret_%s" (num_type_name to_type)
           (num_type_name from_type)
+      in
+      Cst.node name [ arg ]
+    | Convert { from_type; to_type; sign } ->
+      let name =
+        Printf.sprintf "f%s.convert_i%s_%s" (size_name to_type)
+          (size_name from_type) (sign_name sign)
+      in
+      Cst.node name [ arg ]
+    | Trunc { from_type; to_type; sign } ->
+      let name =
+        Printf.sprintf "i%s.trunc_f%s_%s" (size_name to_type)
+          (size_name from_type) (sign_name sign)
       in
       Cst.node name [ arg ]
 
@@ -1831,7 +1858,8 @@ module ToWasm = struct
     end
     | Apply_cont { cont; args } -> [ C.br cont (List.map conv_expr_group args) ]
     | Br_on_cast { value; typ; if_cast; if_else } ->
-      [ C.drop (C.br_on_cast if_cast typ (conv_expr_group value)) ] @ conv_expr if_else
+      [ C.drop (C.br_on_cast if_cast typ (conv_expr_group value)) ]
+      @ conv_expr if_else
     | Br_if { cond; if_true; if_else } ->
       [ C.br_if if_true (conv_expr_group cond) ] @ conv_expr if_else
     | Br_table { cond; cases; default } ->

@@ -89,6 +89,16 @@ type unop =
       { from_type : num_type
       ; to_type : num_type
       }
+  | Convert of
+      { from_type : nn
+      ; to_type : nn
+      ; sign : sx
+      }
+  | Trunc of
+      { from_type : nn
+      ; to_type : nn
+      ; sign : sx
+      }
 
 (* Every expression returns exactly one value *)
 type t =
@@ -293,6 +303,10 @@ let print_num_type ppf = function
   | I s -> Format.fprintf ppf "i%a" print_nn s
   | F s -> Format.fprintf ppf "f%a" print_nn s
 
+let print_sign ppf = function
+  | S -> Format.fprintf ppf "s"
+  | U -> Format.fprintf ppf "u"
+
 let print_unop ppf = function
   | I31_get_s -> Format.fprintf ppf "I31_get_s"
   | I31_new -> Format.fprintf ppf "I31_new"
@@ -309,6 +323,12 @@ let print_unop ppf = function
   | Reinterpret { from_type; to_type } ->
     Format.fprintf ppf "%a.reinterpret_%a" print_num_type to_type print_num_type
       from_type
+  | Convert { from_type; to_type; sign } ->
+    Format.fprintf ppf "f%a.convert_i%a_%a" print_nn to_type print_nn from_type
+      print_sign sign
+  | Trunc { from_type; to_type; sign } ->
+    Format.fprintf ppf "i%a.trunc_i%a_%a" print_nn to_type print_nn from_type
+      print_sign sign
 
 let rec print ppf = function
   | Var l -> Local.print ppf l
