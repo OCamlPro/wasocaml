@@ -1143,7 +1143,7 @@ module Conv = struct
         let if_else : Expr.t = Array_new_fixed { typ = Array; fields = args } in
         Let_cont
           { cont
-          ; params = []
+          ; params = [None, Rvar Float]
           ; handler
           ; body =
               Br_on_cast { value = first; typ = Float; if_cast = cont; if_else }
@@ -1831,7 +1831,7 @@ module ToWasm = struct
     end
     | Apply_cont { cont; args } -> [ C.br cont (List.map conv_expr_group args) ]
     | Br_on_cast { value; typ; if_cast; if_else } ->
-      [ C.br_on_cast if_cast typ (conv_expr_group value) ] @ conv_expr if_else
+      [ C.drop (C.br_on_cast if_cast typ (conv_expr_group value)) ] @ conv_expr if_else
     | Br_if { cond; if_true; if_else } ->
       [ C.br_if if_true (conv_expr_group cond) ] @ conv_expr if_else
     | Br_table { cond; cases; default } ->
