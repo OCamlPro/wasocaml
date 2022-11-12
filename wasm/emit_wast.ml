@@ -18,7 +18,7 @@ open Wident
 open Wmodule
 
 module Conv = struct
-  type top_env = { offsets : Wasm_closure_offsets.result }
+  type top_env = { offsets : Wasm_closure_offsets.t }
 
   type env =
     { bound_vars : Variable.Set.t
@@ -78,11 +78,49 @@ module Conv = struct
       if arity = 1 then get_gen_func e
       else Unop (Struct_get { typ = Gen_closure { arity }; field = 2 }, e)
 
+    let closure_info top_env closure_id =
+      let unit = Closure_id.get_compilation_unit closure_id in
+      if Compilation_unit.is_current unit then (
+        try Closure_id.Map.find closure_id top_env.offsets.function_accessors
+        with Not_found as e ->
+          Format.printf "Missing closure_id %a in current compilation unit"
+            Closure_id.print closure_id;
+          raise e )
+      else
+        let export_info = Compilenv.approx_env () in
+        try
+          Closure_id.Map.find closure_id
+            export_info.wasm_offsets.function_accessors
+        with Not_found as e ->
+          Format.printf "Missing closure_id %a in imported compilation units"
+            Closure_id.print closure_id;
+          raise e
+
+    let var_within_closure_info top_env var_within_closure =
+      let unit = Var_within_closure.get_compilation_unit var_within_closure in
+      if Compilation_unit.is_current unit then (
+        try
+          Var_within_closure.Map.find var_within_closure
+            top_env.offsets.free_variable_accessors
+        with Not_found as e ->
+          Format.printf
+            "Missing var_within_closure %a in current compilation unit"
+            Var_within_closure.print var_within_closure;
+          raise e )
+      else
+        let export_info = Compilenv.approx_env () in
+        try
+          Var_within_closure.Map.find var_within_closure
+            export_info.wasm_offsets.free_variable_accessors
+        with Not_found as e ->
+          Format.printf
+            "Missing var_within_closure %a in imported compilation units"
+            Var_within_closure.print var_within_closure;
+          raise e
+
     let project_closure ?(cast : unit option) (top_env : top_env) closure_id
         set_of_closures : Expr.t =
-      let accessor =
-        Closure_id.Map.find closure_id top_env.offsets.function_accessors
-      in
+      let accessor = closure_info top_env closure_id in
       if not accessor.recursive_set then set_of_closures
       else
         let typ : Type.Var.t = Set_of_closures accessor.set in
@@ -95,18 +133,8 @@ module Conv = struct
 
     let project_var ?(cast : unit option) (top_env : top_env) closure_id var
         closure : Expr.t =
-      let accessor =
-        try
-          Var_within_closure.Map.find var
-            top_env.offsets.free_variable_accessors
-        with Not_found ->
-          failwith
-            (Format.asprintf "Missing var_within_closure %a"
-               Var_within_closure.print var )
-      in
-      let closure_info =
-        Closure_id.Map.find closure_id top_env.offsets.function_accessors
-      in
+      let accessor = var_within_closure_info top_env var in
+      let closure_info = closure_info top_env closure_id in
       if not accessor.recursive_set then begin
         let typ : Type.Var.t =
           Closure { arity = closure_info.arity; fields = accessor.closure_size }

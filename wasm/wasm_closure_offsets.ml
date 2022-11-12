@@ -30,7 +30,7 @@ type free_var_accessor =
   ; set : Set_of_closures_id.t
   }
 
-type result =
+type t =
   { function_accessors : function_accessor Closure_id.Map.t
   ; free_variable_accessors : free_var_accessor Var_within_closure.Map.t
   }
@@ -113,14 +113,27 @@ let add_closure_offsets result
     in
     { function_accessors; free_variable_accessors }
 
-let compute (program : Flambda.program) =
-  let init : result =
-    { function_accessors = Closure_id.Map.empty
-    ; free_variable_accessors = Var_within_closure.Map.empty
-    }
+let empty =
+  { function_accessors = Closure_id.Map.empty
+  ; free_variable_accessors = Var_within_closure.Map.empty
+  }
+
+let merge a b =
+  let function_accessors =
+    Closure_id.Map.disjoint_union a.function_accessors b.function_accessors
   in
+  let free_variable_accessors =
+    Var_within_closure.Map.disjoint_union a.free_variable_accessors
+      b.free_variable_accessors
+  in
+  { function_accessors; free_variable_accessors }
+
+let import_for_pack ~pack_units:_ ~pack:_ _t =
+  failwith "TODO wasm import_for_pack"
+
+let compute (program : Flambda.program) =
   let r =
-    List.fold_left add_closure_offsets init
+    List.fold_left add_closure_offsets empty
       (Flambda_utils.all_sets_of_closures program)
   in
   r

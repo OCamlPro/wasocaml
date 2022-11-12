@@ -755,6 +755,9 @@ let convert ~ppf_dump (program, exported_transient) : result =
       ppf_dump;
     }
   in
+  let wasm_offsets =
+    Wasm_closure_offsets.compute program
+  in
   let expr, structured_constants, preallocated_blocks =
     to_clambda_program t Env.empty Symbol.Map.empty program
   in
@@ -770,5 +773,6 @@ let convert ~ppf_dump (program, exported_transient) : result =
       ~imported_offset_fun:imported_units.fun_offset_table
       ~imported_offset_fv:imported_units.fv_offset_table
       ~constant_closures:current_unit.constant_closures
+      ~wasm_offsets
   in
   { expr; preallocated_blocks; structured_constants; exported; }

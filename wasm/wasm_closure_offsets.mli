@@ -33,9 +33,16 @@ type free_var_accessor = private
   ; set : Set_of_closures_id.t
   }
 
-type result = private
+type t = private
   { function_accessors : function_accessor Closure_id.Map.t
   ; free_variable_accessors : free_var_accessor Var_within_closure.Map.t
   }
 
-val compute : Flambda.program -> result
+val empty : t
+
+val merge : t -> t -> t
+
+val import_for_pack :
+  pack_units:Compilation_unit.Set.t -> pack:Compilation_unit.t -> t -> t
+
+val compute : Flambda.program -> t

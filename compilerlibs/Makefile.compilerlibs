@@ -141,7 +141,6 @@ LAMBDA = \
 LAMBDA_CMI =
 
 WASM = \
-  wasm/wasm_closure_offsets.cmo \
   wasm/wstate.cmo \
   wasm/wtype.cmo \
   wasm/wident.cmo \
@@ -348,6 +347,7 @@ MIDDLE_END = \
   middle_end/flambda/effect_analysis.cmo \
   middle_end/flambda/inlining_cost.cmo \
   middle_end/flambda/simple_value_approx.cmo \
+  wasm/wasm_closure_offsets.cmo \
   middle_end/flambda/export_info.cmo \
   middle_end/flambda/export_info_for_pack.cmo \
   middle_end/compilenv.cmo \
