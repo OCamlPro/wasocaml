@@ -7,6 +7,8 @@ module Type = Wtype
 
 [@@@ocaml.warning "-32"]
 
+let ignore_unimplemented = true
+
 let print_list f sep ppf l =
   Format.pp_print_list
     ~pp_sep:(fun ppf () -> Format.fprintf ppf "%s@ " sep)
@@ -934,10 +936,18 @@ module Conv = struct
     | Proved_unreachable -> NR Unreachable
     | Let_rec (_bindings, _body) ->
       let msg = Format.asprintf "Value letrec not implemented (yet ?)" in
-      failwith msg
+      if ignore_unimplemented then begin
+        Format.eprintf "%s@." msg;
+        runtime_prim "unimplemented" []
+      end
+      else failwith msg
     | Send _ ->
       let msg = Format.asprintf "SEND: objects not implemented (yet ?)" in
-      failwith msg
+      if ignore_unimplemented then begin
+        Format.eprintf "%s@." msg;
+        runtime_prim "unimplemented" []
+      end
+      else failwith msg
 
   and conv_switch (env : env) (cond : Expr.t) (switch : Flambda.switch) : Expr.t
       =
@@ -1306,6 +1316,9 @@ module Conv = struct
            ; field = i32 field
            ; value = i32 value
            } )
+    | Pbigarrayref _ | Pbigarrayset _ | Pbigarraydim _ | Pbigstring_load _
+    | Pbigstring_set _ ->
+      runtime_prim "unimplemented"
     | Pstring_load _ | Pbytes_load _ | Pbytes_set _ | Pbswap16 | Pbbswap _
     | Pint_as_pointer ->
       runtime_prim "unimplemented"
