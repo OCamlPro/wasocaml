@@ -99,6 +99,8 @@ type unop =
       ; to_type : nn
       ; sign : sx
       }
+  | Abs_float
+  | Neg_float
 
 (* Every expression returns exactly one value *)
 type t =
@@ -329,6 +331,8 @@ let print_unop ppf = function
   | Trunc { from_type; to_type; sign } ->
     Format.fprintf ppf "i%a.trunc_i%a_%a" print_nn to_type print_nn from_type
       print_sign sign
+  | Abs_float -> Format.fprintf ppf "Abs_float"
+  | Neg_float -> Format.fprintf ppf "Neg_float"
 
 let rec print ppf = function
   | Var l -> Local.print ppf l

@@ -1078,6 +1078,8 @@ module Conv = struct
       in
       Unit (Block.set_field ~cast:() ~block:(arg1 args) ~field:0 value)
     | Pisout -> i31 (I_relop (S32, Lt U, args2 (List.map i32 args)))
+    | Pabsfloat -> box_float (Unop (Abs_float, unbox_float (arg1 args)))
+    | Pnegfloat -> box_float (Unop (Neg_float, unbox_float (arg1 args)))
     | Paddfloat ->
       box_float (Expr.Binop (Expr.f64_add, args2 (List.map unbox_float args)))
     | Psubfloat ->
@@ -1747,6 +1749,8 @@ module ToWasm = struct
           (size_name from_type) (sign_name sign)
       in
       Cst.node name [ arg ]
+    | Abs_float -> Cst.node "f64.abs" [ arg ]
+    | Neg_float -> Cst.node "f64.neg" [ arg ]
 
   let irelop_name nn (op : Expr.irelop) =
     match op with
