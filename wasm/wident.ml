@@ -118,6 +118,7 @@ module Local = struct
   let var_name = function
     | Variable v ->
       let name, id = Variable.unique_name_id v in
+      let name = String.map acceptable_char name in
       Format.asprintf "%s_%i" name id
     | Set_of_closures id -> Format.asprintf "Set_%a" Set_of_closures_id.print id
     | Mutable v ->
