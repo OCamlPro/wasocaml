@@ -110,7 +110,7 @@ module C = struct
   let struct_get typ field arg =
     node "struct.get" [ type_name typ; int field; arg ]
 
-  let array_len typ arg = node "array.len" [ type_name typ; arg ]
+  let array_len _typ arg = node "array.len" [ (* type_name typ;  *)arg ]
 
   let array_get typ args = node "array.get" (type_name typ :: args)
 
