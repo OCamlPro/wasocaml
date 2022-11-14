@@ -228,7 +228,7 @@ let lambda_to_clambda ~backend ~prefixname ~ppf_dump
     | Some _ -> true
   in
   if do_wasm then
-    Emit_wast.emit ~output_prefix:prefixname program;
+    Profile.record_call "emit_wast" (fun () -> Emit_wast.emit ~output_prefix:prefixname program);
 
   let clambda, preallocated_blocks, constants =
     Profile.record_call "backend" (fun () ->

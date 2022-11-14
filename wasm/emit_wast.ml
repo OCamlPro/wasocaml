@@ -2076,8 +2076,10 @@ let run ~output_prefix (flambda : Flambda.program) =
     Format.printf "WASM %s@.%a@." output_prefix Module.print m;
   let common = Conv.make_common () in
   if print_everything then Format.printf "COMMON@.%a@." Module.print common;
-  let wasm = ToWasm.conv_module (common @ m) in
-  Format.printf "@.%a@." ToWasm.Cst.emit wasm;
-  output_file ~output_prefix wasm
+  let wasm =
+    Profile.record_call "ToWasm" (fun () -> ToWasm.conv_module (common @ m))
+  in
+  (* Format.printf "@.%a@." ToWasm.Cst.emit wasm; *)
+  Profile.record_call "output_wasm" (fun () -> output_file ~output_prefix wasm)
 
 let emit ~output_prefix (flambda : Flambda.program) = run ~output_prefix flambda
