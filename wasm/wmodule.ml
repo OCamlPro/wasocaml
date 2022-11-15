@@ -84,6 +84,7 @@ module Decl = struct
         }
     | Const of
         { name : Global.t
+        ; export : Symbol.t option
         ; descr : Const.t
         }
 

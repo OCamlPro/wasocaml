@@ -60,7 +60,13 @@ module C = struct
 
   let type_name v = atom (Type.Var.name v)
 
-  let global name typ descr = node "global" ([ !$name; typ ] @ descr)
+  let global name export_name typ descr =
+    match export_name with
+    | None -> node "global" ([ !$name; typ ] @ descr)
+    | Some export_name ->
+      node "global"
+        ([ !$name; node "export" [ String export_name ]; typ ] @ descr)
+
   let global_import name typ module_ import_name =
     node "global"
       [ !$name; node "import" [ String module_; String import_name ]; typ ]
@@ -113,7 +119,7 @@ module C = struct
   let struct_get typ field arg =
     node "struct.get" [ type_name typ; int field; arg ]
 
-  let array_len _typ arg = node "array.len" [ (* type_name typ;  *)arg ]
+  let array_len _typ arg = node "array.len" [ (* type_name typ;  *) arg ]
 
   let array_get typ args = node "array.get" (type_name typ :: args)
 
@@ -255,4 +261,6 @@ module C = struct
   let start f = node "start" [ !$(Func_id.name f) ]
 
   let module_ m = nodev "module" m
+
+  let register name = node "register" [ String name ]
 end

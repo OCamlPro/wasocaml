@@ -278,6 +278,8 @@ module Conv = struct
     let const symbol =
       record symbol;
       Const.Global (Global.Sym symbol)
+
+    let export_name symbol = Linkage_name.to_string @@ Symbol.label symbol
   end
 
   module WInt = struct
@@ -639,7 +641,7 @@ module Conv = struct
       in
       Struct { typ = Type.Var.Block { size }; fields }
     in
-    let decl = Decl.Const { name; descr } in
+    let decl = Decl.Const { name; export = Some symbol; descr } in
     let size = List.length fields in
     State.add_block_size size;
     let effect (field, expr) : Expr.no_value_expression =
@@ -664,7 +666,7 @@ module Conv = struct
               (WSymbol.get field_contents) )
           fields_to_update
       in
-      ([ Const { name; descr } ], new_effects)
+      ([ Const { name; export = Some symbol; descr } ], new_effects)
     | Project_closure (_sym, _closure_id) -> ([], [])
     | Set_of_closures set ->
       let decl = closed_function_declarations symbol set.function_decls in
@@ -672,7 +674,7 @@ module Conv = struct
     | Allocated_const const ->
       let name = Global.of_symbol symbol in
       let descr = conv_allocated_const const in
-      ([ Const { name; descr } ], [])
+      ([ Const { name; export = Some symbol; descr } ], [])
 
   and closed_function_declarations _symbol
       (declarations : Flambda.function_declarations) : Decl.t list =
@@ -693,13 +695,11 @@ module Conv = struct
           in
           Const.Struct { typ = Type.Var.Closure { arity; fields = 0 }; fields }
         in
-        let closure_name =
-          let closure_symbol =
-            Compilenv.closure_symbol (Closure_id.wrap name)
-          in
-          Global.of_symbol closure_symbol
-        in
-        Decl.Const { name = closure_name; descr = closure } :: declarations )
+        let closure_symbol = Compilenv.closure_symbol (Closure_id.wrap name) in
+        let closure_name = Global.of_symbol closure_symbol in
+        Decl.Const
+          { name = closure_name; export = Some closure_symbol; descr = closure }
+        :: declarations )
       declarations.funs []
 
   and conv_set_of_closures env (set_of_closures : Flambda.set_of_closures) :
@@ -1558,7 +1558,7 @@ module Conv = struct
         Linkage_name.to_string
         @@ Compilation_unit.get_linkage_name (Symbol.compilation_unit sym)
     in
-    let name = Linkage_name.to_string @@ Symbol.label sym in
+    let name = WSymbol.export_name sym in
     Const.Import { typ = ref_eq; module_; name }
 
   let func_1_and_env =
@@ -1659,7 +1659,7 @@ module Conv = struct
         (fun (sym : Global_import.t) decls ->
           let name = Global.Sym sym in
           let descr = global_import sym in
-          Decl.Const { name; descr } :: decls )
+          Decl.Const { name; export = None; descr } :: decls )
         !State.global_imports decls
     in
     let decls =
@@ -2015,7 +2015,8 @@ module ToWasm = struct
     | NR_br { cont; arg } -> [ C.br cont [ conv_expr_group arg ] ]
     | Unreachable -> [ C.unreachable ]
 
-  let conv_const name (const : Const.t) =
+  let conv_const name export (const : Const.t) =
+    let export_name = Option.map Conv.WSymbol.export_name export in
     match const with
     | Struct { typ; fields } ->
       let field (field : Const.field) : Cst.t =
@@ -2025,10 +2026,10 @@ module ToWasm = struct
         | Ref_func f -> C.ref_func f
         | Global g -> C.global_get g
       in
-      C.global (Global.name name) (C.reft typ)
+      C.global (Global.name name) export_name (C.reft typ)
         [ C.struct_new_canon typ (List.map field fields) ]
     | Expr { typ; e } ->
-      C.global (Global.name name) (C.type_atom typ) (conv_expr e)
+      C.global (Global.name name) export_name (C.type_atom typ) (conv_expr e)
     | Import { typ; module_; name = import_name } ->
       C.global_import (Global.name name) (C.type_atom typ) module_ import_name
 
@@ -2075,7 +2076,8 @@ module ToWasm = struct
 
   let rec conv_decl = function
     | [] -> [ C.start Start ]
-    | Decl.Const { name; descr } :: tl -> conv_const name descr :: conv_decl tl
+    | Decl.Const { name; export; descr } :: tl ->
+      conv_const name export descr :: conv_decl tl
     | Decl.Func { name; descr } :: tl ->
       let func = conv_func name descr in
       func @ conv_decl tl
@@ -2089,7 +2091,7 @@ module ToWasm = struct
   let conv_module module_ = C.module_ (conv_decl module_)
 end
 
-let output_file ~output_prefix module_ =
+let output_file ~output_prefix ~module_ ~register =
   let wastfile = output_prefix ^ ".wast" in
   let oc = open_out_bin wastfile in
   let ppf = Format.formatter_of_out_channel oc in
@@ -2098,7 +2100,10 @@ let output_file ~output_prefix module_ =
       Format.fprintf ppf "@.";
       close_out oc )
     (* ~exceptionally:(fun () -> Misc.remove_file wastfile) *)
-      (fun () -> ToWasm.Cst.emit ppf module_ )
+      (fun () ->
+      ToWasm.Cst.emit ppf module_;
+      Format.fprintf ppf "@\n";
+      ToWasm.Cst.emit ppf register )
 
 let run ~output_prefix (flambda : Flambda.program) =
   State.reset ();
@@ -2118,7 +2123,14 @@ let run ~output_prefix (flambda : Flambda.program) =
   let wasm =
     Profile.record_call "ToWasm" (fun () -> ToWasm.conv_module (common @ m))
   in
+  let register =
+    let ln =
+      Compilation_unit.get_linkage_name (Compilation_unit.get_current_exn ())
+    in
+    Wast.C.register (Linkage_name.to_string ln)
+  in
   (* Format.printf "@.%a@." ToWasm.Cst.emit wasm; *)
-  Profile.record_call "output_wasm" (fun () -> output_file ~output_prefix wasm)
+  Profile.record_call "output_wasm" (fun () ->
+      output_file ~output_prefix ~module_:wasm ~register )
 
 let emit ~output_prefix (flambda : Flambda.program) = run ~output_prefix flambda
