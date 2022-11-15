@@ -531,7 +531,14 @@ module Conv = struct
     end
 
   let closure_types (program : Flambda.program) =
-    List.filter_map closure_type (Flambda_utils.all_sets_of_closures program)
+    let list = ref [] in
+    Flambda_iterators.iter_on_set_of_closures_of_program program
+      ~f:(fun ~constant set_of_closures ->
+        if not constant then
+          match closure_type set_of_closures with
+          | None -> ()
+          | Some t -> list := t :: !list );
+    !list
 
   let runtime_prim name args : Expr.t =
     let arity = List.length args in
@@ -717,6 +724,7 @@ module Conv = struct
           body : Expr.t =
         let arity = Flambda_utils.function_arity function_decl in
         let typ : Type.Var.t = Closure { arity; fields = 1 } in
+        State.add_closure_type ~arity ~fields:1;
         let defining_expr : Expr.t =
           let func_id = Func_id.of_var_closure_id func_var in
           let fields =
