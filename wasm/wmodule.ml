@@ -60,6 +60,11 @@ module Const = struct
         { typ : Type.atom
         ; e : Expr.t
         }
+    | Import of
+        { typ : Type.atom
+        ; module_ : string
+        ; name : string
+        }
 
   let print_field ppf = function
     | I8 i -> Format.fprintf ppf "i8(%i)" i
@@ -102,6 +107,9 @@ module Decl = struct
     | Const { name; descr = Expr { typ; e } } ->
       Format.fprintf ppf "@[<hov 2>const %a : %a =@ {%a}@]" Global.print name
         Type.print_atom typ Expr.print e
+    | Const { name; descr = Import { typ; module_; name = import_name } } ->
+      Format.fprintf ppf "@[<hov 2>const %a : %a =@ {%s %s}@]" Global.print name
+        Type.print_atom typ module_ import_name
 end
 
 module Module = struct

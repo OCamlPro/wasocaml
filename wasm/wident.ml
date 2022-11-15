@@ -66,24 +66,29 @@ end
 module Global = struct
   type t =
     | S of string
+    | Sym of Symbol.t
     | Module_block
     | Closure of Variable.t
 
+  let symbol_name s =
+    let linkage_name = Symbol.label s in
+    let name = Linkage_name.to_string linkage_name in
+    let name = String.map acceptable_char name in
+    name
+
   let name = function
     | S name -> Format.asprintf "%s" name
+    | Sym s -> symbol_name s
     | Module_block -> Format.asprintf "Module_block"
     | Closure v -> Format.asprintf "Closure_%s" (Variable.unique_name v)
 
   let print ppf = function
     | S name -> Format.fprintf ppf "G(%s)" name
+    | Sym sym -> Format.fprintf ppf "S(%a)" Symbol.print sym
     | Module_block -> Format.fprintf ppf "Module_block"
     | Closure v -> Format.fprintf ppf "Closure %a" Variable.print v
 
-  let of_symbol s =
-    let linkage_name = Symbol.label s in
-    let name = Linkage_name.to_string linkage_name in
-    let name = String.map acceptable_char name in
-    S name
+  let of_symbol s = Sym s
 end
 
 module Param = struct

@@ -61,6 +61,9 @@ module C = struct
   let type_name v = atom (Type.Var.name v)
 
   let global name typ descr = node "global" ([ !$name; typ ] @ descr)
+  let global_import name typ module_ import_name =
+    node "global"
+      [ !$name; node "import" [ String module_; String import_name ]; typ ]
 
   let reft name = node "ref" [ type_name name ]
 

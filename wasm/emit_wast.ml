@@ -266,6 +266,20 @@ module Conv = struct
     | Cle -> Le S
     | Cge -> Ge S
 
+  module WSymbol = struct
+    let record symbol =
+      if not (Compilation_unit.is_current (Symbol.compilation_unit symbol)) then
+        State.add_global_import symbol
+
+    let get symbol =
+      record symbol;
+      Expr.Global_get (Global.Sym symbol)
+
+    let const symbol =
+      record symbol;
+      Const.Global (Global.Sym symbol)
+  end
+
   module WInt = struct
     let untag e : Expr.t = Unop (I31_get_s, Unop (Ref_cast_i31, e))
 
@@ -430,7 +444,7 @@ module Conv = struct
           fields_to_update := (i, s) :: !fields_to_update;
           I31 dummy_const
         end
-        else Global (Global.of_symbol s)
+        else WSymbol.const s
       | Const (Int i) -> I31 i
       | Const (Char c) -> I31 (Char.code c)
     in
@@ -629,9 +643,7 @@ module Conv = struct
     let size = List.length fields in
     State.add_block_size size;
     let effect (field, expr) : Expr.no_value_expression =
-      Block.set_field ~field
-        ~block:(Expr.Global_get (Global.of_symbol symbol))
-        expr
+      Block.set_field ~field ~block:(WSymbol.get symbol) expr
     in
     let effect = List.map effect !fields_to_update in
     (decl, effect)
@@ -648,9 +660,8 @@ module Conv = struct
       let new_effects =
         List.map
           (fun (field_to_update, field_contents) : Expr.no_value_expression ->
-            Block.set_field ~field:field_to_update
-              ~block:(Expr.Global_get (Global.of_symbol symbol))
-              (Expr.Global_get (Global.of_symbol field_contents)) )
+            Block.set_field ~field:field_to_update ~block:(WSymbol.get symbol)
+              (WSymbol.get field_contents) )
           fields_to_update
       in
       ([ Const { name; descr } ], new_effects)
@@ -1053,14 +1064,14 @@ module Conv = struct
   and conv_named (env : env) (named : Flambda.named) : Expr.t =
     match named with
     | Prim (prim, args, _dbg) -> conv_prim env ~prim ~args
-    | Symbol s -> Global_get (Global.of_symbol s)
+    | Symbol s -> WSymbol.get s
     | Expr (Var var) -> conv_var env var
     | Const c ->
       let c = match c with Int i -> i | Char c -> Char.code c in
       Unop (I31_new, I32 (Int32.of_int c))
     | Expr e -> conv_expr env e
     | Read_symbol_field (symbol, field) ->
-      Block.get_field ~field Expr.(Global_get (Global.of_symbol symbol))
+      Block.get_field ~field (WSymbol.get symbol)
     | Read_mutable mut_var -> Var (V (Expr.Local.var_of_mut_var mut_var))
     | Project_var project_var ->
       let closure = conv_var env project_var.closure in
@@ -1540,6 +1551,16 @@ module Conv = struct
     let result = [ ref_eq ] in
     Func.Import { params; result; module_ = "runtime"; name = descr.name }
 
+  let global_import (sym : Global_import.t) =
+    let module_ =
+      if Compilenv.is_predefined_exception sym then "runtime"
+      else
+        Linkage_name.to_string
+        @@ Compilation_unit.get_linkage_name (Symbol.compilation_unit sym)
+    in
+    let name = Linkage_name.to_string @@ Symbol.label sym in
+    Const.Import { typ = ref_eq; module_; name }
+
   let func_1_and_env =
     let env =
       let fields : Type.atom list =
@@ -1632,6 +1653,14 @@ module Conv = struct
           let descr = runtime_import descr in
           Decl.Func { name; descr } :: decls )
         !State.runtime_imports decls
+    in
+    let decls =
+      Global_import.Set.fold
+        (fun (sym : Global_import.t) decls ->
+          let name = Global.Sym sym in
+          let descr = global_import sym in
+          Decl.Const { name; descr } :: decls )
+        !State.global_imports decls
     in
     let decls =
       define_types_smaller
@@ -2000,6 +2029,8 @@ module ToWasm = struct
         [ C.struct_new_canon typ (List.map field fields) ]
     | Expr { typ; e } ->
       C.global (Global.name name) (C.type_atom typ) (conv_expr e)
+    | Import { typ; module_; name = import_name } ->
+      C.global_import (Global.name name) (C.type_atom typ) module_ import_name
 
   let conv_func name (func : Func.t) =
     match func with

@@ -57,6 +57,9 @@
           (return (call $array_get_int_or_addr_safe (ref.cast $Array) (local.get $field))))
         (local.get $field)))
   )
+
+  ;; TODO exceptions
+  (global (export "caml_exn_Assert_failure") (ref eq) (i31.new (i32.const 0)))
 )
 
 (register "runtime")

@@ -42,6 +42,11 @@ module C_import = struct
   module Set = MSet (M)
 end
 
+module Global_import = struct
+  include Symbol
+  module Set = MSet (Symbol)
+end
+
 module Runtime_import = struct
   module M = struct
     type t =
@@ -69,6 +74,8 @@ module State = struct
 
   let c_imports = ref C_import.Set.empty
 
+  let global_imports = ref Global_import.Set.empty
+
   let runtime_imports = ref Runtime_import.Set.empty
 
   let add_arity (i : Arity.t) = Arity.Set.(arities += i)
@@ -84,6 +91,8 @@ module State = struct
 
   let add_c_import description = C_import.Set.(c_imports += description)
 
+  let add_global_import description = Global_import.Set.(global_imports += description)
+
   let add_runtime_import description =
     Runtime_import.Set.(runtime_imports += description)
 
@@ -94,5 +103,6 @@ module State = struct
     block_float_sizes := Arity.Set.singleton 0;
     closure_types := Closure_type.Set.empty;
     c_imports := C_import.Set.empty;
+    global_imports := Global_import.Set.empty;
     runtime_imports := Runtime_import.Set.empty
 end
