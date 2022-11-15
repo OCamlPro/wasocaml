@@ -489,6 +489,12 @@ module Conv = struct
     end
     | Direct closure_id ->
       let func = Func_id.of_closure_id closure_id in
+      let () =
+        let cu = Closure_id.get_compilation_unit closure_id in
+        if not (Compilation_unit.is_current cu) then
+          State.add_func_import
+            { id = closure_id; arity = List.length apply.args }
+      in
       let args =
         List.map (conv_var env) apply.args
         @ [ Closure.cast (conv_var env apply.func) ]
@@ -1561,6 +1567,19 @@ module Conv = struct
     let name = WSymbol.export_name sym in
     Const.Import { typ = ref_eq; module_; name }
 
+  let func_import ({ id; arity } : Func_import.t) =
+    let module_ =
+      Linkage_name.to_string
+      @@ Compilation_unit.get_linkage_name (Closure_id.get_compilation_unit id)
+    in
+    let name =
+      let name, n = Variable.unique_name_id (Closure_id.unwrap id) in
+      Format.asprintf "%s_%i" name n
+      (* Func_id.name (Func_id.of_closure_id id) *)
+    in
+    let params = List.init arity (fun _ -> ref_eq) @ [ Type.Rvar Env ] in
+    Func.Import { params; result = [ ref_eq ]; module_; name }
+
   let func_1_and_env =
     let env =
       let fields : Type.atom list =
@@ -1661,6 +1680,14 @@ module Conv = struct
           let descr = global_import sym in
           Decl.Const { name; export = None; descr } :: decls )
         !State.global_imports decls
+    in
+    let decls =
+      Func_import.Set.fold
+        (fun (import : Func_import.t) decls ->
+          let name = Func_id.of_closure_id import.id in
+          let descr = func_import import in
+          Decl.Func { name; descr } :: decls )
+        !State.func_imports decls
     in
     let decls =
       define_types_smaller

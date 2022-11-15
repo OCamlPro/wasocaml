@@ -174,7 +174,10 @@ module C = struct
   let results t = node_p "result" (List.map type_atom t)
 
   let func ~name ~params ~result ~locals ~body =
-    let fields = [ !$(Func_id.name name) ] @ params @ result @ locals in
+    let fields =
+      [ !$(Func_id.name name); node "export" [ String (Func_id.name name) ] ]
+      @ params @ result @ locals
+    in
     nodehv "func" fields body
 
   let field f = node "field" [ node "mut" [ type_atom f ] ]

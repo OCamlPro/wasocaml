@@ -47,6 +47,20 @@ module Global_import = struct
   module Set = MSet (Symbol)
 end
 
+module Func_import = struct
+  module M = struct
+    type t =
+      { id : Closure_id.t
+      ; arity : int
+      }
+
+    let compare a b = Closure_id.compare a.id b.id
+  end
+
+  include M
+  module Set = MSet (M)
+end
+
 module Runtime_import = struct
   module M = struct
     type t =
@@ -76,6 +90,8 @@ module State = struct
 
   let global_imports = ref Global_import.Set.empty
 
+  let func_imports = ref Func_import.Set.empty
+
   let runtime_imports = ref Runtime_import.Set.empty
 
   let add_arity (i : Arity.t) = Arity.Set.(arities += i)
@@ -91,7 +107,11 @@ module State = struct
 
   let add_c_import description = C_import.Set.(c_imports += description)
 
-  let add_global_import description = Global_import.Set.(global_imports += description)
+  let add_global_import description =
+    Global_import.Set.(global_imports += description)
+
+  let add_func_import description =
+    Func_import.Set.(func_imports += description)
 
   let add_runtime_import description =
     Runtime_import.Set.(runtime_imports += description)
@@ -104,5 +124,6 @@ module State = struct
     closure_types := Closure_type.Set.empty;
     c_imports := C_import.Set.empty;
     global_imports := Global_import.Set.empty;
+    func_imports := Func_import.Set.empty;
     runtime_imports := Runtime_import.Set.empty
 end

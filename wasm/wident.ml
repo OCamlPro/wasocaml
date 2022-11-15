@@ -50,6 +50,13 @@ module Func_id = struct
 
   let of_var_closure_id var =
     let name, id = Variable.unique_name_id var in
+    let cu = Variable.get_compilation_unit var in
+    let name =
+      if Compilation_unit.is_current cu then
+        name
+      else
+        Linkage_name.to_string (Compilation_unit.get_linkage_name cu) ^ "__" ^ name
+    in
     let name = String.map acceptable_char name in
     V (name, id)
 
