@@ -50,13 +50,48 @@
   (func (export "array_get_int_or_addr_safe") (param $arr (ref eq)) (param $field (ref eq)) (result (ref eq))
     (call $array_get_int_or_addr_safe (ref.cast $Array (local.get $arr)) (local.get $field)))
 
-  (func (export "array_get_safe") (param $arr (ref eq)) (param $field (ref eq)) (result (ref eq))
+  (func $array_get_safe (param $arr (ref eq)) (param $field (ref eq)) (result (ref eq))
     (return
       (call $array_get_float_safe
         (block $floatarray (result (ref $FloatArray))
           (br_on_cast $floatarray $FloatArray (local.get $arr))
           (return (call $array_get_int_or_addr_safe (ref.cast $Array) (local.get $field))))
         (local.get $field)))
+  )
+
+  (export "array_get_safe" (func $array_get_safe))
+  (export "array_get_unsafe" (func $array_get_safe))
+
+  (func $array_set_float_unsafe (param $arr (ref $FloatArray)) (param $field (ref eq))
+                                (param $value (ref eq)) (result (ref eq))
+      (array.set $FloatArray
+        (local.get $arr)
+        (i31.get_s (ref.cast i31 (local.get $field)))
+        (struct.get $Float 0 (ref.cast $Float (local.get $value))))
+      (i31.new (i32.const 0))
+  )
+
+  (func $array_set_int_or_addr_unsafe (param $arr (ref $Array)) (param $field (ref eq))
+                                      (param $value (ref eq)) (result (ref eq))
+      (array.set $Array
+        (local.get $arr)
+        (i31.get_s (ref.cast i31 (local.get $field)))
+        (local.get $value))
+      (i31.new (i32.const 0))
+  )
+
+  (func (export "array_set_unsafe") (param $arr (ref eq)) (param $field (ref eq))
+                                    (param $value (ref eq)) (result (ref eq))
+    (return
+      (call $array_set_float_unsafe
+        (block $floatarray (result (ref $FloatArray))
+          (br_on_cast $floatarray $FloatArray (local.get $arr))
+          (return
+            (call $array_set_int_or_addr_unsafe
+              (ref.cast $Array) (local.get $field) (local.get $value))))
+        (local.get $field)
+        (local.get $value)
+      ))
   )
 
   (func $string_eq (param $a (ref $String)) (param $b (ref $String)) (result i32)
