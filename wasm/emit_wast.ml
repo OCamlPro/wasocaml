@@ -575,6 +575,10 @@ module Conv = struct
     let func : Func_id.t = Runtime name in
     Call { func; args }
 
+  let unimplemented args =
+    let name = Format.asprintf "unimplemented_%i" (List.length args) in
+    runtime_prim name args
+
   let rec conv_body (env : top_env) (expr : Flambda.program_body) effects :
       Module.t =
     match expr with
@@ -973,14 +977,14 @@ module Conv = struct
       let msg = Format.asprintf "Value letrec not implemented (yet ?)" in
       if ignore_unimplemented then begin
         Format.eprintf "%s@." msg;
-        runtime_prim "unimplemented" []
+        unimplemented []
       end
       else failwith msg
     | Send _ ->
       let msg = Format.asprintf "SEND: objects not implemented (yet ?)" in
       if ignore_unimplemented then begin
         Format.eprintf "%s@." msg;
-        runtime_prim "unimplemented" []
+        unimplemented []
       end
       else failwith msg
 
@@ -1353,10 +1357,10 @@ module Conv = struct
            } )
     | Pbigarrayref _ | Pbigarrayset _ | Pbigarraydim _ | Pbigstring_load _
     | Pbigstring_set _ ->
-      runtime_prim "unimplemented"
+      unimplemented args
     | Pstring_load _ | Pbytes_load _ | Pbytes_set _ | Pbswap16 | Pbbswap _
     | Pint_as_pointer ->
-      runtime_prim "unimplemented"
+      unimplemented args
     | _ ->
       let msg =
         Format.asprintf "TODO prim %a" Printclambda_primitives.primitive prim
