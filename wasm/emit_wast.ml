@@ -31,6 +31,7 @@ module Conv = struct
     ; current_function : Closure_id.t option
     ; top_env : top_env
     ; catch : Block_id.t Static_exception.Map.t
+    ; constant_function : bool
     }
 
   let empty_env ~top_env =
@@ -42,10 +43,11 @@ module Conv = struct
     ; current_function = None
     ; top_env
     ; catch = Static_exception.Map.empty
+    ; constant_function = false
     }
 
   let enter_function ~top_env ~closure_id ~params ~free_vars ~closure_functions
-      =
+      ~constant_function =
     let params =
       List.fold_left
         (fun params p -> Variable.Set.add (Parameter.var p) params)
@@ -62,6 +64,7 @@ module Conv = struct
     ; current_function = Some closure_id
     ; top_env
     ; catch = Static_exception.Map.empty
+    ; constant_function
     }
 
   let bind_catch env catch_id : env * Block_id.t =
@@ -389,9 +392,13 @@ module Conv = struct
               (Var_within_closure.wrap var)
               (Var (Param Env))
           else if Variable.Set.mem var env.closure_functions then
-            let move_to = Closure_id.wrap var in
-            Closure.move_within_set_of_closures ~cast:() env.top_env
-              ~start_from:closure_id ~move_to (Var (Param Env))
+            if env.constant_function then
+              let closure_id = Closure_id.wrap var in
+              WSymbol.get (Compilenv.closure_symbol closure_id)
+            else
+              let move_to = Closure_id.wrap var in
+              Closure.move_within_set_of_closures ~cast:() env.top_env
+                ~start_from:closure_id ~move_to (Var (Param Env))
           else Misc.fatal_errorf "Unbound variable %a" Variable.print var
     end
 
@@ -796,8 +803,8 @@ module Conv = struct
       Variable.Map.fold add_closure function_decls.funs expr
     end
 
-  and conv_function_declaration ~top_env ~closure_functions function_name
-      (declaration : Flambda.function_declaration) : Decl.t =
+  and conv_function_declaration ~top_env ~closure_functions ~constant_function
+      function_name (declaration : Flambda.function_declaration) : Decl.t =
     let arity = List.length declaration.params in
     let closure_id = Closure_id.wrap function_name in
     State.add_arity arity;
@@ -809,6 +816,7 @@ module Conv = struct
     let env =
       enter_function ~closure_id ~params:declaration.params
         ~free_vars:declaration.free_variables ~closure_functions ~top_env
+        ~constant_function
     in
     let body = conv_expr env declaration.body in
     let func =
@@ -1354,15 +1362,22 @@ module Conv = struct
       failwith msg
 
   let conv_functions ~top_env (flambda : Flambda.program) =
+    let constant_sets =
+      Flambda_utils.all_lifted_constant_sets_of_closures flambda
+    in
     List.fold_left
       (fun decls (set_of_closures : Flambda.set_of_closures) ->
         let function_decls = set_of_closures.function_decls in
+        let constant_function =
+          Set_of_closures_id.Set.mem function_decls.set_of_closures_id
+            constant_sets
+        in
         let closure_functions = Variable.Map.keys function_decls.funs in
         Variable.Map.fold
           (fun var function_declaration decls ->
             let decl =
               conv_function_declaration ~top_env ~closure_functions var
-                function_declaration
+                ~constant_function function_declaration
             in
             decl :: decls )
           function_decls.funs decls )
