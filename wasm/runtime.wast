@@ -1,5 +1,6 @@
 (module
   (type $Float (struct (field (mut f64))))
+  (type $String (array (mut i8)))
   (type $Array (array (mut (ref eq))))
   (type $FloatArray (array (mut f64)))
 
@@ -56,6 +57,34 @@
           (br_on_cast $floatarray $FloatArray (local.get $arr))
           (return (call $array_get_int_or_addr_safe (ref.cast $Array) (local.get $field))))
         (local.get $field)))
+  )
+
+  (func $string_eq (param $a (ref $String)) (param $b (ref $String)) (result i32)
+    (local $len_a i32)
+    (local $len_b i32)
+    (local $pos i32)
+    (local.set $len_a (array.len (local.get $a)))
+    (local.set $len_b (array.len (local.get $b)))
+    (if (i32.ne (local.get $len_a) (local.get $len_b))
+        (then (return (i32.const 0)))
+        (else))
+    (local.set $pos (i32.const 0))
+    (loop $next_char
+      (if (i32.eq (local.get $len_a) (local.get $pos))
+        (then (return (i32.const 1)))
+        (else))
+      (if (i32.ne (array.get_s $String (local.get $a) (local.get $pos))
+                  (array.get_s $String (local.get $b) (local.get $pos)))
+        (then (return (i32.const 0)))
+        (else
+          (local.set $pos (i32.add (i32.const 1) (local.get $pos)))
+          (br $next_char))))
+    (unreachable)
+  )
+
+  (func (export "string_eq") (param $a (ref eq)) (param $b (ref eq)) (result (ref eq))
+    (i31.new
+      (call $string_eq (ref.cast $String (local.get $a)) (ref.cast $String (local.get $b))))
   )
 
   ;; TODO exceptions

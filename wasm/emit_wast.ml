@@ -950,7 +950,9 @@ module Conv = struct
         List.fold_left
           (fun body (str, branch) : Expr.t ->
             let cond =
-              runtime_prim "string_eq" [ Expr.Var (V local); const_string str ]
+              WInt.untag
+                (runtime_prim "string_eq"
+                   [ Expr.Var (V local); const_string str ] )
             in
             If_then_else
               { cond; if_expr = conv_expr env branch; else_expr = body } )
