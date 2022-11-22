@@ -723,7 +723,7 @@ module Conv = struct
       [ Decl.Const decl
       ; Decl.Const
           { name = Global.of_symbol symbol
-          ; export = Some symbol
+          ; export = Some symbol (* This export is probably not required *)
           ; descr = Expr { typ = ref_eq; e = Expr.Global_get decl.name }
           }
       ]
@@ -749,7 +749,10 @@ module Conv = struct
       closure_decls
       @ [ Decl.Const
             { name = Global.of_symbol symbol
-            ; export = Some symbol
+            ; export =
+                Some symbol
+                (* This export might not be required, there is no reason for
+                   a cross module reference to a set of closure *)
             ; descr = set_of_closures
             }
         ]
