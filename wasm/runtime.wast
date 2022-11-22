@@ -31,6 +31,13 @@
   ;; Arrays
   ;; ======
 
+  (func $array_length (export "array_length") (param $arr (ref eq)) (result (ref eq))
+    (i31.new (array.len
+      (block $floatarray (result (ref $FloatArray))
+        (br_on_cast $floatarray $FloatArray (local.get $arr))
+        (return (i31.new (array.len (ref.cast $Array)))))))
+  )
+
   (func $array_get_float_safe (param $arr (ref $FloatArray)) (param $field (ref eq)) (result (ref $Float))
     ;; TODO exceptions
     (struct.new_canon $Float
@@ -84,8 +91,9 @@
       (i31.new (i32.const 0))
   )
 
-  (func (export "array_set_unsafe") (param $arr (ref eq)) (param $field (ref eq))
-                                    (param $value (ref eq)) (result (ref eq))
+  (func $array_set_unsafe (export "array_set_unsafe")
+                          (param $arr (ref eq)) (param $field (ref eq))
+                          (param $value (ref eq)) (result (ref eq))
     (return
       (call $array_set_float_unsafe
         (block $floatarray (result (ref $FloatArray))
@@ -96,6 +104,13 @@
         (local.get $field)
         (local.get $value)
       ))
+  )
+
+  (func (export "array_set_safe")
+                          (param $arr (ref eq)) (param $field (ref eq))
+                          (param $value (ref eq)) (result (ref eq))
+    ;; TODO exceptions
+    (call $array_set_unsafe (local.get $arr) (local.get $field) (local.get $value))
   )
 
   ;; ============

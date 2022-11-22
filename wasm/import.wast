@@ -103,6 +103,14 @@
     ;; Comparison
     ;; ==========
 
+  (func (export "caml_compare") (param (ref eq)) (param (ref eq)) (result (ref eq))
+      ;; TODO
+      (unreachable))
+
+  (func (export "caml_equal") (param (ref eq)) (param (ref eq)) (result (ref eq))
+      ;; TODO
+      (unreachable))
+
   (func (export "caml_notequal") (param (ref eq)) (param (ref eq)) (result (ref eq))
       ;; TODO
       (unreachable))
@@ -294,6 +302,20 @@
   (func (export "caml_nativeint_format") (param (ref eq)) (param (ref eq)) (result (ref eq)) (unreachable))
   (func (export "caml_int64_format") (param (ref eq)) (param (ref eq)) (result (ref eq)) (unreachable))
   (func (export "caml_hexstring_of_float") (param (ref eq)) (param (ref eq)) (param (ref eq)) (result (ref eq)) (unreachable))
+
+  ;; =====
+  ;; Array
+  ;; =====
+
+  (func (export "caml_make_vect") (param (ref eq)) (param (ref eq)) (result (ref eq)) (unreachable))
+  (func (export "caml_make_float_vect") (param (ref eq)) (result (ref eq)) (unreachable))
+  (func (export "caml_array_sub") (param (ref eq)) (param (ref eq)) (param (ref eq)) (result (ref eq)) (unreachable))
+  (func (export "caml_array_append") (param (ref eq)) (param (ref eq)) (result (ref eq)) (unreachable))
+  (func (export "caml_array_concat") (param (ref eq)) (result (ref eq)) (unreachable))
+  (func (export "caml_array_blit") (param (ref eq)) (param (ref eq)) (param (ref eq))
+                     (param (ref eq)) (param (ref eq)) (result (ref eq)) (unreachable))
+  (func (export "caml_array_fill") (param (ref eq)) (param (ref eq)) (param (ref eq))
+                     (param (ref eq)) (result (ref eq)) (unreachable))
 
 )
 
