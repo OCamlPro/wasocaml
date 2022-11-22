@@ -88,7 +88,13 @@ module C = struct
       node "array.new_canon_fixed"
         ([ type_name typ; Int (Int64.of_int size) ] @ args)
 
-  let int i = Int (Int64.of_int i)
+  let int i =
+    (* XXX TODO remove this is wrong,
+       but this allows to avoid problems with max_int for now... *)
+    let i =
+      Int64.of_int32 (Int32.of_int i)
+    in
+    Int i
 
   let string s = String s
 
