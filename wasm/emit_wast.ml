@@ -208,32 +208,32 @@ module Conv = struct
   end
 
   module Block = struct
-    let get_tag ?(cast : unit option) e : Expr.t =
+    let get_tag ~(cast : bool) e : Expr.t =
       let block : Expr.t =
         match cast with
-        | None -> e
-        | Some () -> Ref_cast { r = e; typ = Gen_block }
+        | false -> e
+        | true -> Ref_cast { r = e; typ = Gen_block }
       in
       Unop (Struct_get_packed { extend = U; typ = Gen_block; field = 0 }, block)
 
-    let get_field ?(cast : unit option) e ~field : Expr.t =
+    let get_field ~(cast : bool) e ~field : Expr.t =
       let size = field + 1 in
       State.add_block_size size;
       let typ : Type.Var.t = Block { size } in
       let e =
-        match cast with None -> e | Some () -> Expr.(Ref_cast { typ; r = e })
+        match cast with false -> e | true -> Expr.(Ref_cast { typ; r = e })
       in
       Unop (Struct_get { typ; field = field + 2 }, e)
 
-    let set_field ?(cast : unit option) ~block value ~field :
+    let set_field ~(cast : bool) ~block value ~field :
         Expr.no_value_expression =
       let size = field + 1 in
       State.add_block_size size;
       let typ : Type.Var.t = Block { size } in
       let block =
         match cast with
-        | None -> block
-        | Some () -> Expr.(Ref_cast { typ; r = block })
+        | false -> block
+        | true -> Expr.(Ref_cast { typ; r = block })
       in
       NV_binop (Struct_set { typ; field = field + 2 }, (block, value))
   end
@@ -662,7 +662,7 @@ module Conv = struct
     let size = List.length fields in
     State.add_block_size size;
     let effect (field, expr) : Expr.no_value_expression =
-      Block.set_field ~field ~block:(WSymbol.get symbol) expr
+      Block.set_field ~cast:true ~field ~block:(WSymbol.get symbol) expr
     in
     let effect = List.map effect !fields_to_update in
     (decl, effect)
@@ -679,7 +679,7 @@ module Conv = struct
       let new_effects =
         List.map
           (fun (field_to_update, field_contents) : Expr.no_value_expression ->
-            Block.set_field ~field:field_to_update ~block:(WSymbol.get symbol)
+            Block.set_field ~cast:true ~field:field_to_update ~block:(WSymbol.get symbol)
               (WSymbol.get field_contents) )
           fields_to_update
       in
@@ -1056,7 +1056,7 @@ module Conv = struct
       let block_cases, block_defs = branches switch.numblocks switch.blocks in
       let defs = block_defs @ default_defs in
       make_let_conts
-        (br_table (Block.get_tag ~cast:()) block_cases block_defs)
+        (br_table (Block.get_tag ~cast:true) block_cases block_defs)
         defs
     else if Numbers.Int.Set.is_empty switch.numblocks then
       let const_cases, const_defs = branches switch.numconsts switch.consts in
@@ -1069,7 +1069,7 @@ module Conv = struct
       let body : Expr.no_return =
         let if_expr = br_table WInt.untag const_cases const_defs in
         let else_expr =
-          br_table (Block.get_tag ~cast:()) block_cases block_defs
+          br_table (Block.get_tag ~cast:true) block_cases block_defs
         in
         NR_if_then_else
           { cond =
@@ -1091,7 +1091,7 @@ module Conv = struct
       Unop (I31_new, I32 (Int32.of_int c))
     | Expr e -> conv_expr env e
     | Read_symbol_field (symbol, field) ->
-      Block.get_field ~field (WSymbol.get symbol)
+      Block.get_field ~field ~cast:true (WSymbol.get symbol)
     | Read_mutable mut_var -> Var (V (Expr.Local.var_of_mut_var mut_var))
     | Project_var project_var ->
       let closure = conv_var env project_var.closure in
@@ -1149,11 +1149,11 @@ module Conv = struct
     | Poffsetint n ->
       i31 (Expr.Binop (Expr.i32_add, (i32 (arg1 args), I32 (Int32.of_int n))))
     | Poffsetref n ->
-      let ref_val = Block.get_field ~cast:() (arg1 args) ~field:0 in
+      let ref_val = Block.get_field ~cast:true (arg1 args) ~field:0 in
       let value =
         i31 (Expr.Binop (Expr.i32_add, (i32 ref_val, I32 (Int32.of_int n))))
       in
-      Unit (Block.set_field ~cast:() ~block:(arg1 args) ~field:0 value)
+      Unit (Block.set_field ~cast:true ~block:(arg1 args) ~field:0 value)
     | Pisout -> i31 (I_relop (S32, Lt U, args2 (List.map i32 args)))
     | Pabsfloat -> box_float (Unop (Abs_float, unbox_float (arg1 args)))
     | Pnegfloat -> box_float (Unop (Neg_float, unbox_float (arg1 args)))
@@ -1210,10 +1210,10 @@ module Conv = struct
         , I32 (Int32.of_int tag) :: I32 (Int32.of_int size) :: args )
     | Pfield field ->
       let arg = arg1 args in
-      Block.get_field ~field ~cast:() arg
+      Block.get_field ~field ~cast:true arg
     | Psetfield (field, _kind, _init) ->
       let block, value = args2 args in
-      Seq ([ Block.set_field ~cast:() ~field ~block value ], unit_value)
+      Seq ([ Block.set_field ~cast:true ~field ~block value ], unit_value)
     | Pmakearray (Pfloatarray, Immutable) ->
       FloatBlock.make (List.map unbox_float args)
     | Pmakearray (Pfloatarray, Mutable) ->
