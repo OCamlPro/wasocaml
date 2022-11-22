@@ -27,6 +27,10 @@
           (f64.eq (local.get $a') (local.get $a'))
           (f64.eq (local.get $b') (local.get $b'))))))
 
+  ;; ======
+  ;; Arrays
+  ;; ======
+
   (func $array_get_float_safe (param $arr (ref $FloatArray)) (param $field (ref eq)) (result (ref $Float))
     ;; TODO exceptions
     (struct.new_canon $Float
@@ -94,6 +98,29 @@
       ))
   )
 
+  ;; ============
+  ;; String/Bytes
+  ;; ============
+
+  (func (export "bytes_set") (param $arr (ref eq)) (param $field (ref eq))
+                             (param $value (ref eq)) (result (ref eq))
+      ;; TODO exceptions
+      (array.set $String
+        (ref.cast $String (local.get $arr))
+        (i31.get_s (ref.cast i31 (local.get $field)))
+        (i31.get_s (ref.cast i31 (local.get $value))))
+      (i31.new (i32.const 0))
+  )
+
+  (func (export "string_get") (param $arr (ref eq)) (param $field (ref eq))
+                              (result (ref eq))
+      ;; TODO exceptions
+      (i31.new
+        (array.get_s $String
+          (ref.cast $String (local.get $arr))
+          (i31.get_s (ref.cast i31 (local.get $field)))))
+  )
+
   (func $string_eq (param $a (ref $String)) (param $b (ref $String)) (result i32)
     (local $len_a i32)
     (local $len_b i32)
@@ -122,8 +149,37 @@
       (call $string_eq (ref.cast $String (local.get $a)) (ref.cast $String (local.get $b))))
   )
 
+  ;; ==========
+  ;; Exceptions
+  ;; ==========
+
   ;; TODO exceptions
-  (global (export "caml_exn_Assert_failure") (ref eq) (i31.new (i32.const 0)))
+  (global (export "caml_exn_Match_failure") (ref eq) (i31.new (i32.const 0)))
+  (global (export "caml_exn_Assert_failure") (ref eq) (i31.new (i32.const 1)))
+  (global (export "caml_exn_Invalid_argument") (ref eq) (i31.new (i32.const 2)))
+  (global (export "caml_exn_Failure") (ref eq) (i31.new (i32.const 3)))
+  (global (export "caml_exn_Not_found") (ref eq) (i31.new (i32.const 4)))
+  (global (export "caml_exn_Out_of_memory") (ref eq) (i31.new (i32.const 5)))
+  (global (export "caml_exn_Stack_overflow") (ref eq) (i31.new (i32.const 6)))
+  (global (export "caml_exn_Sys_error") (ref eq) (i31.new (i32.const 7)))
+  (global (export "caml_exn_End_of_file") (ref eq) (i31.new (i32.const 8)))
+  (global (export "caml_exn_Division_by_zero") (ref eq) (i31.new (i32.const 9)))
+  (global (export "caml_exn_Sys_blocked_io") (ref eq) (i31.new (i32.const 10)))
+  (global (export "caml_exn_Undefined_recursive_module") (ref eq) (i31.new (i32.const 11)))
+
+  ;; ==========
+  ;; Undefineds
+  ;; ==========
+
+  (func (export "unimplemented_1") (param (ref eq)) (result (ref eq))
+    (unreachable))
+
+  (func (export "unimplemented_2") (param (ref eq)) (param (ref eq)) (result (ref eq))
+    (unreachable))
+
+  (func (export "unimplemented_3") (param (ref eq)) (param (ref eq)) (param (ref eq)) (result (ref eq))
+    (unreachable))
+
 )
 
 (register "runtime")
