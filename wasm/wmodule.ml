@@ -75,6 +75,12 @@ module Const = struct
 end
 
 module Decl = struct
+  type const =
+    { name : Global.t
+    ; export : Symbol.t option
+    ; descr : Const.t
+    }
+
   type t =
     | Type of Type.Var.t * Type.descr
     | Type_rec of (Type.Var.t * Type.descr) list
@@ -82,11 +88,7 @@ module Decl = struct
         { name : Func_id.t
         ; descr : Func.t
         }
-    | Const of
-        { name : Global.t
-        ; export : Symbol.t option
-        ; descr : Const.t
-        }
+    | Const of const
 
   let print ppf = function
     | Type (var, descr) ->

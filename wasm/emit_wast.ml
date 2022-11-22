@@ -2,9 +2,7 @@ open Wstate
 module Type = Wtype
 
 [@@@ocaml.warning "-23"]
-
 [@@@ocaml.warning "-37"]
-
 [@@@ocaml.warning "-32"]
 
 let ignore_unimplemented = true
@@ -225,8 +223,8 @@ module Conv = struct
       in
       Unop (Struct_get { typ; field = field + 2 }, e)
 
-    let set_field ~(cast : bool) ~block value ~field :
-        Expr.no_value_expression =
+    let set_field ~(cast : bool) ~block value ~field : Expr.no_value_expression
+        =
       let size = field + 1 in
       State.add_block_size size;
       let typ : Type.Var.t = Block { size } in
@@ -530,7 +528,7 @@ module Conv = struct
     let typ, e = conv_allocated_const_expr const in
     Expr { typ; e }
 
-  let closure_type (set_of_closures : Flambda.set_of_closures) =
+  let closure_type ~constant (set_of_closures : Flambda.set_of_closures) =
     let Flambda.{ function_decls; free_vars } = set_of_closures in
     let is_recursive = Variable.Map.cardinal function_decls.funs > 1 in
     if not is_recursive then None
@@ -539,7 +537,8 @@ module Conv = struct
         Variable.Map.fold
           (fun _id (function_decl : Flambda.function_declaration) acc ->
             let arity = Flambda_utils.function_arity function_decl in
-            let typ : Type.atom = Rvar (Closure { arity; fields = 1 }) in
+            let fields = if constant then 0 else 1 in
+            let typ : Type.atom = Rvar (Closure { arity; fields }) in
             typ :: acc )
           function_decls.funs []
       in
@@ -563,10 +562,9 @@ module Conv = struct
     let list = ref [] in
     Flambda_iterators.iter_on_set_of_closures_of_program program
       ~f:(fun ~constant set_of_closures ->
-        if not constant then
-          match closure_type set_of_closures with
-          | None -> ()
-          | Some t -> list := t :: !list );
+        match closure_type ~constant set_of_closures with
+        | None -> ()
+        | Some t -> list := t :: !list );
     !list
 
   let runtime_prim name args : Expr.t =
@@ -583,7 +581,7 @@ module Conv = struct
       Module.t =
     match expr with
     | Let_symbol (symbol, Set_of_closures set, body) ->
-      let decl = closed_function_declarations symbol set.function_decls in
+      let decl = closed_set_of_closures symbol set in
       let body = conv_body env body effects in
       decl @ body
     | Let_symbol (symbol, const, body) ->
@@ -679,45 +677,83 @@ module Conv = struct
       let new_effects =
         List.map
           (fun (field_to_update, field_contents) : Expr.no_value_expression ->
-            Block.set_field ~cast:true ~field:field_to_update ~block:(WSymbol.get symbol)
+            Block.set_field ~cast:true ~field:field_to_update
+              ~block:(WSymbol.get symbol)
               (WSymbol.get field_contents) )
           fields_to_update
       in
       ([ Const { name; export = Some symbol; descr } ], new_effects)
     | Project_closure (_sym, _closure_id) -> ([], [])
     | Set_of_closures set ->
-      let decl = closed_function_declarations symbol set.function_decls in
+      let decl = closed_set_of_closures symbol set in
       (decl, [])
     | Allocated_const const ->
       let name = Global.of_symbol symbol in
       let descr = conv_allocated_const const in
       ([ Const { name; export = Some symbol; descr } ], [])
 
-  and closed_function_declarations _symbol
-      (declarations : Flambda.function_declarations) : Decl.t list =
-    Variable.Map.fold
-      (fun name (declaration : Flambda.function_declaration) declarations ->
-        let function_name = Func_id.of_var_closure_id name in
-        let arity = List.length declaration.params in
-        let closure =
-          let fields : Const.field list =
-            State.add_arity arity;
-            State.add_closure_type ~arity ~fields:0;
-            if arity = 1 then [ I8 1; Ref_func function_name ]
-            else
-              [ I8 arity
-              ; Ref_func (Func_id.Caml_curry (arity, 0))
-              ; Ref_func function_name
-              ]
-          in
-          Const.Struct { typ = Type.Var.Closure { arity; fields = 0 }; fields }
-        in
-        let closure_symbol = Compilenv.closure_symbol (Closure_id.wrap name) in
-        let closure_name = Global.of_symbol closure_symbol in
-        Decl.Const
-          { name = closure_name; export = Some closure_symbol; descr = closure }
-        :: declarations )
-      declarations.funs []
+  and closed_function_declaration (name : Variable.t)
+      (declaration : Flambda.function_declaration) : Decl.const =
+    let function_name = Func_id.of_var_closure_id name in
+    let arity = List.length declaration.params in
+    let closure =
+      let fields : Const.field list =
+        State.add_arity arity;
+        State.add_closure_type ~arity ~fields:0;
+        if arity = 1 then [ I8 1; Ref_func function_name ]
+        else
+          [ I8 arity
+          ; Ref_func (Func_id.Caml_curry (arity, 0))
+          ; Ref_func function_name
+          ]
+      in
+      Const.Struct { typ = Type.Var.Closure { arity; fields = 0 }; fields }
+    in
+    let closure_symbol = Compilenv.closure_symbol (Closure_id.wrap name) in
+    let closure_name = Global.of_symbol closure_symbol in
+    { name = closure_name; export = Some closure_symbol; descr = closure }
+
+  and closed_set_of_closures symbol (set_of_closures : Flambda.set_of_closures)
+      : Decl.t list =
+    let function_decls = set_of_closures.function_decls in
+    let is_recursive = Variable.Map.cardinal function_decls.funs > 1 in
+    if not is_recursive then begin
+      let name, declaration = Variable.Map.choose function_decls.funs in
+      let decl = closed_function_declaration name declaration in
+      [ Decl.Const decl
+      ; Decl.Const
+          { name = Global.of_symbol symbol
+          ; export = Some symbol
+          ; descr = Expr { typ = ref_eq; e = Expr.Global_get decl.name }
+          }
+      ]
+    end
+    else begin
+      let decls =
+        Variable.Map.fold
+          (fun name (declaration : Flambda.function_declaration) declarations ->
+            let decl = closed_function_declaration name declaration in
+            decl :: declarations )
+          set_of_closures.function_decls.funs []
+      in
+      let closure_decls = List.map (fun decl -> Decl.Const decl) decls in
+      let set_of_closures =
+        Const.Struct
+          { typ = Set_of_closures function_decls.set_of_closures_id
+          ; fields =
+              List.rev_map
+                (fun (decl : Decl.const) -> Const.Global decl.name)
+                decls
+          }
+      in
+      closure_decls
+      @ [ Decl.Const
+            { name = Global.of_symbol symbol
+            ; export = Some symbol
+            ; descr = set_of_closures
+            }
+        ]
+    end
 
   and conv_set_of_closures env (set_of_closures : Flambda.set_of_closures) :
       Expr.t =
