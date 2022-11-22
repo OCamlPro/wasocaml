@@ -646,7 +646,7 @@ module Conv = struct
             I31 dummy_const
           | Some (field : Flambda.constant_defining_value_block_field) -> (
             match field with
-            | Symbol s -> Global (Global.of_symbol s)
+            | Symbol s -> WSymbol.const s
             | Const (Int i) -> I31 i
             | Const (Char c) -> I31 (Char.code c) ) )
         fields
