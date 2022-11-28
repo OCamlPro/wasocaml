@@ -2025,9 +2025,16 @@ module ToWasm = struct
     | Call_ref { typ; args; func; tail } ->
       let args = List.map conv_expr_group args @ [ conv_expr_group func ] in
       if tail then [ C.return_call_ref typ args ] else [ C.call_ref typ args ]
-    | Call { args; func; tail } ->
+    | Call { typ; args; func; tail } ->
       let args = List.map conv_expr_group args in
-      if tail then [ C.return_call func args ] else [ C.call func args ]
+      if tail then
+        (* This should be
+           {[ [ C.return_call func args ] ]}
+           But return call is not handled by the gc branch so we play a trick
+           with return_call_ref
+        *)
+        [ C.return_call_ref typ (C.ref_func func :: args) ]
+      else [ C.call func args ]
     | Ref_cast { typ; r } -> [ C.ref_cast typ [ conv_expr_group r ] ]
     | Global_get g -> [ C.global_get g ]
     | Seq (effects, last) ->
