@@ -31,6 +31,17 @@ module Closure_type = struct
   module Set = MSet (M)
 end
 
+module C_import_func_type = struct
+  module M = struct
+    type t = Wtype.Var.c_import_func_type
+
+    let compare = compare
+  end
+
+  include M
+  module Set = MSet (M)
+end
+
 module C_import = struct
   module M = struct
     type t = Primitive.description
@@ -86,6 +97,8 @@ module State = struct
 
   let closure_types = ref Closure_type.Set.empty
 
+  let c_import_func_types = ref C_import_func_type.Set.empty
+
   let c_imports = ref C_import.Set.empty
 
   let global_imports = ref Global_import.Set.empty
@@ -105,13 +118,15 @@ module State = struct
   let add_closure_type ~arity ~fields =
     Closure_type.Set.(closure_types += { arity; fields })
 
+  let add_c_import_func_type typ =
+    C_import_func_type.Set.(c_import_func_types += typ)
+
   let add_c_import description = C_import.Set.(c_imports += description)
 
   let add_global_import description =
     Global_import.Set.(global_imports += description)
 
-  let add_func_import description =
-    Func_import.Set.(func_imports += description)
+  let add_func_import description = Func_import.Set.(func_imports += description)
 
   let add_runtime_import description =
     Runtime_import.Set.(runtime_imports += description)
@@ -122,6 +137,7 @@ module State = struct
     block_sizes := Arity.Set.singleton 0;
     block_float_sizes := Arity.Set.singleton 0;
     closure_types := Closure_type.Set.empty;
+    c_import_func_types := C_import_func_type.Set.empty;
     c_imports := C_import.Set.empty;
     global_imports := Global_import.Set.empty;
     func_imports := Func_import.Set.empty;

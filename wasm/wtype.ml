@@ -8,28 +8,28 @@ module Var = struct
     type t =
       | I32
       | I64
-      | INat
       | Float
       | Val
 
     let name_of_atom = function
       | I32 -> "3"
       | I64 -> "6"
-      | INat -> "N"
       | Float -> "F"
       | Val -> "V"
 
     let name_of_atoms l = String.concat "" (List.map name_of_atom l)
   end
 
+  type c_import_func_type =
+    { params : C_import_atom.t list
+    ; results : C_import_atom.t list
+    }
+
   type t =
     | V of string * int
     | Partial_closure of int * int
     | Func of { arity : int }
-    | C_import_func of
-        { params : C_import_atom.t list
-        ; results : C_import_atom.t list
-        }
+    | C_import_func of c_import_func_type
     | Closure of
         { arity : int
         ; fields : int
@@ -103,7 +103,7 @@ type descr =
       }
   | Func of
       { params : atom list
-      ; result : atom option
+      ; results : atom list
       }
 
 let rec print_atom ppf = function
@@ -130,9 +130,11 @@ let print_descr ppf = function
       | Some sub -> Format.fprintf ppf "sub: %a;@ " Var.print sub
     in
     Format.fprintf ppf "@[<hov 2>Array {%a%a}@]" pp_sub sub print_atom atom
-  | Func { params; result = None } ->
+  | Func { params; results = [] } ->
     Format.fprintf ppf "@[<hov 2>Func {%a}@]" (print_list print_atom ",") params
-  | Func { params; result = Some result } ->
+  | Func { params; results } ->
     Format.fprintf ppf "@[<hov 2>Func {%a} ->@ %a@]"
       (print_list print_atom ",")
-      params print_atom result
+      params
+      (print_list print_atom ",")
+      results

@@ -466,8 +466,11 @@ module Conv = struct
     let typ = Type.Var.Float in
     Unop (Struct_get { typ; field = 0 }, Ref_cast { typ; r = x })
 
-  let c_import_type_var (descr : Primitive.description) =
+  let c_import_type_var (descr : Primitive.description) :
+      Type.Var.c_import_func_type =
     let repr_type (t : Primitive.native_repr) : Type.Var.C_import_atom.t =
+      if descr.prim_native_name = "" then
+        assert (t = Primitive.Same_as_ocaml_repr);
       match t with
       | Same_as_ocaml_repr -> Val
       | Unboxed_float -> Float
@@ -478,24 +481,19 @@ module Conv = struct
     in
     let params = List.map repr_type descr.prim_native_repr_args in
     let results = [ repr_type descr.prim_native_repr_res ] in
-    Type.Var.C_import_func { params; results }
+    { params; results }
 
-  let c_import_type (descr : Primitive.description) =
-    let repr_type (t : Primitive.native_repr) : Type.atom =
-      if descr.prim_native_name = "" then
-        assert (t = Primitive.Same_as_ocaml_repr);
+  let c_import_type (descr : Type.Var.c_import_func_type) =
+    let repr_type (t : Type.Var.C_import_atom.t) : Type.atom =
       match t with
-      | Same_as_ocaml_repr -> ref_eq
-      | Unboxed_float -> Type.F64
-      | Unboxed_integer Pnativeint -> Type.I32
-      | Unboxed_integer Pint32 -> Type.I32
-      | Unboxed_integer Pint64 -> Type.I64
-      | Untagged_int -> Type.I32
+      | Val -> ref_eq
+      | Float -> Type.F64
+      | I32 -> Type.I32
+      | I64 -> Type.I64
     in
-    let params = List.map repr_type descr.prim_native_repr_args in
-    let result = repr_type descr.prim_native_repr_res in
-    let var = c_import_type_var descr in
-    Decl.Type (var, Func { params; result = Some result })
+    let params = List.map repr_type descr.params in
+    let results = List.map repr_type descr.results in
+    Decl.Type (C_import_func descr, Func { params; results })
 
   let conv_apply ~tail env (apply : Flambda.apply) : Expr.t =
     match apply.kind with
@@ -1280,14 +1278,16 @@ module Conv = struct
         | Unboxed_integer kind -> WBint.box kind res
         | Untagged_int -> i31 res
       in
+      let func_typ = c_import_type_var descr in
+      let typ = Type.Var.C_import_func func_typ in
       State.add_c_import descr;
+      State.add_c_import_func_type func_typ;
       let args = List.map2 unbox_arg descr.prim_native_repr_args args in
       let tail =
         match descr.prim_native_repr_res with
         | Same_as_ocaml_repr -> tail
         | _ -> false
       in
-      let typ = c_import_type_var descr in
       box_result descr.prim_native_repr_res
         (Call { typ; tail; args; func = Func_id.prim_name descr })
     | Pmakeblock (tag, _mut, _shape) ->
@@ -1532,7 +1532,7 @@ module Conv = struct
 
   let func_type size : Type.descr =
     let params = List.init size (fun _ -> ref_eq) in
-    Func { params = params @ [ Type.Rvar Env ]; result = Some ref_eq }
+    Func { params = params @ [ Type.Rvar Env ]; results = [ref_eq] }
 
   let caml_curry_apply ~param_arg ~env_arg n =
     assert (n > 1);
@@ -1845,10 +1845,10 @@ module Conv = struct
         !State.arities decls
     in
     let decls =
-      C_import.Set.fold
-        (fun (descr : Primitive.description) decls ->
+      C_import_func_type.Set.fold
+        (fun (descr : Type.Var.c_import_func_type) decls ->
           c_import_type descr :: decls )
-        !State.c_imports decls
+        !State.c_import_func_types decls
     in
     let decls = gen_block :: decls in
     let decls =
@@ -2219,8 +2219,8 @@ module ToWasm = struct
         match sub with None -> descr | Some sub -> C.sub sub descr
       in
       C.type_ name descr
-    | Func { params; result } ->
-      C.type_ name (C.func_type params (option_to_list result))
+    | Func { params; results } ->
+      C.type_ name (C.func_type params results)
 
   let conv_type_rec types =
     C.rec_ (List.map (fun (name, descr) -> conv_type name descr) types)
