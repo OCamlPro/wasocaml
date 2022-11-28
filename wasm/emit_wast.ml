@@ -466,7 +466,38 @@ module Conv = struct
     let typ = Type.Var.Float in
     Unop (Struct_get { typ; field = 0 }, Ref_cast { typ; r = x })
 
-  let conv_apply env (apply : Flambda.apply) : Expr.t =
+  let c_import_type_var (descr : Primitive.description) =
+    let repr_type (t : Primitive.native_repr) : Type.Var.C_import_atom.t =
+      match t with
+      | Same_as_ocaml_repr -> Val
+      | Unboxed_float -> Float
+      | Unboxed_integer Pnativeint -> I32
+      | Unboxed_integer Pint32 -> I32
+      | Unboxed_integer Pint64 -> I64
+      | Untagged_int -> I32
+    in
+    let params = List.map repr_type descr.prim_native_repr_args in
+    let results = [ repr_type descr.prim_native_repr_res ] in
+    Type.Var.C_import_func { params; results }
+
+  let c_import_type (descr : Primitive.description) =
+    let repr_type (t : Primitive.native_repr) : Type.atom =
+      if descr.prim_native_name = "" then
+        assert (t = Primitive.Same_as_ocaml_repr);
+      match t with
+      | Same_as_ocaml_repr -> ref_eq
+      | Unboxed_float -> Type.F64
+      | Unboxed_integer Pnativeint -> Type.I32
+      | Unboxed_integer Pint32 -> Type.I32
+      | Unboxed_integer Pint64 -> Type.I64
+      | Untagged_int -> Type.I32
+    in
+    let params = List.map repr_type descr.prim_native_repr_args in
+    let result = repr_type descr.prim_native_repr_res in
+    let var = c_import_type_var descr in
+    Decl.Type (var, Func { params; result = Some result })
+
+  let conv_apply ~tail env (apply : Flambda.apply) : Expr.t =
     match apply.kind with
     | Indirect -> begin
       match apply.args with
@@ -481,7 +512,7 @@ module Conv = struct
           { var
           ; typ = Rvar Env
           ; defining_expr = closure
-          ; body = Call_ref { typ = func_typ; func; args }
+          ; body = Call_ref { typ = func_typ; func; args; tail }
           }
       | _ :: _ :: _ ->
         let arity = List.length apply.args in
@@ -490,7 +521,8 @@ module Conv = struct
           :: List.map (conv_var env) apply.args
         in
         State.add_caml_apply arity;
-        Call { func = Caml_apply arity; args }
+        let typ = Type.Var.Func { arity } in
+        Call { typ; func = Caml_apply arity; args; tail }
     end
     | Direct closure_id ->
       let func = Func_id.of_closure_id closure_id in
@@ -504,7 +536,8 @@ module Conv = struct
         List.map (conv_var env) apply.args
         @ [ Closure.cast (conv_var env apply.func) ]
       in
-      Call { func; args }
+      let typ = Type.Var.Func { arity = List.length apply.args } in
+      Call { typ; func; args; tail }
 
   let conv_allocated_const_expr (const : Allocated_const.t) : Type.atom * Expr.t
       =
@@ -567,15 +600,16 @@ module Conv = struct
         | Some t -> list := t :: !list );
     !list
 
-  let runtime_prim name args : Expr.t =
+  let runtime_prim ~tail name args : Expr.t =
     let arity = List.length args in
     State.add_runtime_import { name; arity };
     let func : Func_id.t = Runtime name in
-    Call { func; args }
+    let typ = Type.Var.Func { arity } in
+    Call { typ; func; args; tail }
 
   let unimplemented args =
     let name = Format.asprintf "unimplemented_%i" (List.length args) in
-    runtime_prim name args
+    runtime_prim ~tail:false name args
 
   let rec conv_body (env : top_env) (expr : Flambda.program_body) effects :
       Module.t =
@@ -613,7 +647,7 @@ module Conv = struct
       decl :: conv_body env body (effect @ effects)
     | Effect (expr, body) ->
       let expr_env = empty_env ~top_env:env in
-      let effect : Expr.t = conv_expr expr_env expr in
+      let effect : Expr.t = conv_expr ~tail:false expr_env expr in
       conv_body env body (drop effect :: effects)
     | End _end_symbol ->
       [ Decl.Func
@@ -639,7 +673,7 @@ module Conv = struct
           match field with
           | None ->
             let expr_env = empty_env ~top_env:env in
-            let expr = conv_expr expr_env expr in
+            let expr = conv_expr ~tail:false expr_env expr in
             fields_to_update := (i, expr) :: !fields_to_update;
             I31 dummy_const
           | Some (field : Flambda.constant_defining_value_block_field) -> (
@@ -861,7 +895,7 @@ module Conv = struct
         ~free_vars:declaration.free_variables ~closure_functions ~top_env
         ~constant_function
     in
-    let body = conv_expr env declaration.body in
+    let body = conv_expr ~tail:true env declaration.body in
     let func =
       Func.Decl
         { params = params @ [ (Param.Env, Type.Rvar Type.Var.Env) ]
@@ -871,21 +905,21 @@ module Conv = struct
     let name = Func_id.of_var_closure_id function_name in
     Decl.Func { name; descr = func }
 
-  and conv_expr (env : env) (expr : Flambda.t) : Expr.t =
+  and conv_expr ~tail (env : env) (expr : Flambda.t) : Expr.t =
     match expr with
     | Let { var; defining_expr; body = Var v; _ } when Variable.equal var v ->
-      conv_named env defining_expr
+      conv_named ~tail env defining_expr
     | Let { var; defining_expr; body; _ } ->
       let local = Expr.Local.var_of_var var in
-      let defining_expr = conv_named env defining_expr in
-      let body = conv_expr (bind_var env var) body in
+      let defining_expr = conv_named ~tail:false env defining_expr in
+      let body = conv_expr ~tail (bind_var env var) body in
       Let { var = local; typ = ref_eq; defining_expr; body }
     | Var var -> conv_var env var
-    | Apply apply -> conv_apply env apply
+    | Apply apply -> conv_apply ~tail env apply
     | Let_mutable { var; initial_value; contents_kind = _; body } ->
       let local = Expr.Local.var_of_mut_var var in
       let defining_expr = conv_var env initial_value in
-      let body = conv_expr (bind_mutable_var env var) body in
+      let body = conv_expr ~tail (bind_mutable_var env var) body in
       Let { var = local; typ = ref_eq; defining_expr; body }
     | Assign { being_assigned; new_value } ->
       assert (Mutable_variable.Set.mem being_assigned env.mutables);
@@ -895,8 +929,8 @@ module Conv = struct
     | If_then_else (var, if_expr, else_expr) ->
       let cond : Expr.t = WInt.untag (conv_var env var) in
 
-      let if_expr = conv_expr env if_expr in
-      let else_expr = conv_expr env else_expr in
+      let if_expr = conv_expr ~tail env if_expr in
+      let else_expr = conv_expr ~tail env else_expr in
       If_then_else { cond; if_expr; else_expr }
     | Static_catch (id, params, body, handler) ->
       let body_env, cont = bind_catch env id in
@@ -904,8 +938,8 @@ module Conv = struct
       let params =
         List.map (fun v -> (Some (Expr.Local.var_of_var v), ref_eq)) params
       in
-      let handler = conv_expr handler_env handler in
-      let body = conv_expr body_env body in
+      let handler = conv_expr ~tail handler_env handler in
+      let body = conv_expr ~tail body_env body in
       Let_cont { cont; params; handler; body }
     | Static_raise (id, args) ->
       let cont =
@@ -917,10 +951,13 @@ module Conv = struct
       let args = List.map (conv_var env) args in
       Apply_cont { cont; args }
     | While (cond, body) ->
-      let cond : Expr.t = WInt.untag (conv_expr env cond) in
+      let cond : Expr.t = WInt.untag (conv_expr ~tail:false env cond) in
       let cont = Block_id.fresh "continue" in
       let body : Expr.no_value_expression =
-        NV_seq [ drop (conv_expr env body); NV_br_if { cond; if_true = cont } ]
+        NV_seq
+          [ drop (conv_expr ~tail:false env body)
+          ; NV_br_if { cond; if_true = cont }
+          ]
       in
       Unit
         (NV_if_then_else { cond; if_expr = Loop { cont; body }; else_expr = NV })
@@ -946,7 +983,7 @@ module Conv = struct
       let body : Expr.no_value_expression =
         let env = bind_var env bound_var in
         NV_seq
-          [ drop (conv_expr env body)
+          [ drop (conv_expr ~tail:false env body)
           ; Assign { being_assigned = loop_local; new_value = next }
           ; Assign
               { being_assigned = local
@@ -980,25 +1017,26 @@ module Conv = struct
         }
     | Switch (cond, switch) ->
       let cond = conv_var env cond in
-      conv_switch env cond switch
+      conv_switch ~tail env cond switch
     | String_switch (cond, branches, default) ->
       let local = Local.fresh "str" in
       let cond = conv_var env cond in
       let body : Expr.t =
         match default with
         | None -> NR Unreachable
-        | Some default -> conv_expr env default
+        | Some default -> conv_expr ~tail env default
       in
       let body =
         List.fold_left
           (fun body (str, branch) : Expr.t ->
             let cond =
               WInt.untag
-                (runtime_prim "string_eq"
+                (runtime_prim ~tail:false "string_eq"
                    [ Expr.Var (V local); const_string str ] )
             in
             If_then_else
-              { cond; if_expr = conv_expr env branch; else_expr = body } )
+              { cond; if_expr = conv_expr ~tail env branch; else_expr = body }
+            )
           body branches
       in
       Let
@@ -1009,8 +1047,11 @@ module Conv = struct
         }
     | Try_with (body, var, handler) ->
       let local = Expr.Local.var_of_var var in
-      let handler = conv_expr (bind_var env var) handler in
-      Try { body = conv_expr env body; param = (local, ref_eq); handler }
+      (* This is tail in the meaning of wasm: the return value of
+         that expression is the return value of the current function.
+         It will use stack space, but it is ok to use the call_return *)
+      let handler = conv_expr ~tail (bind_var env var) handler in
+      Try { body = conv_expr ~tail env body; param = (local, ref_eq); handler }
     | Proved_unreachable -> NR Unreachable
     | Let_rec (_bindings, _body) ->
       let msg = Format.asprintf "Value letrec not implemented (yet ?)" in
@@ -1027,8 +1068,8 @@ module Conv = struct
       end
       else failwith msg
 
-  and conv_switch (env : env) (cond : Expr.t) (switch : Flambda.switch) : Expr.t
-      =
+  and conv_switch ~tail (env : env) (cond : Expr.t) (switch : Flambda.switch) :
+      Expr.t =
     let default_id = Block_id.fresh "switch_default" in
     let branches _set cases =
       let cases, defs =
@@ -1079,7 +1120,8 @@ module Conv = struct
           { cont
           ; params = []
           ; body
-          ; handler = NR_br { cont = fallthrough; arg = conv_expr env branch }
+          ; handler =
+              NR_br { cont = fallthrough; arg = conv_expr ~tail env branch }
           }
       in
       let body = List.fold_left add_def body defs in
@@ -1120,15 +1162,15 @@ module Conv = struct
       in
       make_let_conts body defs
 
-  and conv_named (env : env) (named : Flambda.named) : Expr.t =
+  and conv_named ~tail (env : env) (named : Flambda.named) : Expr.t =
     match named with
-    | Prim (prim, args, _dbg) -> conv_prim env ~prim ~args
+    | Prim (prim, args, _dbg) -> conv_prim ~tail env ~prim ~args
     | Symbol s -> WSymbol.get s
     | Expr (Var var) -> conv_var env var
     | Const c ->
       let c = match c with Int i -> i | Char c -> Char.code c in
       Unop (I31_new, I32 (Int32.of_int c))
-    | Expr e -> conv_expr env e
+    | Expr e -> conv_expr ~tail env e
     | Read_symbol_field (symbol, field) ->
       Block.get_field ~field ~cast:true (WSymbol.get symbol)
     | Read_mutable mut_var -> Var (V (Expr.Local.var_of_mut_var mut_var))
@@ -1149,7 +1191,8 @@ module Conv = struct
       let _typ, e = conv_allocated_const_expr const in
       e
 
-  and conv_prim env ~(prim : Clambda_primitives.primitive) ~args : Expr.t =
+  and conv_prim ~tail env ~(prim : Clambda_primitives.primitive) ~args : Expr.t
+      =
     let args = List.map (conv_var env) args in
     let arg1 args =
       match args with
@@ -1166,7 +1209,7 @@ module Conv = struct
       | [ a; b; c ] -> (a, b, c)
       | _ -> Misc.fatal_errorf "Wrong number of primitive arguments"
     in
-    let runtime_prim name : Expr.t = runtime_prim name args in
+    let runtime_prim name : Expr.t = runtime_prim ~tail name args in
     let i32 v = WInt.untag v in
     let i31 v = WInt.tag v in
     match prim with
@@ -1239,8 +1282,14 @@ module Conv = struct
       in
       State.add_c_import descr;
       let args = List.map2 unbox_arg descr.prim_native_repr_args args in
+      let tail =
+        match descr.prim_native_repr_res with
+        | Same_as_ocaml_repr -> tail
+        | _ -> false
+      in
+      let typ = c_import_type_var descr in
       box_result descr.prim_native_repr_res
-        (Call { args; func = Func_id.prim_name descr })
+        (Call { typ; tail; args; func = Func_id.prim_name descr })
     | Pmakeblock (tag, _mut, _shape) ->
       let size = List.length args in
       State.add_block_size size;
@@ -1511,7 +1560,8 @@ module Conv = struct
          (Unop
             ( Struct_get { typ = partial_closure_arg_typ; field = 2 }
             , Expr.Var (Expr.Local.V partial_closure_var) ) )
-         (Expr.Call_ref { typ = Type.Var.Func { arity = n }; args; func }) )
+         (Expr.Call_ref
+            { tail = true; typ = Type.Var.Func { arity = n }; args; func } ) )
 
   let caml_curry_alloc ~param_arg ~env_arg n m : Expr.t =
     (* arity, func, env, arg1..., argn-1, argn *)
@@ -1569,19 +1619,20 @@ module Conv = struct
     let param_i i = Param.P ("param", i) in
     let params = List.init n (fun i -> (param_i i, ref_eq)) in
     let rec build closure_var n params : Expr.t =
-      let mk_call param =
+      let mk_call ~tail param =
         Expr.Call_ref
           { typ = Func { arity = 1 }
           ; args = [ Var (Param param); Var closure_var ]
           ; func = Closure.get_gen_func (Var closure_var)
+          ; tail
           }
       in
       match params with
       | [] -> assert false
-      | [ (param, _typ) ] -> mk_call param
+      | [ (param, _typ) ] -> mk_call ~tail:true param
       | (param, _typ) :: params ->
         let var : Expr.Local.var = Fresh ("partial_closure", n) in
-        let call : Expr.t = Closure.cast (mk_call param) in
+        let call : Expr.t = Closure.cast (mk_call ~tail:false param) in
         let body = build (Expr.Local.V var) (n + 1) params in
         Let { var; typ = Rvar Env; defining_expr = call; body }
     in
@@ -1793,6 +1844,12 @@ module Conv = struct
           Decl.Type (name, descr) :: decls )
         !State.arities decls
     in
+    let decls =
+      C_import.Set.fold
+        (fun (descr : Primitive.description) decls ->
+          c_import_type descr :: decls )
+        !State.c_imports decls
+    in
     let decls = gen_block :: decls in
     let decls =
       Arity.Set.fold
@@ -1965,12 +2022,12 @@ module ToWasm = struct
       let fields = List.map conv_expr_group fields in
       [ C.array_new_canon_fixed typ size fields ]
     | Ref_func fid -> [ C.ref_func fid ]
-    | Call_ref { typ; args; func } ->
+    | Call_ref { typ; args; func; tail } ->
       let args = List.map conv_expr_group args @ [ conv_expr_group func ] in
-      [ C.call_ref typ args ]
-    | Call { args; func } ->
+      if tail then [ C.return_call_ref typ args ] else [ C.call_ref typ args ]
+    | Call { args; func; tail } ->
       let args = List.map conv_expr_group args in
-      [ C.call func args ]
+      if tail then [ C.return_call func args ] else [ C.call func args ]
     | Ref_cast { typ; r } -> [ C.ref_cast typ [ conv_expr_group r ] ]
     | Global_get g -> [ C.global_get g ]
     | Seq (effects, last) ->

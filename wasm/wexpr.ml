@@ -133,10 +133,13 @@ type t =
       { typ : Type.Var.t
       ; args : t list
       ; func : t
+      ; tail : bool
       }
   | Call of
-      { args : t list
+      { typ : Type.Var.t
+      ; args : t list
       ; func : Func_id.t
+      ; tail : bool
       }
   | Ref_cast of
       { typ : Type.Var.t

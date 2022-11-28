@@ -144,9 +144,13 @@ module C = struct
   let struct_set typ field block value =
     node "struct.set" [ type_name typ; int field; block; value ]
 
+  let return_call_ref typ args = node "return_call_ref" ([ type_name typ ] @ args)
+
   let call_ref typ args = node "call_ref" ([ type_name typ ] @ args)
 
   let call_ref' typ = node "call_ref" [ type_name typ ]
+
+  let return_call func args = node "return_call" ([ !$(Func_id.name func) ] @ args)
 
   let call func args = node "call" ([ !$(Func_id.name func) ] @ args)
 

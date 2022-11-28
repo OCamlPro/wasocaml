@@ -4,10 +4,32 @@ let print_list f sep ppf l =
     f ppf l
 
 module Var = struct
+  module C_import_atom = struct
+    type t =
+      | I32
+      | I64
+      | INat
+      | Float
+      | Val
+
+    let name_of_atom = function
+      | I32 -> "3"
+      | I64 -> "6"
+      | INat -> "N"
+      | Float -> "F"
+      | Val -> "V"
+
+    let name_of_atoms l = String.concat "" (List.map name_of_atom l)
+  end
+
   type t =
     | V of string * int
     | Partial_closure of int * int
     | Func of { arity : int }
+    | C_import_func of
+        { params : C_import_atom.t list
+        ; results : C_import_atom.t list
+        }
     | Closure of
         { arity : int
         ; fields : int
@@ -36,6 +58,10 @@ module Var = struct
     | Partial_closure (n, m) -> Format.asprintf "$Partial_closure_%i_%i" n m
     | Env -> Format.asprintf "$Env"
     | Func { arity } -> Format.asprintf "$Func_%i" arity
+    | C_import_func { params; results } ->
+      Format.asprintf "$C_import_func_%s_%s"
+        (C_import_atom.name_of_atoms params)
+        (C_import_atom.name_of_atoms results)
     | Block { size } -> Format.asprintf "$Block_%i" size
     | BlockFloat { size } -> Format.asprintf "$BlockFloat_%i" size
     | Gen_block -> Format.asprintf "$Gen_block"
