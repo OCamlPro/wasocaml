@@ -659,7 +659,11 @@ module Conv = struct
       [ Decl.Func
           { name = Start
           ; descr =
-              Decl { params = []; type_decl = None; body = No_value (NV_seq (List.rev effects)) }
+              Decl
+                { params = []
+                ; type_decl = None
+                ; body = No_value (NV_seq (List.rev effects))
+                }
           }
       ]
 

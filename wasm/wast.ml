@@ -91,9 +91,7 @@ module C = struct
   let int i =
     (* XXX TODO remove this is wrong,
        but this allows to avoid problems with max_int for now... *)
-    let i =
-      Int64.of_int32 (Int32.of_int i)
-    in
+    let i = Int64.of_int32 (Int32.of_int i) in
     Int i
 
   let string s = String s
@@ -144,13 +142,15 @@ module C = struct
   let struct_set typ field block value =
     node "struct.set" [ type_name typ; int field; block; value ]
 
-  let return_call_ref typ args = node "return_call_ref" ([ type_name typ ] @ args)
+  let return_call_ref typ args =
+    node "return_call_ref" ([ type_name typ ] @ args)
 
   let call_ref typ args = node "call_ref" ([ type_name typ ] @ args)
 
   let call_ref' typ = node "call_ref" [ type_name typ ]
 
-  let return_call func args = node "return_call" ([ !$(Func_id.name func) ] @ args)
+  let return_call func args =
+    node "return_call" ([ !$(Func_id.name func) ] @ args)
 
   let call func args = node "call" ([ !$(Func_id.name func) ] @ args)
 
