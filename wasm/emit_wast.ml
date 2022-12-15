@@ -651,7 +651,7 @@ module Conv = struct
       [ Decl.Func
           { name = Start
           ; descr =
-              Decl { params = []; body = No_value (NV_seq (List.rev effects)) }
+              Decl { params = []; type_decl = None; body = No_value (NV_seq (List.rev effects)) }
           }
       ]
 
@@ -898,6 +898,7 @@ module Conv = struct
       Func.Decl
         { params = params @ [ (Param.Env, Type.Rvar Type.Var.Env) ]
         ; body = Value (body, ref_eq)
+        ; type_decl = Some (Func { arity })
         }
     in
     let name = Func_id.of_var_closure_id function_name in
@@ -1611,6 +1612,7 @@ module Conv = struct
     Func.Decl
       { params = [ (param_arg, ref_eq); (env_arg, Type.Rvar Type.Var.Env) ]
       ; body = Value (body, ref_eq)
+      ; type_decl = Some (Func { arity = 1 })
       }
 
   let caml_apply n =
@@ -1640,6 +1642,7 @@ module Conv = struct
     Func.Decl
       { params = (closure_param, Type.Rvar Env) :: params
       ; body = Value (body, ref_eq)
+      ; type_decl = None
       }
 
   let c_import (descr : Primitive.description) =
@@ -2189,7 +2192,7 @@ module ToWasm = struct
     | Import { module_; name = prim_name; params; result } ->
       let typ = C.func_type ~name params result in
       [ C.import module_ prim_name typ ]
-    | Decl { params; body } ->
+    | Decl { params; body; type_decl } ->
       let func =
         let locals = Expr.required_locals body in
         let params = List.map (fun (p, t) -> C.param p t) params in
@@ -2201,17 +2204,14 @@ module ToWasm = struct
           | Value (body, typ) -> (conv_expr body, [ C.result typ ])
           | No_value body -> (conv_no_value body, [])
         in
-        C.func ~name ~params ~locals ~result ~body
+        C.func ~name ~type_decl ~params ~locals ~result ~body
       in
       [ C.declare_func name; func ]
 
   let conv_type name (descr : Type.descr) =
     match descr with
     | Struct { sub; fields } ->
-      let descr = C.struct_type fields in
-      let descr =
-        match sub with None -> descr | Some sub -> C.sub sub descr
-      in
+      let descr = C.struct_type ~sub fields in
       C.type_ name descr
     | Array { sub; fields } ->
       let descr = C.array_type fields in

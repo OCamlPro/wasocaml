@@ -183,16 +183,35 @@ module C = struct
 
   let results t = node_p "result" (List.map type_atom t)
 
-  let func ~name ~params ~result ~locals ~body =
+  let func ~name ~type_decl ~params ~result ~locals ~body =
+    let type_decl =
+      match type_decl with
+      | None -> []
+      | Some type_decl -> [node "type" [type_name type_decl]]
+    in
     let fields =
       [ !$(Func_id.name name); node "export" [ String (Func_id.name name) ] ]
+      @ type_decl
       @ params @ result @ locals
     in
     nodehv "func" fields body
 
   let field f = node "field" [ node "mut" [ type_atom f ] ]
 
-  let struct_type fields = node "struct" (List.map field fields)
+  let struct_type ~sub fields =
+    match mode with
+    | Reference -> begin
+      let descr = node "struct" (List.map field fields) in
+      match sub with
+      | None -> descr
+      | Some name -> node "sub" [ type_name name; descr ]
+    end
+    | Binarien -> begin
+      match sub with
+      | None -> node "struct" (List.map field fields)
+      | Some name ->
+        node "struct_subtype" (List.map field fields @ [ type_name name ])
+    end
 
   let array_type f = node "array" [ node "mut" [ type_atom f ] ]
 

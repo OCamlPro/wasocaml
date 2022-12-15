@@ -14,6 +14,7 @@ module Func = struct
     | Decl of
         { params : (Param.t * Type.atom) list
         ; body : Expr.function_body
+        ; type_decl : Type.Var.t option
         }
     | Import of
         { params : Type.atom list
