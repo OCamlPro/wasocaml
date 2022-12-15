@@ -496,6 +496,8 @@ module Conv = struct
     Decl.Type (C_import_func descr, Func { params; results })
 
   let conv_apply ~tail env (apply : Flambda.apply) : Expr.t =
+    let arity = List.length apply.args in
+    State.add_arity arity;
     match apply.kind with
     | Indirect -> begin
       match apply.args with
@@ -513,13 +515,12 @@ module Conv = struct
           ; body = Call_ref { typ = func_typ; func; args; tail }
           }
       | _ :: _ :: _ ->
-        let arity = List.length apply.args in
         let args =
           Closure.cast (conv_var env apply.func)
           :: List.map (conv_var env) apply.args
         in
         State.add_caml_apply arity;
-        let typ = Type.Var.Func { arity } in
+        let typ = Type.Var.Caml_apply_func { arity } in
         Call { typ; func = Caml_apply arity; args; tail }
     end
     | Direct closure_id ->
@@ -534,7 +535,7 @@ module Conv = struct
         List.map (conv_var env) apply.args
         @ [ Closure.cast (conv_var env apply.func) ]
       in
-      let typ = Type.Var.Func { arity = List.length apply.args } in
+      let typ = Type.Var.Func { arity } in
       Call { typ; func; args; tail }
 
   let conv_allocated_const_expr (const : Allocated_const.t) : Type.atom * Expr.t
@@ -602,7 +603,14 @@ module Conv = struct
     let arity = List.length args in
     State.add_runtime_import { name; arity };
     let func : Func_id.t = Runtime name in
-    let typ = Type.Var.Func { arity } in
+    let func_type =
+      Type.Var.
+        { params = List.init arity (fun _ -> Type.Var.C_import_atom.Val)
+        ; results = [ Val ]
+        }
+    in
+    let typ = Type.Var.C_import_func func_type in
+    State.add_c_import_func_type func_type;
     Call { typ; func; args; tail }
 
   let unimplemented args =
@@ -1533,7 +1541,11 @@ module Conv = struct
 
   let func_type size : Type.descr =
     let params = List.init size (fun _ -> ref_eq) in
-    Func { params = params @ [ Type.Rvar Env ]; results = [ref_eq] }
+    Func { params = params @ [ Type.Rvar Env ]; results = [ ref_eq ] }
+
+  let caml_apply_type size : Type.descr =
+    let params = List.init size (fun _ -> ref_eq) in
+    Func { params = [ Type.Rvar Env ] @ params; results = [ ref_eq ] }
 
   let caml_curry_apply ~param_arg ~env_arg n =
     assert (n > 1);
@@ -1864,6 +1876,15 @@ module Conv = struct
         decls
     in
     let decls =
+      Arity.Set.fold
+        (fun arity decls ->
+          let name = Type.Var.Caml_apply_func { arity } in
+          let descr = caml_apply_type arity in
+          Decl.Type (name, descr) :: decls )
+        (Arity.Set.remove 1 !State.caml_applies)
+        decls
+    in
+    let decls =
       float_type :: int32_type :: int64_type :: nativeint_type :: string_type
       :: array_type :: floatarray_type :: func_1_and_env :: decls
     in
@@ -2036,7 +2057,7 @@ module ToWasm = struct
            But return call is not handled by the gc branch so we play a trick
            with return_call_ref
         *)
-        [ C.return_call_ref typ (C.ref_func func :: args) ]
+        [ C.return_call_ref typ (args @ [ C.ref_func func ]) ]
       else [ C.call func args ]
     | Ref_cast { typ; r } -> [ C.ref_cast typ [ conv_expr_group r ] ]
     | Global_get g -> [ C.global_get g ]
@@ -2191,7 +2212,12 @@ module ToWasm = struct
     match func with
     | Import { module_; name = prim_name; params; result } ->
       let typ = C.func_type ~name params result in
-      [ C.import module_ prim_name typ ]
+      [ (* The declare shouldn't be required: the should not be any reference to an
+           imported function, but calls are compiled as ref_call for the tail rec
+           hack so we need that for now *)
+        C.declare_func name
+      ; C.import module_ prim_name typ
+      ]
     | Decl { params; body; type_decl } ->
       let func =
         let locals = Expr.required_locals body in
@@ -2219,8 +2245,7 @@ module ToWasm = struct
         match sub with None -> descr | Some sub -> C.sub sub descr
       in
       C.type_ name descr
-    | Func { params; results } ->
-      C.type_ name (C.func_type params results)
+    | Func { params; results } -> C.type_ name (C.func_type params results)
 
   let conv_type_rec types =
     C.rec_ (List.map (fun (name, descr) -> conv_type name descr) types)

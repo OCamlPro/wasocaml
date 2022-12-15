@@ -29,6 +29,7 @@ module Var = struct
     | V of string * int
     | Partial_closure of int * int
     | Func of { arity : int }
+    | Caml_apply_func of { arity : int }
     | C_import_func of c_import_func_type
     | Closure of
         { arity : int
@@ -58,6 +59,7 @@ module Var = struct
     | Partial_closure (n, m) -> Format.asprintf "$Partial_closure_%i_%i" n m
     | Env -> Format.asprintf "$Env"
     | Func { arity } -> Format.asprintf "$Func_%i" arity
+    | Caml_apply_func { arity } -> Format.asprintf "$Caml_apply_func_%i" arity
     | C_import_func { params; results } ->
       Format.asprintf "$C_import_func_%s_%s"
         (C_import_atom.name_of_atoms params)
