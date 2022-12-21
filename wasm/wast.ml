@@ -83,7 +83,7 @@ module C = struct
 
   let array_new_canon_fixed typ size args =
     match mode with
-    | Binarien -> node "array.new" ([ type_name typ ] @ args)
+    | Binarien -> node "array.init_static" ([ type_name typ ] @ args)
     | Reference ->
       node "array.new_canon_fixed"
         ([ type_name typ; Int (Int64.of_int size) ] @ args)
