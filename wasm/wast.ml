@@ -272,10 +272,15 @@ module C = struct
 
   let pop typ = node "pop" [ type_atom typ ]
 
-  let throw e = node "throw" [ e ]
+  let throw e = node "throw" [ !$"exc"; e ]
 
   let try_ ~body ~typ ~handler =
-    node "try" [ node "do" body; node "catch" (type_atom typ :: handler) ]
+    ignore typ;
+    node "try"
+      [ node "do" body
+      ; node "catch" (!$"exc" :: (* type_atom typ :: *)
+                                 handler)
+      ]
 
   let sub name descr =
     match mode with
@@ -292,7 +297,13 @@ module C = struct
 
   let start f = node "start" [ !$(Func_id.name f) ]
 
-  let module_ m = nodev "module" m
+  let import_tag =
+    import "exc_tag" "exc"
+      (node "tag" [ !$"exc"; node "param" [ node "ref" [ atom "eq" ] ] ])
+
+  let module_ m =
+    let m = match mode with Reference -> m | Binarien -> import_tag :: m in
+    nodev "module" m
 
   let register name = node "register" [ String name ]
 end
