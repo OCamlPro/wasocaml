@@ -187,12 +187,11 @@ module C = struct
     let type_decl =
       match type_decl with
       | None -> []
-      | Some type_decl -> [node "type" [type_name type_decl]]
+      | Some type_decl -> [ node "type" [ type_name type_decl ] ]
     in
     let fields =
       [ !$(Func_id.name name); node "export" [ String (Func_id.name name) ] ]
-      @ type_decl
-      @ params @ result @ locals
+      @ type_decl @ params @ result @ locals
     in
     nodehv "func" fields body
 
