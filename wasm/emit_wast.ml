@@ -1412,7 +1412,7 @@ module Conv = struct
     | Parrayrefu Pfloatarray ->
       let typ : Type.Var.t = FloatArray in
       let array, field = args2 args in
-      Binop (Array_get typ, (Ref_cast { typ; r = array }, i32 field))
+      box_float (Binop (Array_get typ, (Ref_cast { typ; r = array }, i32 field)))
     | Parrayrefu Pgenarray -> runtime_prim "array_get_unsafe"
     | Parrayrefs (Paddrarray | Pintarray) ->
       runtime_prim "array_get_int_or_addr_safe"
@@ -1436,7 +1436,7 @@ module Conv = struct
            { typ
            ; array = Ref_cast { typ; r = array }
            ; field = i32 field
-           ; value
+           ; value = unbox_float value
            } )
     | Parraysetu Pgenarray -> runtime_prim "array_set_unsafe"
     | Parraysets (Paddrarray | Pintarray) ->
