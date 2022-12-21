@@ -304,8 +304,12 @@ module Conv = struct
     let conv ~from ~to_ e : Expr.t =
       match (size from, size to_) with
       | S32, S32 | S64, S64 -> e
-      | sfrom, sto ->
-        Unop (Reinterpret { from_type = I sfrom; to_type = I sto }, e)
+      | S32, S64 ->
+          Unop (I64_extend_i32 S, e)
+      | S64, S32 ->
+          Unop (I32_wrap_i64, e)
+      (* | sfrom, sto ->
+       *   Unop (Reinterpret { from_type = I sfrom; to_type = I sto }, e) *)
 
     let unbox t e : Expr.t =
       let typ = box_type t in
@@ -1992,6 +1996,9 @@ module ToWasm = struct
           (num_type_name from_type)
       in
       Cst.node name [ arg ]
+    | I32_wrap_i64 -> Cst.node "i32.wrap_i64" [ arg ]
+    | I64_extend_i32 sign ->
+      Cst.node (Printf.sprintf "i64.extend_%s_i32" (sign_name sign)) [ arg ]
     | Convert { from_type; to_type; sign } ->
       let name =
         Printf.sprintf "f%s.convert_i%s_%s" (size_name to_type)

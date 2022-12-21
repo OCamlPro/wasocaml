@@ -89,6 +89,8 @@ type unop =
       { from_type : num_type
       ; to_type : num_type
       }
+  | I32_wrap_i64
+  | I64_extend_i32 of sx
   | Convert of
       { from_type : nn
       ; to_type : nn
@@ -329,6 +331,9 @@ let print_unop ppf = function
   | Reinterpret { from_type; to_type } ->
     Format.fprintf ppf "%a.reinterpret_%a" print_num_type to_type print_num_type
       from_type
+  | I32_wrap_i64 -> Format.fprintf ppf "I32_wrap_i64"
+  | I64_extend_i32 sign ->
+    Format.fprintf ppf "I64_extend_i32_%a" print_sign sign
   | Convert { from_type; to_type; sign } ->
     Format.fprintf ppf "f%a.convert_i%a_%a" print_nn to_type print_nn from_type
       print_sign sign
