@@ -301,15 +301,16 @@ module Conv = struct
       | S32 -> I32 (Int32.of_int n)
       | S64 -> I64 (Int64.of_int n)
 
-    let conv ~from ~to_ e : Expr.t =
-      match (size from, size to_) with
+    let conv_size ~(from : Expr.nn) ~(to_ : Expr.nn) e : Expr.t =
+      match (from, to_) with
       | S32, S32 | S64, S64 -> e
-      | S32, S64 ->
-          Unop (I64_extend_i32 S, e)
-      | S64, S32 ->
-          Unop (I32_wrap_i64, e)
-      (* | sfrom, sto ->
-       *   Unop (Reinterpret { from_type = I sfrom; to_type = I sto }, e) *)
+      | S32, S64 -> Unop (I64_extend_i32 S, e)
+      | S64, S32 -> Unop (I32_wrap_i64, e)
+    (* | sfrom, sto ->
+     *   Unop (Reinterpret { from_type = I sfrom; to_type = I sto }, e) *)
+
+    let conv ~from ~to_ e : Expr.t =
+      conv_size ~from:(size from) ~to_:(size to_) e
 
     let unbox t e : Expr.t =
       let typ = box_type t in
@@ -324,7 +325,9 @@ module Conv = struct
       box t (Binop (I_binop (op, size t), args))
 
     let binop_with_int (t : Primitive.boxed_integer) op (a1, a2) : Expr.t =
-      let args = (unbox t a1, WInt.untag a2) in
+      let args =
+        (unbox t a1, conv_size ~from:S32 ~to_:(size t) (WInt.untag a2))
+      in
       box t (Binop (I_binop (op, size t), args))
 
     let relop (t : Primitive.boxed_integer) op (a1, a2) : Expr.t =
@@ -1998,7 +2001,7 @@ module ToWasm = struct
       Cst.node name [ arg ]
     | I32_wrap_i64 -> Cst.node "i32.wrap_i64" [ arg ]
     | I64_extend_i32 sign ->
-      Cst.node (Printf.sprintf "i64.extend_%s_i32" (sign_name sign)) [ arg ]
+      Cst.node (Printf.sprintf "i64.extend_i32_%s" (sign_name sign)) [ arg ]
     | Convert { from_type; to_type; sign } ->
       let name =
         Printf.sprintf "f%s.convert_i%s_%s" (size_name to_type)
