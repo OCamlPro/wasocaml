@@ -273,10 +273,11 @@ module C = struct
 
   let throw e = node "throw" [ !$"exc"; e ]
 
-  let try_ ~body ~typ ~handler =
+  let try_ ~body ~result_typ ~typ ~handler =
     ignore typ;
     node "try"
-      [ node "do" body
+      [ result result_typ
+      ; node "do" body
       ; node "catch" (!$"exc" :: (* type_atom typ :: *)
                                  handler)
       ]

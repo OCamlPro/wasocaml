@@ -176,6 +176,7 @@ type t =
   | Try of
       { body : t
       ; param : Local.var * Type.atom
+      ; result_typ : Type.atom
       ; handler : t
       }
   | Throw of t
@@ -531,7 +532,7 @@ let required_locals body =
       let acc = loop acc cond in
       loop acc if_else
     | Br_table { cond; cases = _; default = _ } -> loop acc cond
-    | Try { body; handler; param = local, typ } ->
+    | Try { body; handler; result_typ = _; param = local, typ } ->
       let acc = add local typ acc in
       let acc = loop acc body in
       loop acc handler

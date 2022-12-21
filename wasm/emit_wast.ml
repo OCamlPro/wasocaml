@@ -1062,7 +1062,12 @@ module Conv = struct
          that expression is the return value of the current function.
          It will use stack space, but it is ok to use the call_return *)
       let handler = conv_expr ~tail (bind_var env var) handler in
-      Try { body = conv_expr ~tail env body; param = (local, ref_eq); handler }
+      Try
+        { body = conv_expr ~tail env body
+        ; param = (local, ref_eq)
+        ; handler
+        ; result_typ = ref_eq
+        }
     | Proved_unreachable -> NR Unreachable
     | Let_rec (_bindings, _body) ->
       let msg = Format.asprintf "Value letrec not implemented (yet ?)" in
@@ -2130,7 +2135,7 @@ module ToWasm = struct
       | Reference -> [ C.unreachable ]
       | Binarien -> [ C.throw (conv_expr_group e) ]
     end
-    | Try { body; handler; param = local, typ } -> begin
+    | Try { body; handler; result_typ; param = local, typ } -> begin
       match mode with
       | Reference ->
         Format.eprintf "Warning exception not supported@.";
@@ -2138,7 +2143,7 @@ module ToWasm = struct
       | Binarien ->
         let body = conv_expr body in
         let handler = C.local_set (V local) (C.pop typ) :: conv_expr handler in
-        [ C.try_ ~body ~handler ~typ ]
+        [ C.try_ ~result_typ ~body ~handler ~typ ]
     end
     | Unit e -> conv_no_value e @ [ unit ]
     | NR nr -> conv_no_return nr
