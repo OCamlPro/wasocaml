@@ -1630,7 +1630,8 @@ module Conv = struct
     let param_arg = Param.P ("arg", 0) in
     let env_arg = Param.Env in
     let body =
-      if m = n - 1 then
+      if n = 0 then Expr.NR Unreachable
+      else if m = n - 1 then
         caml_curry_apply ~param_arg:(Expr.Local.Param param_arg)
           ~env_arg:(Expr.Local.Param env_arg) n
       else
@@ -1775,7 +1776,7 @@ module Conv = struct
     let decls =
       Arity.Set.fold
         (fun arity decls ->
-          let ms = List.init arity (fun i -> i) in
+          let ms = List.init (max arity 1) (fun i -> i) in
           List.fold_left
             (fun decls applied_args ->
               let decl =
