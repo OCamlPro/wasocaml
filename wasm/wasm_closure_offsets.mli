@@ -33,9 +33,20 @@ type free_var_accessor = private
   ; set : Set_of_closures_id.t
   }
 
+type func = private
+  { arity : int
+  ; fields : int
+  }
+
+type set_of_closures_id_type = private
+  { functions : func list
+  ; fields : int
+  }
+
 type t = private
   { function_accessors : function_accessor Closure_id.Map.t
   ; free_variable_accessors : free_var_accessor Var_within_closure.Map.t
+  ; set_of_closures_id_types : set_of_closures_id_type Set_of_closures_id.Map.t
   }
 
 val empty : t

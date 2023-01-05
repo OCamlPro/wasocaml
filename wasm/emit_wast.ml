@@ -567,44 +567,25 @@ module Conv = struct
     let typ, e = conv_allocated_const_expr const in
     Expr { typ; e }
 
-  let closure_type ~constant (set_of_closures : Flambda.set_of_closures) =
-    let Flambda.{ function_decls; free_vars } = set_of_closures in
-    let is_recursive = Variable.Map.cardinal function_decls.funs > 1 in
-    if not is_recursive then None
-    else begin
-      let func_types =
-        Variable.Map.fold
-          (fun _id (function_decl : Flambda.function_declaration) acc ->
-            let arity = Flambda_utils.function_arity function_decl in
-            let fields = if constant then 0 else 1 in
-            let typ : Type.atom = Rvar (Closure { arity; fields }) in
-            typ :: acc )
-          function_decls.funs []
-      in
-      let rev_fields =
-        Variable.Map.fold
-          (fun _id _var acc ->
-            let typ : Type.atom = ref_eq in
-            typ :: acc )
-          free_vars func_types
-      in
-      let descr : Type.descr =
-        Struct { sub = None; fields = List.rev rev_fields }
-      in
-      let name : Type.Var.t =
-        Set_of_closures function_decls.set_of_closures_id
-      in
-      Some (Decl.Type (name, descr))
-    end
+  let closure_type_from_info (id : Set_of_closures_id.t)
+      (set_info : Wasm_closure_offsets.set_of_closures_id_type) =
+    let name : Type.Var.t = Set_of_closures id in
+    let func_types =
+      List.fold_left
+        (fun acc ({ arity; fields } : Wasm_closure_offsets.func) ->
+          let typ : Type.atom = Rvar (Closure { arity; fields }) in
+          typ :: acc )
+        [] set_info.functions
+    in
+    let data_fields = List.init set_info.fields (fun _ -> ref_eq) in
+    let fields = func_types @ data_fields in
+    let descr : Type.descr = Struct { sub = None; fields } in
+    Decl.Type (name, descr)
 
-  let closure_types (program : Flambda.program) =
-    let list = ref [] in
-    Flambda_iterators.iter_on_set_of_closures_of_program program
-      ~f:(fun ~constant set_of_closures ->
-        match closure_type ~constant set_of_closures with
-        | None -> ()
-        | Some t -> list := t :: !list );
-    !list
+  let closure_types_from_info (info : Wasm_closure_offsets.t) =
+    Set_of_closures_id.Map.fold (fun id info acc ->
+        closure_type_from_info id info :: acc)
+      info.set_of_closures_id_types []
 
   let runtime_prim ~tail name args : Expr.t =
     let arity = List.length args in
@@ -2309,7 +2290,16 @@ let run ~output_prefix (flambda : Flambda.program) =
   let offsets = Wasm_closure_offsets.compute flambda in
   let top_env = Conv.{ offsets } in
   let m = Conv.conv_body top_env flambda.program_body [] in
-  let closure_types = Conv.closure_types flambda in
+  let closure_types =
+    let local_closure_types =
+      Conv.closure_types_from_info offsets in
+    let imported_closure_types =
+      let export_info = Compilenv.approx_env () in
+      Conv.closure_types_from_info export_info.wasm_offsets
+    in
+    (* TODO filter imported closure types *)
+    imported_closure_types @ local_closure_types
+  in
   let functions = Conv.conv_functions ~top_env flambda in
   let m = closure_types @ m @ functions in
   if print_everything then

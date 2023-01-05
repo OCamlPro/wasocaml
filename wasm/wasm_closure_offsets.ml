@@ -30,12 +30,23 @@ type free_var_accessor =
   ; set : Set_of_closures_id.t
   }
 
+type func =
+  { arity : int
+  ; fields : int
+  }
+
+type set_of_closures_id_type =
+  { functions : func list
+  ; fields : int
+  }
+
 type t =
   { function_accessors : function_accessor Closure_id.Map.t
   ; free_variable_accessors : free_var_accessor Var_within_closure.Map.t
+  ; set_of_closures_id_types : set_of_closures_id_type Set_of_closures_id.Map.t
   }
 
-let add_closure_offsets result
+let add_closure_offsets result ~constant
     ({ function_decls; free_vars } : Flambda.set_of_closures) =
   let is_recursive = Variable.Map.cardinal function_decls.funs > 1 in
   let closure_size = Variable.Map.cardinal free_vars in
@@ -81,7 +92,10 @@ let add_closure_offsets result
       Variable.Map.fold assign_free_variable_offset free_vars
         (result.free_variable_accessors, fun_offset + 1)
     in
-    { function_accessors; free_variable_accessors }
+    { function_accessors
+    ; free_variable_accessors
+    ; set_of_closures_id_types = result.set_of_closures_id_types
+    }
   else
     let assign_function_offset id function_decl (map, env_pos) =
       let env_pos = env_pos + 1 in
@@ -111,11 +125,25 @@ let add_closure_offsets result
       Variable.Map.fold assign_free_variable_offset free_vars
         (result.free_variable_accessors, free_variable_pos)
     in
-    { function_accessors; free_variable_accessors }
+    let set_of_closures_id_types =
+      let functions =
+        Variable.Map.fold
+          (fun _id (function_decl : Flambda.function_declaration) acc ->
+            let arity = Flambda_utils.function_arity function_decl in
+            let fields = if constant then 0 else 1 in
+            { arity; fields } :: acc )
+          function_decls.funs []
+      in
+      let fields = Variable.Map.cardinal free_vars in
+      Set_of_closures_id.Map.add function_decls.set_of_closures_id
+        { functions; fields } result.set_of_closures_id_types
+    in
+    { function_accessors; free_variable_accessors; set_of_closures_id_types }
 
 let empty =
   { function_accessors = Closure_id.Map.empty
   ; free_variable_accessors = Var_within_closure.Map.empty
+  ; set_of_closures_id_types = Set_of_closures_id.Map.empty
   }
 
 let merge a b =
@@ -126,14 +154,18 @@ let merge a b =
     Var_within_closure.Map.disjoint_union a.free_variable_accessors
       b.free_variable_accessors
   in
-  { function_accessors; free_variable_accessors }
+  let set_of_closures_id_types =
+    Set_of_closures_id.Map.disjoint_union a.set_of_closures_id_types
+      b.set_of_closures_id_types
+  in
+  { function_accessors; free_variable_accessors; set_of_closures_id_types }
 
 let import_for_pack ~pack_units:_ ~pack:_ _t =
   failwith "TODO wasm import_for_pack"
 
 let compute (program : Flambda.program) =
-  let r =
-    List.fold_left add_closure_offsets empty
-      (Flambda_utils.all_sets_of_closures program)
-  in
-  r
+  let state = ref empty in
+  Flambda_iterators.iter_on_set_of_closures_of_program program
+    ~f:(fun ~constant set_of_closures ->
+      state := add_closure_offsets !state ~constant set_of_closures );
+  !state
