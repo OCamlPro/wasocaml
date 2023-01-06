@@ -1180,7 +1180,7 @@ module Conv = struct
     | Read_mutable mut_var -> Var (V (Expr.Local.var_of_mut_var mut_var))
     | Project_var project_var ->
       let closure = conv_var env project_var.closure in
-      Closure.project_var env.top_env project_var.closure_id project_var.var
+      Closure.project_var ~cast:() env.top_env project_var.closure_id project_var.var
         closure
     | Project_closure project_closure ->
       let set_of_closures = conv_var env project_closure.set_of_closures in
