@@ -57,6 +57,10 @@ module Const = struct
         { typ : Type.Var.t
         ; fields : field list
         }
+    | Array of
+        { typ : Type.Var.t
+        ; fields : field list
+        }
     | Expr of
         { typ : Type.atom
         ; e : Expr.t
@@ -105,6 +109,11 @@ module Decl = struct
         Func.print descr
     | Const { name; descr = Struct { typ; fields } } ->
       Format.fprintf ppf "@[<hov 2>const %a : %a =@ {%a}@]" Global.print name
+        Type.Var.print typ
+        (print_list Const.print_field ";")
+        fields
+    | Const { name; descr = Array { typ; fields } } ->
+      Format.fprintf ppf "@[<hov 2>const %a : %a =@ [%a]@]" Global.print name
         Type.Var.print typ
         (print_list Const.print_field ";")
         fields
