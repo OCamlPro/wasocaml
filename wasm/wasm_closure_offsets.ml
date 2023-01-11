@@ -117,10 +117,11 @@ let add_closure_offsets result ~constant
       let map = Closure_id.Map.add closure_id accessor map in
       (map, env_pos)
     in
-    let function_accessors, free_variable_pos =
+    let function_accessors, last_allocated_slot =
       Variable.Map.fold assign_function_offset function_decls.funs
         (result.function_accessors, -1)
     in
+    let free_variable_pos = last_allocated_slot + 1 in
     let free_variable_accessors, _ =
       Variable.Map.fold assign_free_variable_offset free_vars
         (result.free_variable_accessors, free_variable_pos)
