@@ -14,7 +14,8 @@ module Block_id = struct
       (name, !f)
 end
 
-let acceptable_char = function '[' -> '_' | ']' -> '_' | ',' -> '_' | c -> c
+let acceptable_char = function '[' -> '_' | ']' -> '_' | ',' -> '_' | ('.' | ':' | '-' | '@') -> '_' | c -> c
+let acceptable_string s = String.map acceptable_char s
 
 module Func_id = struct
   type t =

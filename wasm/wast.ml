@@ -64,12 +64,27 @@ module C = struct
     match export_name with
     | None -> node "global" ([ !$name; typ ] @ descr)
     | Some export_name ->
+      let export_name = Wident.acceptable_string export_name in
       node "global"
         ([ !$name; node "export" [ String export_name ]; typ ] @ descr)
 
+  let module_name module_ =
+    let module_ =
+      if Wstate.unmangle_module_name && String.starts_with ~prefix:"caml" module_ then
+        let first_char = Char.lowercase_ascii module_.[4] in
+        let remaining = String.sub module_ 5 (String.length module_ - 5) in
+        (String.make 1 first_char) ^ remaining
+      else
+        module_
+    in
+    if Wstate.module_name_file then
+      Printf.sprintf "./%s.wasm" module_
+    else
+      module_
+
   let global_import name typ module_ import_name =
     node "global"
-      [ !$name; node "import" [ String module_; String import_name ]; typ ]
+      [ !$name; node "import" [ String (module_name module_); String import_name ]; typ ]
 
   let reft name = node "ref" [ type_name name ]
 
@@ -190,7 +205,7 @@ module C = struct
       | Some type_decl -> [ node "type" [ type_name type_decl ] ]
     in
     let fields =
-      [ !$(Func_id.name name); node "export" [ String (Func_id.name name) ] ]
+      [ !$(Func_id.name name); node "export" [ String (Wident.acceptable_string (Func_id.name name)) ] ]
       @ type_decl @ params @ result @ locals
     in
     nodehv "func" fields body
@@ -214,12 +229,17 @@ module C = struct
 
   let array_type f = node "array" [ node "mut" [ type_atom f ] ]
 
-  let func_type ?name params res =
+  let func_type ?name ?typ params res =
     let name =
       match name with None -> [] | Some name -> [ !$(Func_id.name name) ]
     in
+    let typ =
+      match typ with
+      | None -> []
+      | Some typ -> [node "type" [type_name typ]]
+    in
     let res = List.map result res in
-    node "func" (name @ List.map param_t params @ res)
+    node "func" (name @ typ @ List.map param_t params @ res)
 
   let if_then_else typ cond if_expr else_expr =
     let nopise e =
@@ -293,17 +313,17 @@ module C = struct
 
   let rec_ l = node "rec" l
 
-  let import module_ name e = node "import" [ String module_; String name; e ]
+  let import module_ name e = node "import" [ String (module_name module_); String (Wident.acceptable_string name); e ]
 
   let start f = node "start" [ !$(Func_id.name f) ]
 
   let import_tag =
-    import "exc_tag" "exc"
+    import Wstate.exc_tag_module "exc"
       (node "tag" [ !$"exc"; node "param" [ node "ref" [ atom "eq" ] ] ])
 
   let module_ m =
     let m = match mode with Reference -> m | Binarien -> import_tag :: m in
     nodev "module" m
 
-  let register name = node "register" [ String name ]
+  let register name = node "register" [ String (module_name name) ]
 end

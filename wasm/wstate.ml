@@ -9,8 +9,23 @@ type mode =
 let mode = Binarien
 (* let mode = Reference *)
 
-let block_repr = Array_block
-(* let block_repr = Struct_block *)
+(* let block_repr = Array_block *)
+let block_repr = Struct_block
+
+let unmangle_module_name = true
+
+(** module names represents the wasm file path *)
+let module_name_file = true
+
+let module_name f =
+  if module_name_file then
+    Printf.sprintf "./%s.wasm" f
+  else
+    f
+
+let exc_tag_module = module_name "exc_tag"
+let imports_module = module_name "imports"
+let runtime_module = module_name "runtime"
 
 module MSet (M : Set.OrderedType) = struct
   include Set.Make (M)
