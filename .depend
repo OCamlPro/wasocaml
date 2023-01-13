@@ -3874,15 +3874,19 @@ wasm/emit_wast.cmo : \
     middle_end/flambda/base_types/tag.cmi \
     middle_end/symbol.cmi \
     middle_end/flambda/base_types/static_exception.cmi \
+    middle_end/flambda/base_types/set_of_closures_id.cmi \
+    utils/profile.cmi \
     middle_end/printclambda_primitives.cmi \
     typing/primitive.cmi \
     middle_end/flambda/parameter.cmi \
     utils/numbers.cmi \
     middle_end/flambda/base_types/mutable_variable.cmi \
     utils/misc.cmi \
+    middle_end/linkage_name.cmi \
     lambda/lambda.cmi \
     middle_end/flambda/initialize_symbol_to_let_symbol.cmi \
     middle_end/flambda/flambda_utils.cmi \
+    middle_end/flambda/flambda_iterators.cmi \
     middle_end/flambda/flambda.cmi \
     middle_end/compilenv.cmi \
     middle_end/compilation_unit.cmi \
@@ -3902,15 +3906,19 @@ wasm/emit_wast.cmx : \
     middle_end/flambda/base_types/tag.cmx \
     middle_end/symbol.cmx \
     middle_end/flambda/base_types/static_exception.cmx \
+    middle_end/flambda/base_types/set_of_closures_id.cmx \
+    utils/profile.cmx \
     middle_end/printclambda_primitives.cmx \
     typing/primitive.cmx \
     middle_end/flambda/parameter.cmx \
     utils/numbers.cmx \
     middle_end/flambda/base_types/mutable_variable.cmx \
     utils/misc.cmx \
+    middle_end/linkage_name.cmx \
     lambda/lambda.cmx \
     middle_end/flambda/initialize_symbol_to_let_symbol.cmx \
     middle_end/flambda/flambda_utils.cmx \
+    middle_end/flambda/flambda_iterators.cmx \
     middle_end/flambda/flambda.cmx \
     middle_end/compilenv.cmx \
     middle_end/compilation_unit.cmx \
@@ -3969,6 +3977,7 @@ wasm/wident.cmo : \
     typing/primitive.cmi \
     middle_end/flambda/base_types/mutable_variable.cmi \
     middle_end/linkage_name.cmi \
+    middle_end/compilation_unit.cmi \
     middle_end/flambda/base_types/closure_id.cmi
 wasm/wident.cmx : \
     middle_end/variable.cmx \
@@ -3977,19 +3986,28 @@ wasm/wident.cmx : \
     typing/primitive.cmx \
     middle_end/flambda/base_types/mutable_variable.cmx \
     middle_end/linkage_name.cmx \
+    middle_end/compilation_unit.cmx \
     middle_end/flambda/base_types/closure_id.cmx
 wasm/wmodule.cmo : \
     wasm/wtype.cmo \
     wasm/wident.cmo \
-    wasm/wexpr.cmo
+    wasm/wexpr.cmo \
+    middle_end/symbol.cmi
 wasm/wmodule.cmx : \
     wasm/wtype.cmx \
     wasm/wident.cmx \
-    wasm/wexpr.cmx
+    wasm/wexpr.cmx \
+    middle_end/symbol.cmx
 wasm/wstate.cmo : \
-    typing/primitive.cmi
+    wasm/wtype.cmo \
+    middle_end/symbol.cmi \
+    typing/primitive.cmi \
+    middle_end/flambda/base_types/closure_id.cmi
 wasm/wstate.cmx : \
-    typing/primitive.cmx
+    wasm/wtype.cmx \
+    middle_end/symbol.cmx \
+    typing/primitive.cmx \
+    middle_end/flambda/base_types/closure_id.cmx
 wasm/wtype.cmo : \
     middle_end/flambda/base_types/set_of_closures_id.cmi
 wasm/wtype.cmx : \
