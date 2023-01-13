@@ -302,9 +302,7 @@ module Conv = struct
       Unop
         ( I31_get_s
         , Ref_cast
-            { typ = Gen_block
-            ; r = Binop (Array_get Gen_block, (block, I32 0l))
-            } )
+            { typ = I31; r = Binop (Array_get Gen_block, (block, I32 0l)) } )
 
     let get_field ~(cast : bool) e ~field : Expr.t =
       let size = field + 1 in
