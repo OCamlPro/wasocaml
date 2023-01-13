@@ -19,6 +19,7 @@ module Func = struct
     | Import of
         { params : Type.atom list
         ; result : Type.atom list
+        ; typ : Type.Var.t option
         ; module_ : string
         ; name : string
         }
@@ -36,7 +37,7 @@ module Func = struct
       in
       Format.fprintf ppf "@[<hov 2>Func (%a)%a@]" (print_list param ",") params
         print_body body
-    | Import { params; result; module_; name } ->
+    | Import { params; result; typ = _; module_; name } ->
       Format.fprintf ppf "@[<hov 2>Import %s %s : (%a) -> %a @]" module_ name
         (print_list Type.print_atom ",")
         params

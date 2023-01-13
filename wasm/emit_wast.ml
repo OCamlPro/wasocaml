@@ -690,8 +690,8 @@ module Conv = struct
     Decl.Type (name, descr)
 
   let closure_types_from_info (info : Wasm_closure_offsets.t) =
-    Set_of_closures_id.Map.fold (fun id info acc ->
-        closure_type_from_info id info :: acc)
+    Set_of_closures_id.Map.fold
+      (fun id info acc -> closure_type_from_info id info :: acc)
       info.set_of_closures_id_types []
 
   let runtime_prim ~tail name args : Expr.t =
@@ -1283,8 +1283,8 @@ module Conv = struct
     | Read_mutable mut_var -> Var (V (Expr.Local.var_of_mut_var mut_var))
     | Project_var project_var ->
       let closure = conv_var env project_var.closure in
-      Closure.project_var ~cast:() env.top_env project_var.closure_id project_var.var
-        closure
+      Closure.project_var ~cast:() env.top_env project_var.closure_id
+        project_var.var closure
     | Project_closure project_closure ->
       let set_of_closures = conv_var env project_closure.set_of_closures in
       Closure.project_closure ~cast:() env.top_env project_closure.closure_id
@@ -2315,8 +2315,8 @@ module ToWasm = struct
 
   let conv_func name (func : Func.t) =
     match func with
-    | Import { module_; name = prim_name; params; result } ->
-      let typ = C.func_type ~name params result in
+    | Import { module_; name = prim_name; typ; params; result } ->
+      let typ = C.func_type ~name ?typ params result in
       [ (* The declare shouldn't be required: the should not be any reference to an
            imported function, but calls are compiled as ref_call for the tail rec
            hack so we need that for now *)
