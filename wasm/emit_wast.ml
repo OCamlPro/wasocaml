@@ -1761,18 +1761,20 @@ module Conv = struct
     Func.Import
       { params
       ; result
-      ; module_ = "import"
+      ; typ = None
+      ; module_ = imports_module
       ; name = Func_id.prim_func_name descr
       }
 
   let runtime_import (descr : Runtime_import.t) =
     let params = List.init descr.arity (fun _ -> ref_eq) in
     let result = [ ref_eq ] in
-    Func.Import { params; result; module_ = "runtime"; name = descr.name }
+    Func.Import
+      { params; result; typ = None; module_ = runtime_module; name = descr.name }
 
   let global_import (sym : Global_import.t) =
     let module_ =
-      if Compilenv.is_predefined_exception sym then "runtime"
+      if Compilenv.is_predefined_exception sym then runtime_module
       else
         Linkage_name.to_string
         @@ Compilation_unit.get_linkage_name (Symbol.compilation_unit sym)
