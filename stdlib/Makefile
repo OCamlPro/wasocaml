@@ -230,6 +230,17 @@ stdlib__%.cmo:
 %.cmx: %.ml
 	$(CAMLOPT) $(COMPFLAGS) $(OPTCOMPFLAGS) $(shell ./Compflags $@) -c $<
 
+WASMOPT=~/test/wasm/binaryen/bin/wasm-opt
+
+%.wasm: %.wast
+	$(WASMOPT) \
+	  --enable-reference-types --enable-gc --enable-tail-call --enable-exception-handling \
+	  --enable-multivalue \
+	  -O3 -o $@ $<
+
+.PHONY: allwasm
+allwasm: $(OBJS:.cmo=.wasm)
+
 # The dependency on the .ml file is in .depend (since stdlib__Foo.cmx
 # depends on stdlib__foo.ml)
 stdlib__%.cmx:
