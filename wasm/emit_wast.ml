@@ -1793,7 +1793,13 @@ module Conv = struct
       (* Func_id.name (Func_id.of_closure_id id) *)
     in
     let params = List.init arity (fun _ -> ref_eq) @ [ Type.Rvar Env ] in
-    Func.Import { params; result = [ ref_eq ]; module_; name }
+    Func.Import
+      { params
+      ; result = [ ref_eq ]
+      ; typ = Some (Func { arity })
+      ; module_
+      ; name
+      }
 
   let func_1_and_env =
     let env =
