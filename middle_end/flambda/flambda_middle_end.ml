@@ -228,11 +228,13 @@ let lambda_to_clambda ~backend ~prefixname ~ppf_dump
     | Some _ -> true
   in
   let wasm_contents =
-    let w =
-      Profile.record_call "emit_wast" (fun () ->
-          Emit_wast.emit ~to_file:do_wasm ~output_prefix:prefixname program)
-    in
-    Some w
+    try
+      Some (
+        Profile.record_call "emit_wast" (fun () ->
+            Emit_wast.emit ~to_file:do_wasm ~output_prefix:prefixname program))
+    with Failure s ->
+      Format.eprintf "No wasm generated@.%s@." s;
+      None
   in
   let clambda, preallocated_blocks, constants =
     Profile.record_call "backend" (fun () ->

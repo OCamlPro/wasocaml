@@ -1548,16 +1548,18 @@ module Conv = struct
            ; value = i32 value
            } )
     | Pbigarrayref _ | Pbigarrayset _ | Pbigarraydim _ | Pbigstring_load _
-    | Pbigstring_set _ ->
-      unimplemented args
+    | Pbigstring_set _
     | Pstring_load _ | Pbytes_load _ | Pbytes_set _ | Pbswap16 | Pbbswap _
-    | Pint_as_pointer ->
-      unimplemented args
+    | Pint_as_pointer
     | _ ->
       let msg =
         Format.asprintf "TODO prim %a" Printclambda_primitives.primitive prim
       in
-      failwith msg
+      if ignore_unimplemented then begin
+        Format.eprintf "%s@." msg;
+        unimplemented args
+      end
+      else failwith msg
 
   let conv_functions ~top_env (flambda : Flambda.program) =
     let constant_sets =
