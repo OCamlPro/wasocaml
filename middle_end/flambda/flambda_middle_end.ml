@@ -227,13 +227,17 @@ let lambda_to_clambda ~backend ~prefixname ~ppf_dump
     | None -> false
     | Some _ -> true
   in
-  if do_wasm then
-    Profile.record_call "emit_wast" (fun () -> Emit_wast.emit ~output_prefix:prefixname program);
-
+  let wasm_contents =
+    let w =
+      Profile.record_call "emit_wast" (fun () ->
+          Emit_wast.emit ~to_file:do_wasm ~output_prefix:prefixname program)
+    in
+    Some w
+  in
   let clambda, preallocated_blocks, constants =
     Profile.record_call "backend" (fun () ->
       (program, export)
-      |> Flambda_to_clambda.convert ~ppf_dump
+      |> Flambda_to_clambda.convert ~ppf_dump ~wasm_contents
       |> flambda_raw_clambda_dump_if ppf_dump
       |> (fun { Flambda_to_clambda. expr; preallocated_blocks;
                 structured_constants; exported; } ->

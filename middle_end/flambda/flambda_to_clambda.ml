@@ -713,7 +713,7 @@ type result = {
   exported : Export_info.t;
 }
 
-let convert ~ppf_dump (program, exported_transient) : result =
+let convert ~ppf_dump ~wasm_contents (program, exported_transient) : result =
   let current_unit =
     let closures =
       Closure_id.Map.keys (Flambda_utils.make_closure_map program)
@@ -774,5 +774,6 @@ let convert ~ppf_dump (program, exported_transient) : result =
       ~imported_offset_fv:imported_units.fv_offset_table
       ~constant_closures:current_unit.constant_closures
       ~wasm_offsets
+      ~wasm_contents
   in
   { expr; preallocated_blocks; structured_constants; exported; }

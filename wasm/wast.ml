@@ -53,6 +53,11 @@ module Cst = struct
   let atom name = Atom name
 end
 
+type t = {
+  module_ : Cst.t;
+  register : Cst.t;
+}
+
 module C = struct
   open Cst
 

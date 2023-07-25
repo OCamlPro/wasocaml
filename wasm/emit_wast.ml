@@ -2419,7 +2419,11 @@ let run ~output_prefix (flambda : Flambda.program) =
     Wast.C.register (Linkage_name.to_string ln)
   in
   (* Format.printf "@.%a@." ToWasm.Cst.emit wasm; *)
-  Profile.record_call "output_wasm" (fun () ->
-      output_file ~output_prefix ~module_:wasm ~register )
+  Wast.{ module_ = wasm; register }
 
-let emit ~output_prefix (flambda : Flambda.program) = run ~output_prefix flambda
+let emit ~to_file ~output_prefix (flambda : Flambda.program) =
+  let r = run ~output_prefix flambda in
+  if to_file then
+    Profile.record_call "output_wasm" (fun () ->
+        output_file ~output_prefix ~module_:r.module_ ~register:r.register );
+  r

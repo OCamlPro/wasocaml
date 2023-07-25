@@ -96,6 +96,7 @@ type t = private {
      indexed by set of closures ID. *)
   recursive : Variable.Set.t Set_of_closures_id.Map.t;
   wasm_offsets : Wasm_closure_offsets.t;
+  wasm_contents : Wast.t option;
 }
 
 type transient = private {
@@ -129,6 +130,7 @@ val create
   -> invariant_params:Variable.Set.t Variable.Map.t Set_of_closures_id.Map.t
   -> recursive:Variable.Set.t Set_of_closures_id.Map.t
   -> wasm_offsets:Wasm_closure_offsets.t
+  -> wasm_contents:Wast.t option
   -> t
 
 val create_transient
@@ -161,6 +163,7 @@ val t_of_transient
   -> imported_offset_fv:int Var_within_closure.Map.t
   -> constant_closures:Closure_id.Set.t
   -> wasm_offsets:Wasm_closure_offsets.t
+  -> wasm_contents:Wast.t option
   -> t
 
 (** Union of export information.  Verifies that there are no identifier

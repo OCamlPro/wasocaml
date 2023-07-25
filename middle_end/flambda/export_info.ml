@@ -147,6 +147,7 @@ type t = {
   invariant_params : Variable.Set.t Variable.Map.t Set_of_closures_id.Map.t;
   recursive : Variable.Set.t Set_of_closures_id.Map.t;
   wasm_offsets : Wasm_closure_offsets.t;
+  wasm_contents : Wast.t option;
 }
 
 type transient = {
@@ -171,6 +172,7 @@ let empty : t = {
   invariant_params = Set_of_closures_id.Map.empty;
   recursive = Set_of_closures_id.Map.empty;
   wasm_offsets = Wasm_closure_offsets.empty;
+  wasm_contents = None;
 }
 
 let opaque_transient ~compilation_unit ~root_symbol : transient =
@@ -193,7 +195,7 @@ let opaque_transient ~compilation_unit ~root_symbol : transient =
 
 let create ~sets_of_closures ~values ~symbol_id
       ~offset_fun ~offset_fv ~constant_closures
-      ~invariant_params ~recursive ~wasm_offsets =
+      ~invariant_params ~recursive ~wasm_offsets ~wasm_contents =
   { sets_of_closures;
     values;
     symbol_id;
@@ -203,6 +205,7 @@ let create ~sets_of_closures ~values ~symbol_id
     invariant_params;
     recursive;
     wasm_offsets;
+    wasm_contents;
   }
 
 let create_transient
@@ -225,7 +228,7 @@ let t_of_transient transient
       ~program:_
       ~local_offset_fun ~local_offset_fv
       ~imported_offset_fun ~imported_offset_fv
-      ~constant_closures ~wasm_offsets =
+      ~constant_closures ~wasm_offsets ~wasm_contents =
   let offset_fun =
     let fold_map set =
       Closure_id.Map.fold (fun key value unchanged ->
@@ -260,6 +263,7 @@ let t_of_transient transient
     offset_fv;
     constant_closures;
     wasm_offsets;
+    wasm_contents;
   }
 
 let merge (t1 : t) (t2 : t) : t =
@@ -299,7 +303,8 @@ let merge (t1 : t) (t2 : t) : t =
         t1.recursive t2.recursive;
     wasm_offsets =
       Wasm_closure_offsets.merge
-        t1.wasm_offsets t2.wasm_offsets
+        t1.wasm_offsets t2.wasm_offsets;
+    wasm_contents = None
   }
 
 let find_value eid map =

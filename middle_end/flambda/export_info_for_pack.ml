@@ -214,6 +214,8 @@ let import_for_pack ~pack_units ~pack (exp : Export_info.t) =
     ~wasm_offsets:
       (Wasm_closure_offsets.import_for_pack ~pack_units ~pack
          exp.wasm_offsets)
+    ~wasm_contents:None (* TODO WASM *)
+
 
 let clear_import_state () =
   Set_of_closures_id.Tbl.clear imported_function_declarations_table;
