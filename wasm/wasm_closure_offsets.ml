@@ -162,7 +162,8 @@ let merge a b =
   { function_accessors; free_variable_accessors; set_of_closures_id_types }
 
 let import_for_pack ~pack_units:_ ~pack:_ _t =
-  failwith "TODO wasm import_for_pack"
+  Format.eprintf "TODO wasm import_for_pack";
+  empty
 
 let compute (program : Flambda.program) =
   let state = ref empty in
