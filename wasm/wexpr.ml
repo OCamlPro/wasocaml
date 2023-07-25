@@ -212,6 +212,12 @@ and no_value_expression =
       ; if_expr : no_value_expression
       ; else_expr : no_value_expression
       }
+  | NV_call of
+      { typ : Type.Var.t
+      ; args : t list
+      ; func : Func_id.t
+      ; tail : bool
+      }
   | NV
 
 and no_return =
@@ -445,6 +451,9 @@ and print_no_value ppf no_value =
   | NV_br_if { cond; if_true } ->
     Format.fprintf ppf "@[<hov 2>Br_if(%a -> (%a))@]" print cond Block_id.print
       if_true
+  | NV_call { args; func } ->
+    Format.fprintf ppf "@[<hov 2>Call(%a(%a))@]" Func_id.print func
+      (print_list print ",") args
 
 and print_no_return ppf no_return =
   match no_return with
@@ -570,6 +579,8 @@ let required_locals body =
       let acc = loop acc cond in
       let acc = loop_no_value acc if_expr in
       loop_no_value acc else_expr
+    | NV_call { args; func = _ } ->
+      List.fold_left (fun acc arg -> loop acc arg) acc args
   and loop_no_return acc nr =
     match nr with
     | NR_if_then_else { cond; if_expr; else_expr } ->

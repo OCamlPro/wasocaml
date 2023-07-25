@@ -751,13 +751,32 @@ module Conv = struct
       let effect : Expr.t = conv_expr ~tail:false expr_env expr in
       conv_body env body (drop effect :: effects)
     | End _end_symbol ->
+      let not_really_start : Func_id.t = Runtime "not_really_start" in
+      let func_type = Type.Var.{ params = []; results = [] } in
+      let typ = Type.Var.C_import_func func_type in
       [ Decl.Func
-          { name = Start
+          { name = not_really_start
           ; descr =
               Decl
                 { params = []
                 ; type_decl = None
                 ; body = No_value (NV_seq (List.rev effects))
+                }
+          }
+      ; Decl.Func
+          { name = Start
+          ; descr =
+              Decl
+                { params = []
+                ; type_decl = None
+                ; body =
+                    No_value
+                      (NV_call
+                         { typ
+                         ; func = not_really_start
+                         ; args = []
+                         ; tail = false
+                         } )
                 }
           }
       ]
@@ -2261,6 +2280,16 @@ module ToWasm = struct
       ]
     | NV_br_if { cond; if_true } -> [ C.br_if if_true (conv_expr_group cond) ]
     | NV -> []
+    | NV_call { typ; args; func; tail } ->
+      let args = List.map conv_expr_group args in
+      if tail then
+        (* This should be
+           {[ [ C.return_call func args ] ]}
+           But return call is not handled by the gc branch so we play a trick
+           with return_call_ref
+        *)
+        [ C.return_call_ref typ (args @ [ C.ref_func func ]) ]
+      else [ C.call func args ]
 
   and conv_no_return (nr : Expr.no_return) =
     match nr with
