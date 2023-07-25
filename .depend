@@ -2342,6 +2342,7 @@ asmcomp/asmlink.cmo : \
     utils/misc.cmi \
     parsing/location.cmi \
     utils/load_path.cmi \
+    wasm/link_wast.cmi \
     asmcomp/emitaux.cmi \
     asmcomp/emit.cmi \
     utils/consistbl.cmi \
@@ -2360,6 +2361,7 @@ asmcomp/asmlink.cmx : \
     utils/misc.cmx \
     parsing/location.cmx \
     utils/load_path.cmx \
+    wasm/link_wast.cmx \
     asmcomp/emitaux.cmx \
     asmcomp/emit.cmx \
     utils/consistbl.cmx \
@@ -3886,7 +3888,6 @@ wasm/emit_wast.cmo : \
     lambda/lambda.cmi \
     middle_end/flambda/initialize_symbol_to_let_symbol.cmi \
     middle_end/flambda/flambda_utils.cmi \
-    middle_end/flambda/flambda_iterators.cmi \
     middle_end/flambda/flambda.cmi \
     middle_end/compilenv.cmi \
     middle_end/compilation_unit.cmi \
@@ -3918,7 +3919,6 @@ wasm/emit_wast.cmx : \
     lambda/lambda.cmx \
     middle_end/flambda/initialize_symbol_to_let_symbol.cmx \
     middle_end/flambda/flambda_utils.cmx \
-    middle_end/flambda/flambda_iterators.cmx \
     middle_end/flambda/flambda.cmx \
     middle_end/compilenv.cmx \
     middle_end/compilation_unit.cmx \
@@ -3927,13 +3927,27 @@ wasm/emit_wast.cmx : \
     middle_end/flambda/allocated_const.cmx \
     wasm/emit_wast.cmi
 wasm/emit_wast.cmi : \
+    wasm/wast.cmo \
     middle_end/flambda/flambda.cmi
+wasm/link_wast.cmo : \
+    wasm/wast.cmo \
+    utils/misc.cmi \
+    wasm/emit_wast.cmi \
+    wasm/link_wast.cmi
+wasm/link_wast.cmx : \
+    wasm/wast.cmx \
+    utils/misc.cmx \
+    wasm/emit_wast.cmx \
+    wasm/link_wast.cmi
+wasm/link_wast.cmi : \
+    wasm/wast.cmo
 wasm/wasm_closure_offsets.cmo : \
     middle_end/variable.cmi \
     middle_end/flambda/base_types/var_within_closure.cmi \
     middle_end/flambda/base_types/set_of_closures_id.cmi \
     utils/misc.cmi \
     middle_end/flambda/flambda_utils.cmi \
+    middle_end/flambda/flambda_iterators.cmi \
     middle_end/flambda/flambda.cmi \
     middle_end/flambda/base_types/closure_id.cmi \
     wasm/wasm_closure_offsets.cmi
@@ -3943,6 +3957,7 @@ wasm/wasm_closure_offsets.cmx : \
     middle_end/flambda/base_types/set_of_closures_id.cmx \
     utils/misc.cmx \
     middle_end/flambda/flambda_utils.cmx \
+    middle_end/flambda/flambda_iterators.cmx \
     middle_end/flambda/flambda.cmx \
     middle_end/flambda/base_types/closure_id.cmx \
     wasm/wasm_closure_offsets.cmi
@@ -4424,6 +4439,7 @@ middle_end/flambda/effect_analysis.cmx : \
 middle_end/flambda/effect_analysis.cmi : \
     middle_end/flambda/flambda.cmi
 middle_end/flambda/export_info.cmo : \
+    wasm/wast.cmo \
     wasm/wasm_closure_offsets.cmi \
     middle_end/variable.cmi \
     middle_end/flambda/base_types/var_within_closure.cmi \
@@ -4437,6 +4453,7 @@ middle_end/flambda/export_info.cmo : \
     middle_end/flambda/base_types/closure_id.cmi \
     middle_end/flambda/export_info.cmi
 middle_end/flambda/export_info.cmx : \
+    wasm/wast.cmx \
     wasm/wasm_closure_offsets.cmx \
     middle_end/variable.cmx \
     middle_end/flambda/base_types/var_within_closure.cmx \
@@ -4450,6 +4467,7 @@ middle_end/flambda/export_info.cmx : \
     middle_end/flambda/base_types/closure_id.cmx \
     middle_end/flambda/export_info.cmi
 middle_end/flambda/export_info.cmi : \
+    wasm/wast.cmo \
     wasm/wasm_closure_offsets.cmi \
     middle_end/variable.cmi \
     middle_end/flambda/base_types/var_within_closure.cmi \
@@ -4817,6 +4835,7 @@ middle_end/flambda/flambda_to_clambda.cmx : \
     middle_end/flambda/allocated_const.cmx \
     middle_end/flambda/flambda_to_clambda.cmi
 middle_end/flambda/flambda_to_clambda.cmi : \
+    wasm/wast.cmo \
     middle_end/symbol.cmi \
     middle_end/flambda/flambda.cmi \
     middle_end/flambda/export_info.cmi \
