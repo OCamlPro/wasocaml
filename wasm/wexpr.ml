@@ -384,7 +384,7 @@ let rec print ppf = function
       (print_list print_no_value ";")
       effects print last
   | If_then_else { cond; if_expr; else_expr } ->
-    Format.fprintf ppf "@[<hov 2>If(%a)Then(%a)Else(%a)@]" print cond print
+    Format.fprintf ppf "@[<hov 2>If(%a)@ Then(%a)@ Else(%a)@]" print cond print
       if_expr print else_expr
   | Let_cont { cont; params; handler; body } ->
     Format.fprintf ppf "@[<hov 2>Let_cont %a(%a) =@ %a@]@ in@ %a" Block_id.print
@@ -409,7 +409,13 @@ let rec print ppf = function
     Format.fprintf ppf "@[<hov 2>Br_table(%a -> (%a) %a@]" print cond
       (print_list Block_id.print " ")
       cases Block_id.print default
-  | Try _ | Throw _ -> failwith "TODO print exn"
+  | Try { body; param = var, typ; result_typ; handler } ->
+    Format.fprintf ppf
+      "@[<v>@[<hov 2>Try -> %a {@ @[<hov 2>%a@ @]}@]@ @[<hov 2>With@ @[<hov 2>%a : %a@ ->@ \
+       @[<hov>%a@]@]@]@]"
+      Type.print_atom result_typ print body Local.print_var var Type.print_atom
+      typ print handler
+  | Throw e -> Format.fprintf ppf "@[<hov 2>Throw (@ %a@ )@]" print e
   | Unit nv -> Format.fprintf ppf "@[<hov 2>Unit (@ %a@ )@]" print_no_value nv
   | NR nr -> print_no_return ppf nr
 
