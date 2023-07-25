@@ -114,6 +114,8 @@ type transient = private {
 (** Export information for a compilation unit that exports nothing. *)
 val empty : t
 
+val empty_with_wasm : Wast.t option -> t
+
 val opaque_transient
   : compilation_unit:Compilation_unit.t
   -> root_symbol:Symbol.t

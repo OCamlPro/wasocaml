@@ -175,6 +175,9 @@ let empty : t = {
   wasm_contents = None;
 }
 
+let empty_with_wasm wasm_contents =
+  { empty with wasm_contents }
+
 let opaque_transient ~compilation_unit ~root_symbol : transient =
   let export_id = Export_id.create compilation_unit in
   let values =

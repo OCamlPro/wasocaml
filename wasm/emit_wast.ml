@@ -2374,6 +2374,13 @@ module ToWasm = struct
   let conv_module module_ = C.module_ (conv_decl module_)
 end
 
+
+(* let output_wast ppf wast = *)
+(*   ToWasm.Cst.emit ppf wast *)
+
+let output_wast ppf wast =
+  Format.pp_print_string ppf wast
+
 let output_file ~output_prefix ~module_ ~register =
   let wastfile = output_prefix ^ ".wast" in
   let oc = open_out_bin wastfile in
@@ -2384,9 +2391,9 @@ let output_file ~output_prefix ~module_ ~register =
       close_out oc )
     (* ~exceptionally:(fun () -> Misc.remove_file wastfile) *)
       (fun () ->
-      ToWasm.Cst.emit ppf module_;
+      output_wast ppf module_;
       Format.fprintf ppf "@\n";
-      ToWasm.Cst.emit ppf register )
+      output_wast ppf register )
 
 let run ~output_prefix (flambda : Flambda.program) =
   State.reset ();
@@ -2421,6 +2428,8 @@ let run ~output_prefix (flambda : Flambda.program) =
     Wast.C.register (Linkage_name.to_string ln)
   in
   (* Format.printf "@.%a@." ToWasm.Cst.emit wasm; *)
+  let wasm = Format.asprintf "%a" ToWasm.Cst.emit wasm in
+  let register = Format.asprintf "%a" ToWasm.Cst.emit register in
   Wast.{ module_ = wasm; register }
 
 let emit ~to_file ~output_prefix (flambda : Flambda.program) =

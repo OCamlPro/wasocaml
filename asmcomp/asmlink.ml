@@ -351,6 +351,22 @@ let link ~ppf_dump objfiles output_name =
       (fun (info, file_name, crc) -> check_consistency file_name info crc)
       units_tolink;
     let crc_interfaces = extract_crc_interfaces () in
+    let () =
+      let fl_export =
+        List.filter_map (fun ((ui:Cmx_format.unit_infos), name, _) ->
+            Format.eprintf "name %s ui_name %s@." name ui.ui_name;
+            match ui.ui_export_info with
+            | Clambda _ -> None
+            | Flambda e ->
+                match e.wasm_contents with
+                | None ->
+                    Format.eprintf "No contents@.";
+                    None
+                | Some w -> Some (ui.ui_name, w))
+          units_tolink
+      in
+      Link_wast.link fl_export ~output:output_name;
+    in
     Clflags.ccobjs := !Clflags.ccobjs @ !lib_ccobjs;
     Clflags.all_ccopts := !lib_ccopts @ !Clflags.all_ccopts;
                                                  (* put user's opts first *)
