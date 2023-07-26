@@ -13,9 +13,10 @@ let mode = Binarien
 let block_repr = Struct_block
 
 let unmangle_module_name = true
+let uncapitalize_module_name = false
 
 (** module names represents the wasm file path *)
-let module_name_file = true
+let module_name_file = false
 
 let exc_tag_module = "exc_tag"
 let imports_module = "imports"

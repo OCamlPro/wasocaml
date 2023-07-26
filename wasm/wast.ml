@@ -83,7 +83,12 @@ module C = struct
   let module_name module_ =
     let module_ =
       if Wstate.unmangle_module_name && String.starts_with ~prefix:"caml" module_ then
-        let first_char = Char.lowercase_ascii module_.[4] in
+        let first_char =
+          if Wstate.uncapitalize_module_name then
+            Char.lowercase_ascii module_.[4]
+          else
+            module_.[4]
+        in
         let remaining = String.sub module_ 5 (String.length module_ - 5) in
         (String.make 1 first_char) ^ remaining
       else
