@@ -422,6 +422,9 @@ ifeq "$(INSTALL_SOURCE_ARTIFACTS)" "true"
 	   "$(INSTALL_COMPLIBDIR)"
 endif
 	$(INSTALL_DATA) \
+           wasm/*.wast \
+	   "$(INSTALL_LIBDIR)"
+	$(INSTALL_DATA) \
 	  compilerlibs/*.cma \
 	  "$(INSTALL_COMPLIBDIR)"
 	$(INSTALL_DATA) \
