@@ -9,8 +9,8 @@ type mode =
 let mode = Binarien
 (* let mode = Reference *)
 
-(* let block_repr = Array_block *)
-let block_repr = Struct_block
+let block_repr = Array_block
+(* let block_repr = Struct_block *)
 
 let unmangle_module_name = true
 let uncapitalize_module_name = false
