@@ -5,15 +5,18 @@
   (type $Gen_block (array (mut (ref eq))))
 
 
-  (import "./spectest.mjs" "print_string" (func $print_string (param (ref $String))))
-  (import "./spectest.mjs" "print_string_mem"
+  (import "js_runtime" "print_string" (func $print_string (param (ref $String))))
+  (import "js_runtime" "print_string_mem"
     (func $print_string_mem (param i32) (param i32)))
-  (import "./spectest.mjs" "print_endline" (func $print_endline))
+  (import "js_runtime" "print_endline" (func $print_endline))
 
-  (import "./spectest.mjs" "print_i32" (func $print_i32 (param i32)))
-  (import "./spectest.mjs" "print_f64" (func $print_f64 (param f64)))
+  (import "js_runtime" "print_i32" (func $print_i32 (param i32)))
+  (import "js_runtime" "print_f64" (func $print_f64 (param f64)))
 
-  (import "./spectest.mjs" "memory" (memory $mem 1))
+  (import "js_runtime" "putchar" (func $putchar (param i32)))
+  (import "js_runtime" "flush" (func $flush))
+
+  (import "js_runtime" "memory" (memory $mem 1))
 
   (import "runtime" "string_eq"
     (func $string_eq (param $a (ref eq)) (param $b (ref eq)) (result (ref eq))))
@@ -151,9 +154,36 @@
     ;; Conversions
     ;; ===========
 
-  (func (export "caml_format_int") (param (ref eq)) (param (ref eq)) (result (ref eq))
-      ;; TODO
-      (unreachable))
+   ;; Stolen from Jerome's wasm_of_ocaml
+   (func $format_int_default (param $d i32) (result (ref eq))
+      (local $s (ref $String))
+      (local $negative i32) (local $i i32) (local $n i32)
+      (if (i32.lt_s (local.get $d) (i32.const 0))
+         (then
+            (local.set $negative (i32.const 1))
+            (local.set $i (i32.const 1))
+            (local.set $d (i32.sub (i32.const 0) (local.get $d)))))
+      (local.set $n (local.get $d))
+      (loop $count
+         (local.set $i (i32.add (local.get $i) (i32.const 1)))
+         (local.set $n (i32.div_u (local.get $n) (i32.const 10)))
+         (br_if $count (local.get $n)))
+      (local.set $s (array.new $String (i32.const 0) (local.get $i)))
+      (loop $write
+         (local.set $i (i32.sub (local.get $i) (i32.const 1)))
+         (array.set $String (local.get $s) (local.get $i)
+            (i32.add (i32.const 48)
+               (i32.rem_u (local.get $d) (i32.const 10))))
+         (local.set $d (i32.div_u (local.get $d) (i32.const 10)))
+         (br_if $write (local.get $d)))
+      (if (local.get $negative)
+         (then
+            (array.set $String (local.get $s) (i32.const 0)
+               (i32.const 45)))) ;; '-'
+      (local.get $s))
+
+  (func (export "caml_format_int") (param $format (ref eq)) (param $d (ref eq)) (result (ref eq))
+      (call $format_int_default (i31.get_s (ref.cast i31 (local.get $d)))))
 
   (func (export "caml_format_float") (param (ref eq)) (param (ref eq)) (result (ref eq))
       ;; TODO
@@ -184,18 +214,39 @@
 
   (func (export "caml_ml_flush") (param (ref eq))
                                  (result (ref eq))
-      ;; TODO
-      (unreachable))
+      (call $flush)
+      (i31.new (i32.const 0)))
+
+  (func $cons (param $h (ref eq)) (param $t (ref eq)) (result (ref $Gen_block))
+     (array.init_static $Gen_block
+       (i31.new (i32.const 0))
+       (local.get $h)
+       (local.get $t)))
+
+  (global $empty_list (ref eq) (i31.new (i32.const 0)))
 
   (func (export "caml_ml_out_channels_list") (param (ref eq))
                                  (result (ref eq))
-      ;; TODO
-      (unreachable))
+     (call $cons (i31.new (i32.const 0)) (global.get $empty_list))
+  )
 
-  (func (export "caml_ml_output") (param (ref eq)) (param (ref eq)) (param (ref eq)) (param (ref eq))
-                                   (result (ref eq))
-      ;; TODO
-      (unreachable))
+   (func $caml_ml_output (export "caml_ml_output")
+      (param $ch (ref eq)) (param $s (ref eq)) (param $vpos (ref eq))
+      (param $vlen (ref eq)) (result (ref eq))
+      (local $pos i32) (local $len i32)
+      (local.set $pos (i31.get_s (ref.cast i31 (local.get $vpos))))
+      (local.set $len (i31.get_s (ref.cast i31 (local.get $vlen))))
+      (loop $loop
+         (if (i32.gt_s (local.get $len) (i32.const 0))
+            (then
+               (call $putchar
+                  (array.get $String
+                    (ref.cast $String (local.get $s))
+                    (local.get $pos)))
+               (local.set $pos (i32.add (local.get $pos) (i32.const 1)))
+               (local.set $len (i32.sub (local.get $len) (i32.const 1)))
+               (br $loop))))
+      (i31.new (i32.const 0)))
 
   (func (export "caml_ml_output_bytes") (param (ref eq)) (param (ref eq)) (param (ref eq)) (param (ref eq))
                                    (result (ref eq))
