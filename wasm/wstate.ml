@@ -18,7 +18,7 @@ let uncapitalize_module_name = false
 (** module names represents the wasm file path *)
 let module_name_file = false
 
-let exc_tag_module = "exc_tag"
+let exc_tag_module = "exn_tag"
 let imports_module = "imports"
 let runtime_module = "runtime"
 
