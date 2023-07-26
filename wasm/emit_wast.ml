@@ -1567,10 +1567,8 @@ module Conv = struct
            ; value = i32 value
            } )
     | Pbigarrayref _ | Pbigarrayset _ | Pbigarraydim _ | Pbigstring_load _
-    | Pbigstring_set _
-    | Pstring_load _ | Pbytes_load _ | Pbytes_set _ | Pbswap16 | Pbbswap _
-    | Pint_as_pointer
-    | _ ->
+    | Pbigstring_set _ | Pstring_load _ | Pbytes_load _ | Pbytes_set _
+    | Pbswap16 | Pbbswap _ | Pint_as_pointer | _ ->
       let msg =
         Format.asprintf "TODO prim %a" Printclambda_primitives.primitive prim
       in
@@ -1791,7 +1789,12 @@ module Conv = struct
     let params = List.init descr.arity (fun _ -> ref_eq) in
     let result = [ ref_eq ] in
     Func.Import
-      { params; result; typ = None; module_ = runtime_module; name = descr.name }
+      { params
+      ; result
+      ; typ = None
+      ; module_ = runtime_module
+      ; name = descr.name
+      }
 
   let global_import (sym : Global_import.t) =
     let module_ =
@@ -2403,12 +2406,10 @@ module ToWasm = struct
   let conv_module module_ = C.module_ (conv_decl module_)
 end
 
-
 (* let output_wast ppf wast = *)
 (*   ToWasm.Cst.emit ppf wast *)
 
-let output_wast ppf wast =
-  Format.pp_print_string ppf wast
+let output_wast ppf wast = Format.pp_print_string ppf wast
 
 let output_file ~output_prefix ~module_ ~register =
   let wastfile = output_prefix ^ ".wast" in
