@@ -18,9 +18,9 @@ let out_file (name, (wast : Wast.t)) =
       Format.fprintf ppf "@.";
       close_out oc )
     (fun () ->
-      Emit_wast.output_wast ppf wast.module_;
-      Format.fprintf ppf "@\n";
-      Emit_wast.output_wast ppf wast.register );
+        Emit_wast.output_wast ppf wast.module_;
+        Format.fprintf ppf "@\n";
+        Emit_wast.output_wast ppf wast.register );
   { name; filename }
 
 let emit_text = "--emit-text"
@@ -32,8 +32,8 @@ let options =
   ; "--enable-exception-handling"
   ; "--enable-tail-call"
   ]
-(* let wasm_merge = "wasm-merge" *)
-let wasm_merge = "/home/chambart/test/wasm/binaryen/bin/wasm-merge"
+
+let wasm_merge = "wasm-merge"
 
 let runtime =
   [ (Wstate.exc_tag_module, Wstate.exc_tag_module)
@@ -54,12 +54,12 @@ let merge_files ~runtime_dir ~text files output =
     in
     Filename.quote_command wasm_merge
       ( options @ [ skip_export_conflicts ] @ text @ runtime_files @ ocaml_files
-      @ [ "-o"; output ] )
+        @ [ "-o"; output ] )
   in
   Format.printf "%s@." command;
   let code = Sys.command command in
   if code <> 0 then begin Format.eprintf "wasm-merge failed@."
-    (* failwith "Wasm link error" *)
+  (* failwith "Wasm link error" *)
   end
 
 let rec make_directory dir =
