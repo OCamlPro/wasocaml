@@ -8,12 +8,37 @@ It uses the Flambda IR of the compiler as a source language and targets [Wasm-GC
 
 ### Install
 
+#### Binaryen
+
 You need the `wasm-merge` binary in your path. You can get it from the main branch of [Binaryen].
+
+```shell-session
+$ git clone https://github.com/WebAssembly/binaryen.git
+$ cd binaryen
+$ git submodule init
+$ git submodule update
+$ cmake . && make
+$ sudo make install
+```
+
+#### Wasocaml
+
+You can now build and install Wasocaml.
 
 ```shell-session
 $ ./configure
 $ make
-$ make install
+$ sudo make install
+```
+
+### Usage
+
+Running the compiler will produce two files: `a.out.wasm` (the Wasm binary) and `a.out.wast` (the Wast text format).
+
+```shell-session
+$ /usr/local/bin/ocamlopt file.ml
+$ ls
+a.out a.out.wasm a.out.wast
 ```
 
 [Binaryen]: https://github.com/WebAssembly/binaryen

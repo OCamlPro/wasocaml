@@ -57,6 +57,8 @@ _build
 /ocamlopt.opt
 /ocamlnat
 /_opam
+/o*.wast
+/o*.wasm
 
 # specific files and patterns in sub-directories
 
@@ -120,6 +122,8 @@ _build
 /ocamldoc/test_stdlib
 /ocamldoc/test_latex
 /ocamldoc/test
+/ocamldoc/o*.wast
+/ocamldoc/o*.wasm
 
 /ocamltest/.dep
 /ocamltest/ocamltest
@@ -130,6 +134,8 @@ _build
 /ocamltest/tsl_parser.ml
 /ocamltest/tsl_parser.mli
 /ocamltest/ocamltest.html
+/ocamltest/o*.wast
+/ocamltest/o*.wasm
 
 /otherlibs/*/.dep
 /otherlibs/dynlink/extract_crc
@@ -267,6 +273,8 @@ _build
 /tools/make_opcodes.ml
 /tools/caml-tex
 /tools/eventlog_metadata
+/tools/*.wast
+/tools/*.wasm
 
 /toplevel/byte/topeval.mli
 /toplevel/byte/trace.mli
