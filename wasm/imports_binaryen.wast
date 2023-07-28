@@ -546,6 +546,8 @@
 
   (func (export "caml_gc_major") (param (ref eq)) (result (ref eq))
     (i31.new (i32.const 0)))
+  (func (export "caml_gc_minor") (param (ref eq)) (result (ref eq))
+    (i31.new (i32.const 0)))
 
   (func (export "caml_sys_const_naked_pointers_checked") (param (ref eq)) (result (ref eq))
     (i31.new (i32.const 0)))
