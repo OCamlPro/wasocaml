@@ -1803,7 +1803,7 @@ module Conv = struct
         Linkage_name.to_string
         @@ Compilation_unit.get_linkage_name (Symbol.compilation_unit sym)
     in
-    let name = WSymbol.export_name sym in
+    let name = Wident.acceptable_string (WSymbol.export_name sym) in
     Const.Import { typ = ref_eq; module_; name }
 
   let func_import ({ id; arity } : Func_import.t) =

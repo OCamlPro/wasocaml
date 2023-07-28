@@ -56,7 +56,7 @@
   ;; functions
   ;; =========
 
-  (func (export "compare_ints") (param $a (ref eq)) (param $b (ref eq)) (result (ref eq))
+  (func (export "compare_ints") (param $a (ref eq)) (param $b (ref eq)) (result (ref i31))
     (local $a' i32) (local $b' i32)
     (local.set $a' (i31.get_s (ref.cast i31 (local.get $a))))
     (local.set $b' (i31.get_s (ref.cast i31 (local.get $b))))
@@ -66,7 +66,7 @@
         (i32.lt_s (local.get $a') (local.get $b'))))
   )
 
-  (func (export "compare_floats") (param $a (ref eq)) (param $b (ref eq)) (result (ref eq))
+  (func (export "compare_floats") (param $a (ref eq)) (param $b (ref eq)) (result (ref i31))
     (local $a' f64) (local $b' f64)
     (local.set $a' (struct.get $Float 0 (ref.cast $Float (local.get $a))))
     (local.set $b' (struct.get $Float 0 (ref.cast $Float (local.get $b))))
@@ -82,6 +82,14 @@
   ;; ======
   ;; Arrays
   ;; ======
+
+  (func $array_length (export "array_length") (param $arr (ref eq)) (result (ref eq))
+    (i31.new (array.len $FloatArray
+      (block $floatarray (result (ref $FloatArray))
+        (return (i31.new (array.len $Array (ref.cast $Array
+          (br_on_cast $floatarray (ref eq) (ref $FloatArray) (local.get $arr))))))
+        )))
+  )
 
   ;; (func $array_length (export "array_length") (param $arr (ref eq)) (result (ref eq))
   ;;   (i31.new (array.len
@@ -122,8 +130,17 @@
   ;;       (local.get $field)))
   ;; )
 
-  ;; (export "array_get_safe" (func $array_get_safe))
-  ;; (export "array_get_unsafe" (func $array_get_safe))
+  (func $array_get_safe (export "array_get_safe") (param (ref eq)) (param (ref eq)) (result (ref eq))
+    (unreachable)
+  )
+
+  (func $array_set_unsafe (export "array_set_unsafe") (param (ref eq)) (param (ref eq)) (param (ref eq)) (result (ref eq))
+    (unreachable)
+  )
+
+  (func $array_get_unsafe (export "array_get_unsafe") (param (ref eq)) (param (ref eq)) (result (ref eq))
+    (unreachable)
+  )
 
   ;; (func $array_set_float_unsafe (param $arr (ref $FloatArray)) (param $field (ref eq))
   ;;                               (param $value (ref eq)) (result (ref eq))
