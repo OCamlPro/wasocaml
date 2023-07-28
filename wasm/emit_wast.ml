@@ -1171,9 +1171,12 @@ module Conv = struct
       (* This is tail in the meaning of wasm: the return value of
          that expression is the return value of the current function.
          It will use stack space, but it is ok to use the call_return *)
+      (* Is that true ? This is not the case in V8 *)
       let handler = conv_expr ~tail (bind_var env var) handler in
       Try
-        { body = conv_expr ~tail env body
+        {
+          (* body = conv_expr ~tail env body *)
+          body = conv_expr ~tail:false env body
         ; param = (local, ref_eq)
         ; handler
         ; result_typ = ref_eq
