@@ -23,12 +23,21 @@ $ sudo make install
 
 #### Wasocaml
 
-You can now build and install Wasocaml.
+You can now build and install Wasocaml. You can either build the compiler locally or install a switch with the Wasocaml compiler.
+
+##### Locally
 
 ```shell-session
 $ ./configure
 $ make
 $ sudo make install
+```
+
+##### Opam switch
+
+
+```shell-session
+$ opam switch create wasocaml --repos default,wasocaml=git+https://github.com/ocamlpro/wasocaml-opam.git ocaml-variants.4.14.1+wasocaml
 ```
 
 ### Usage
@@ -41,7 +50,10 @@ $ ls
 a.out a.out.wasm a.out.wast
 ```
 
+For a complete example using the compiler installed as an opam switch, see [wasocaml-demo].
+
 [Binaryen]: https://github.com/WebAssembly/binaryen
 [OCaml]: https://ocaml.org
 [Wasm]: https://webassembly.org
 [Wasm-GC]: https://github.com/WebAssembly/gc
+[wasocaml-demo]: https://github.com/ocamlpro/wasocaml-demo

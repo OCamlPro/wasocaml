@@ -238,6 +238,9 @@ _build
 /testsuite/tools/parsecmm.ml
 /testsuite/tools/parsecmm.mli
 
+/test_kb_wasm/*.wasm
+/test_kb_wasm/*.wast
+
 /tools/ocamldep
 /tools/ocamldep.opt
 /tools/ocamlprof
