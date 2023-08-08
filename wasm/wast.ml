@@ -19,7 +19,7 @@ module Cst = struct
   let print_lst f ppf l =
     Format.pp_print_list ~pp_sep:(fun ppf () -> Format.fprintf ppf "@ ") f ppf l
 
-  let rec emit ppf = function
+  let rec pp ppf = function
     | Int i -> Format.fprintf ppf "%Li" i
     | Float f -> Format.fprintf ppf "%h" f
     | String s -> Format.fprintf ppf "\"%s\"" s
@@ -31,12 +31,72 @@ module Cst = struct
         else Format.pp_print_string ppf name
       | _ ->
         Format.fprintf ppf "@[<v 2>@[<hov 2>";
-        Format.fprintf ppf "(%s@ %a@]" name (print_lst emit) args_h;
+        Format.fprintf ppf "(%s@ %a@]" name (print_lst pp) args_h;
         ( match args_v with
         | [] -> ()
-        | _ -> Format.fprintf ppf "@ %a" (print_lst emit) args_v );
+        | _ -> Format.fprintf ppf "@ %a" (print_lst pp) args_v );
         Format.fprintf ppf ")@]"
     end
+
+  let rec emit ~indent buf = function
+    | Int i -> Buffer.add_string buf (Int64.to_string i)
+    | Float f -> Buffer.add_string buf (Printf.sprintf "%h" f)
+    | String s ->
+        Buffer.add_char buf '"';
+        Buffer.add_string buf s;
+        Buffer.add_char buf '"'
+    | Atom s ->
+        Buffer.add_string buf s
+    | Node { name; args_h; args_v; force_paren } -> begin
+      match (args_h, args_v) with
+      | [], [] ->
+          if force_paren then begin
+            Buffer.add_char buf '(';
+            Buffer.add_string buf name;
+            Buffer.add_char buf ')'
+          end else
+            Buffer.add_string buf name
+      | _ ->
+          Buffer.add_char buf '(';
+          Buffer.add_string buf name;
+          Buffer.add_char buf ' ';
+          emit_h_list ~indent buf args_h;
+          (match args_v with
+           | [] -> ()
+           | _ ->
+               Buffer.add_char buf '\n';
+               emit_v_list ~indent buf args_v);
+          Buffer.add_char buf ')'
+    end
+
+  and emit_h_list ~indent buf = function
+    | [] -> ()
+    | [v] ->
+        emit ~indent buf v
+    | h :: t ->
+        emit ~indent buf h;
+        Buffer.add_char buf ' ';
+        emit_h_list ~indent buf t
+
+  and emit_v_list ~indent buf = function
+    | [] -> ()
+    | [v] ->
+        for _ = 1 to indent do
+          Buffer.add_char buf ' '
+        done;
+        emit ~indent:(1+indent) buf v
+    | h :: t ->
+        for _ = 1 to indent do
+          Buffer.add_char buf ' '
+        done;
+        emit ~indent:(1+indent) buf h;
+        Buffer.add_char buf '\n';
+        emit_v_list ~indent buf t
+
+  let emit ppf e =
+    let b = Buffer.create 100 in
+    emit ~indent:0 b e;
+    Format.pp_print_string ppf (Buffer.contents b)
 
   let nodev name args =
     Node { name; args_h = []; args_v = args; force_paren = false }

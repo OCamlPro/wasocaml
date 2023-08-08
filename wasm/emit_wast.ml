@@ -2461,8 +2461,9 @@ let run ~output_prefix (flambda : Flambda.program) =
     Wast.C.register (Linkage_name.to_string ln)
   in
   (* Format.printf "@.%a@." ToWasm.Cst.emit wasm; *)
-  let wasm = Format.asprintf "%a" ToWasm.Cst.emit wasm in
-  let register = Format.asprintf "%a" ToWasm.Cst.emit register in
+  let emit = if Wstate.pp_wast then ToWasm.Cst.pp else ToWasm.Cst.emit in
+  let wasm = Format.asprintf "%a" emit wasm in
+  let register = Format.asprintf "%a" emit register in
   Wast.{ module_ = wasm; register }
 
 let emit ~to_file ~output_prefix (flambda : Flambda.program) =
