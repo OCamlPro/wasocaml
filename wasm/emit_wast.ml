@@ -26,11 +26,7 @@ module Conv = struct
     val function_return : handler
     val raise : handler -> Expr.t -> Expr.no_return
     val try_with :
-         handler
-      -> local:Local.var
-      -> body:(handler -> Expr.t)
-      -> handler:Expr.t
-      -> Expr.t
+      local:Local.var -> body:(handler -> Expr.t) -> handler:Expr.t -> Expr.t
   end
 
   module Exceptions_native : Exceptions = struct
@@ -38,7 +34,7 @@ module Conv = struct
     let toplevel = ()
     let function_return = ()
     let raise () (e : Expr.t) : Expr.no_return = Throw e
-    let try_with () ~local ~body ~handler : Expr.t =
+    let try_with ~local ~body ~handler : Expr.t =
       Try
         { body = body ()
         ; param = (local, ref_eq)
@@ -65,11 +61,11 @@ module Conv = struct
       | Function_return -> NR_return [ exception_i32; e ]
       | Block block_id -> NR_br { cont = block_id; args = [ e ] }
 
-    let try_with _current_handler ~local ~body ~handler =
+    let try_with ~local ~body ~handler : Expr.t =
       let block_id = Block_id.fresh "exception_handler" in
       let body = body (Block block_id) in
-      ignore (body, local, handler);
-      assert false
+      Let_cont
+        { cont = block_id; params = [ (Some local, ref_eq) ]; handler; body }
   end
 
   let exceptions_module =
@@ -1103,7 +1099,7 @@ module Conv = struct
         (* Is that true ? This is not the case in V8 *)
         conv_expr ~tail:false env body
       in
-      Exceptions.try_with env.current_exception_handler ~local ~body ~handler
+      Exceptions.try_with ~local ~body ~handler
     | Proved_unreachable -> NR Unreachable
     | Let_rec (_bindings, _body) ->
       let msg = Format.asprintf "Value letrec not implemented (yet ?)" in
