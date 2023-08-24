@@ -3864,6 +3864,16 @@ lambda/translprim.cmi : \
     lambda/lambda.cmi \
     typing/ident.cmi \
     typing/env.cmi
+wasm/block_repr.cmo : \
+    wasm/wstate.cmo \
+    wasm/wmodule.cmo \
+    wasm/block_repr.cmi
+wasm/block_repr.cmx : \
+    wasm/wstate.cmx \
+    wasm/wmodule.cmx \
+    wasm/block_repr.cmi
+wasm/block_repr.cmi : \
+    wasm/wmodule.cmo
 wasm/emit_wast.cmo : \
     wasm/wtype.cmo \
     wasm/wstate.cmo \
@@ -3893,6 +3903,7 @@ wasm/emit_wast.cmo : \
     middle_end/compilation_unit.cmi \
     middle_end/flambda/base_types/closure_id.cmi \
     middle_end/clambda_primitives.cmi \
+    wasm/block_repr.cmi \
     middle_end/flambda/allocated_const.cmi \
     wasm/emit_wast.cmi
 wasm/emit_wast.cmx : \
@@ -3924,20 +3935,25 @@ wasm/emit_wast.cmx : \
     middle_end/compilation_unit.cmx \
     middle_end/flambda/base_types/closure_id.cmx \
     middle_end/clambda_primitives.cmx \
+    wasm/block_repr.cmx \
     middle_end/flambda/allocated_const.cmx \
     wasm/emit_wast.cmi
 wasm/emit_wast.cmi : \
     wasm/wast.cmo \
     middle_end/flambda/flambda.cmi
 wasm/link_wast.cmo : \
+    wasm/wstate.cmo \
     wasm/wast.cmo \
     utils/misc.cmi \
     wasm/emit_wast.cmi \
+    utils/config.cmi \
     wasm/link_wast.cmi
 wasm/link_wast.cmx : \
+    wasm/wstate.cmx \
     wasm/wast.cmx \
     utils/misc.cmx \
     wasm/emit_wast.cmx \
+    utils/config.cmx \
     wasm/link_wast.cmi
 wasm/link_wast.cmi : \
     wasm/wast.cmo

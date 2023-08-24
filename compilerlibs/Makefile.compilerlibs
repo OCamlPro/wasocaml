@@ -147,6 +147,7 @@ WASM = \
   wasm/wexpr.cmo \
   wasm/wmodule.cmo \
   wasm/wast.cmo \
+  wasm/block_repr.cmo \
   wasm/emit_wast.cmo \
   wasm/link_wast.cmo
 WASM_CMI =
