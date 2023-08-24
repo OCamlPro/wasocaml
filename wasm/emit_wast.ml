@@ -28,6 +28,7 @@ module Conv = struct
     val try_with :
       local:Local.var -> body:(handler -> Expr.t) -> handler:Expr.t -> Expr.t
     val function_body_value : Expr.t -> Type.atom -> Expr.function_body
+    val function_call_handling : handler -> tail:bool -> Expr.t -> Expr.t
   end
 
   module Exceptions_native : Exceptions = struct
@@ -43,6 +44,7 @@ module Conv = struct
         ; result_typ = ref_eq
         }
     let function_body_value e t : Expr.function_body = Value [ (e, t) ]
+    let function_call_handling () ~tail:_ e = e
   end
 
   module Exceptions_multi_return : Exceptions = struct
@@ -71,6 +73,28 @@ module Conv = struct
 
     let function_body_value e t : Expr.function_body =
       Value [ (no_exception_i32, I32); (e, t) ]
+
+    let function_call_handling handler ~tail call : Expr.t =
+      if tail then call
+      else
+        match mode with
+        | Reference -> failwith "TODO reference call"
+        | Binarien ->
+          let var = Local.fresh "call_result" in
+          let body : Expr.t =
+            If_then_else
+              { cond = Unop (Tuple_extract 0, Var (V var))
+              ; if_expr =
+                  NR (raise handler (Unop (Tuple_extract 1, Var (V var))))
+              ; else_expr = Unop (Tuple_extract 1, Var (V var))
+              }
+          in
+          Let
+            { var
+            ; typ = Type.Tuple [ I32; ref_eq ]
+            ; defining_expr = call
+            ; body
+            }
   end
 
   let exceptions_module =
@@ -553,7 +577,10 @@ module Conv = struct
           { var
           ; typ = Rvar Env
           ; defining_expr = closure
-          ; body = Call_ref { typ = func_typ; func; args; tail }
+          ; body =
+              Exceptions.function_call_handling env.current_exception_handler
+                ~tail
+                (Call_ref { typ = func_typ; func; args; tail })
           }
       | _ :: _ :: _ ->
         let args =
@@ -577,7 +604,8 @@ module Conv = struct
         @ [ Closure.cast (conv_var env apply.func) ]
       in
       let typ = Type.Var.Func { arity } in
-      Call { typ; func; args; tail }
+      Exceptions.function_call_handling env.current_exception_handler ~tail
+        (Call { typ; func; args; tail })
 
   let conv_allocated_const_expr (const : Allocated_const.t) : Type.atom * Expr.t
       =
@@ -1607,7 +1635,7 @@ module Conv = struct
          (Unop
             ( Struct_get { typ = partial_closure_arg_typ; field = 2 }
             , Expr.Var (Expr.Local.V partial_closure_var) ) )
-         (Expr.Call_ref
+         (Call_ref
             { tail = true; typ = Type.Var.Func { arity = n }; args; func } ) )
 
   let caml_curry_alloc ~param_arg ~env_arg n m : Expr.t =
