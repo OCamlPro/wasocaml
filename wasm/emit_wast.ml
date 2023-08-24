@@ -2044,6 +2044,7 @@ module ToWasm = struct
       Cst.node name [ arg ]
     | Abs_float -> Cst.node "f64.abs" [ arg ]
     | Neg_float -> Cst.node "f64.neg" [ arg ]
+    | Tuple_extract i -> C.tuple_extract i arg
 
   let irelop_name nn (op : Expr.irelop) =
     match op with
