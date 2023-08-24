@@ -345,6 +345,11 @@ module C = struct
 
   let br' id = node "br" [ !$(Block_id.name id) ]
 
+  let return args =
+    match (mode, args) with
+    | Binarien, _ :: _ :: _ -> node "return" [ node "tuple.make" args ]
+    | _ -> node "return" args
+
   let br_on_cast id typ arg =
     match mode with
     | Binarien -> begin

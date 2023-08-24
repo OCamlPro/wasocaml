@@ -20,6 +20,62 @@ open Wmodule
 module Conv = struct
   type top_env = { offsets : Wasm_closure_offsets.t }
 
+  module type Exceptions = sig
+    type handler
+    val toplevel : handler
+    val function_return : handler
+    val raise : handler -> Expr.t -> Expr.t
+    val try_with :
+         handler
+      -> local:Local.var
+      -> body:(handler -> Expr.t)
+      -> handler:Expr.t
+      -> Expr.t
+  end
+
+  module Exceptions_native : Exceptions = struct
+    type handler = unit
+    let toplevel = ()
+    let function_return = ()
+    let raise () (e : Expr.t) : Expr.t = Throw e
+    let try_with () ~local ~body ~handler : Expr.t =
+      Try
+        { body = body ()
+        ; param = (local, ref_eq)
+        ; handler
+        ; result_typ = ref_eq
+        }
+  end
+
+  module Exceptions_multi_return : Exceptions = struct
+    type handler =
+      | Toplevel
+      | Function_return
+      | Block of Block_id.t
+
+    let toplevel = Toplevel
+    let function_return = Function_return
+
+    let raise handler (e : Expr.t) : Expr.t =
+      match handler with
+      | Toplevel -> assert false
+      | Function_return -> assert false
+      | Block block_id -> Apply_cont { cont = block_id; args = [ e ] }
+
+    let try_with _current_handler ~local ~body ~handler =
+      let block_id = Block_id.fresh "exception_handler" in
+      let body = body (Block block_id) in
+      ignore (body, local, handler);
+      assert false
+  end
+
+  let exceptions_module =
+    match exception_repr with
+    | Native_exceptions -> (module Exceptions_native : Exceptions)
+    | Multi_return -> (module Exceptions_multi_return : Exceptions)
+
+  module Exceptions = (val exceptions_module)
+
   type env =
     { bound_vars : Variable.Set.t
     ; params : Variable.Set.t
@@ -30,6 +86,7 @@ module Conv = struct
     ; top_env : top_env
     ; catch : Block_id.t Static_exception.Map.t
     ; constant_function : bool
+    ; current_exception_handler : Exceptions.handler
     }
 
   let empty_env ~top_env =
@@ -42,6 +99,7 @@ module Conv = struct
     ; top_env
     ; catch = Static_exception.Map.empty
     ; constant_function = false
+    ; current_exception_handler = Exceptions.toplevel
     }
 
   let enter_function ~top_env ~closure_id ~params ~free_vars ~closure_functions
@@ -63,6 +121,7 @@ module Conv = struct
     ; top_env
     ; catch = Static_exception.Map.empty
     ; constant_function
+    ; current_exception_handler = Exceptions.function_return
     }
 
   let bind_catch env catch_id : env * Block_id.t =
@@ -1032,19 +1091,16 @@ module Conv = struct
         }
     | Try_with (body, var, handler) ->
       let local = Expr.Local.var_of_var var in
-      (* This is tail in the meaning of wasm: the return value of
-         that expression is the return value of the current function.
-         It will use stack space, but it is ok to use the call_return *)
-      (* Is that true ? This is not the case in V8 *)
       let handler = conv_expr ~tail (bind_var env var) handler in
-      Try
-        {
-          (* body = conv_expr ~tail env body *)
-          body = conv_expr ~tail:false env body
-        ; param = (local, ref_eq)
-        ; handler
-        ; result_typ = ref_eq
-        }
+      let body current_exception_handler =
+        let env = { env with current_exception_handler } in
+        (* This is tail in the meaning of wasm: the return value of
+           that expression is the return value of the current function.
+           It will use stack space, but it is ok to use the call_return *)
+        (* Is that true ? This is not the case in V8 *)
+        conv_expr ~tail:false env body
+      in
+      Exceptions.try_with env.current_exception_handler ~local ~body ~handler
     | Proved_unreachable -> NR Unreachable
     | Let_rec (_bindings, _body) ->
       let msg = Format.asprintf "Value letrec not implemented (yet ?)" in
@@ -1366,7 +1422,8 @@ module Conv = struct
     | Plsrbint t -> WBint.binop_with_int t (Shr U) (args2 args)
     | Pasrbint t -> WBint.binop_with_int t (Shr S) (args2 args)
     | Pbintcomp (t, cop) -> WBint.relop t cop (args2 args)
-    | Praise _raise_kind -> Throw (arg1 args)
+    | Praise _raise_kind ->
+      Exceptions.raise env.current_exception_handler (arg1 args)
     | Pbyteslength | Pstringlength ->
       let typ : Type.Var.t = String in
       i31 (Unop (Array_len typ, Ref_cast { typ; r = arg1 args }))
@@ -2183,6 +2240,7 @@ module ToWasm = struct
           (conv_no_return else_expr)
       ]
     | NR_br { cont; arg } -> [ C.br cont [ conv_expr_group arg ] ]
+    | NR_return arg -> [ C.return [ conv_expr_group arg ] ]
     | Unreachable -> [ C.unreachable ]
 
   let conv_const name export (const : Const.t) =

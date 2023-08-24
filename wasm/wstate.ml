@@ -1,3 +1,7 @@
+type exception_repr =
+  | Native_exceptions
+  | Multi_return
+
 type block_repr =
   | Struct_block
   | Array_block
@@ -11,6 +15,8 @@ let mode = Binarien
 
 let block_repr = Array_block
 (* let block_repr = Struct_block *)
+
+let exception_repr = Multi_return
 
 let pp_wast = false
 

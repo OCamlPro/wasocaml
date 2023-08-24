@@ -241,6 +241,7 @@ and no_return =
       { cont : Block_id.t
       ; arg : t
       }
+  | NR_return of t
   | Unreachable
 
 let print_list f sep ppf l =
@@ -476,6 +477,7 @@ and print_no_return ppf no_return =
       params print_no_return handler print_no_return body
   | NR_br { cont; arg } ->
     Format.fprintf ppf "@[<hov 2>Br(%a, %a)@]" Block_id.print cont print arg
+  | NR_return arg -> Format.fprintf ppf "@[<hov 2>Return(%a)@]" print arg
   | Unreachable -> Format.fprintf ppf "Unreachable"
 
 let let_ var typ defining_expr body = Let { var; typ; defining_expr; body }
@@ -592,7 +594,7 @@ let required_locals body =
       let acc = let_cont_reqs acc ~cont ~params in
       let acc = loop_no_return acc handler in
       loop_no_return acc body
-    | NR_br { cont = _; arg } -> loop acc arg
+    | NR_br { cont = _; arg } | NR_return arg -> loop acc arg
     | Unreachable -> acc
   in
   match body with
