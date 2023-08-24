@@ -236,7 +236,7 @@ and no_return =
       { cont : Block_id.t
       ; args : t list
       }
-  | NR_return of t
+  | NR_return of t list
   | Throw of t
   | Unreachable
 
@@ -470,7 +470,8 @@ and print_no_return ppf no_return =
   | NR_br { cont; args } ->
     Format.fprintf ppf "@[<hov 2>Br(%a(%a))@]" Block_id.print cont
       (print_list print ",") args
-  | NR_return arg -> Format.fprintf ppf "@[<hov 2>Return(%a)@]" print arg
+  | NR_return args ->
+    Format.fprintf ppf "@[<hov 2>Return(%a)@]" (print_list print ",") args
   | Throw e -> Format.fprintf ppf "@[<hov 2>Throw (@ %a@ )@]" print e
   | Unreachable -> Format.fprintf ppf "Unreachable"
 
@@ -585,9 +586,8 @@ let required_locals body =
       let acc = let_cont_reqs acc ~cont ~params in
       let acc = loop_no_return acc handler in
       loop_no_return acc body
-    | NR_br { cont = _; args } ->
-        List.fold_left (fun acc arg -> loop acc arg) acc args
-    | NR_return arg -> loop acc arg
+    | NR_br { cont = _; args } | NR_return args ->
+      List.fold_left (fun acc arg -> loop acc arg) acc args
     | Throw e -> loop acc e
     | Unreachable -> acc
   in

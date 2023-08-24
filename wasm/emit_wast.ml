@@ -56,10 +56,13 @@ module Conv = struct
     let toplevel = Toplevel
     let function_return = Function_return
 
+    let no_exception_i32 : Expr.t = I32 0l
+    let exception_i32 : Expr.t = I32 1l
+
     let raise handler (e : Expr.t) : Expr.no_return =
       match handler with
       | Toplevel -> assert false
-      | Function_return -> assert false
+      | Function_return -> NR_return [ exception_i32; e ]
       | Block block_id -> NR_br { cont = block_id; args = [ e ] }
 
     let try_with _current_handler ~local ~body ~handler =
@@ -1170,7 +1173,8 @@ module Conv = struct
           ; params = []
           ; body
           ; handler =
-              NR_br { cont = fallthrough; args = [conv_expr ~tail env branch] }
+              NR_br
+                { cont = fallthrough; args = [ conv_expr ~tail env branch ] }
           }
       in
       let body = List.fold_left add_def body defs in
@@ -2233,8 +2237,9 @@ module ToWasm = struct
       [ C.if_then_else [] (conv_expr_group cond) (conv_no_return if_expr)
           (conv_no_return else_expr)
       ]
-    | NR_br { cont; args } -> [ C.br cont [ C.br cont (List.map conv_expr_group args) ] ]
-    | NR_return arg -> [ C.return [ conv_expr_group arg ] ]
+    | NR_br { cont; args } ->
+      [ C.br cont [ C.br cont (List.map conv_expr_group args) ] ]
+    | NR_return args -> [ C.return (List.map conv_expr_group args) ]
     | Throw e -> begin
       match mode with
       | Reference -> [ C.unreachable ]
