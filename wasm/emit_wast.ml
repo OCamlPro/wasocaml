@@ -27,6 +27,7 @@ module Conv = struct
     val raise : handler -> Expr.t -> Expr.no_return
     val try_with :
       local:Local.var -> body:(handler -> Expr.t) -> handler:Expr.t -> Expr.t
+    val function_body_value : Expr.t -> Type.atom -> Expr.function_body
   end
 
   module Exceptions_native : Exceptions = struct
@@ -41,6 +42,7 @@ module Conv = struct
         ; handler
         ; result_typ = ref_eq
         }
+    let function_body_value e t : Expr.function_body = Value [ (e, t) ]
   end
 
   module Exceptions_multi_return : Exceptions = struct
@@ -66,6 +68,9 @@ module Conv = struct
       let body = body (Block block_id) in
       Let_cont
         { cont = block_id; params = [ (Some local, ref_eq) ]; handler; body }
+
+    let function_body_value e t : Expr.function_body =
+      Value [ (no_exception_i32, I32); (e, t) ]
   end
 
   let exceptions_module =
@@ -941,7 +946,7 @@ module Conv = struct
     let func =
       Func.Decl
         { params = params @ [ (Param.Env, Type.Rvar Type.Var.Env) ]
-        ; body = Value (body, ref_eq)
+        ; body = Exceptions.function_body_value body ref_eq
         ; type_decl = Some (Func { arity })
         }
     in
@@ -1653,7 +1658,7 @@ module Conv = struct
     in
     Func.Decl
       { params = [ (param_arg, ref_eq); (env_arg, Type.Rvar Type.Var.Env) ]
-      ; body = Value (body, ref_eq)
+      ; body = Exceptions.function_body_value body ref_eq
       ; type_decl = Some (Func { arity = 1 })
       }
 
@@ -1683,7 +1688,7 @@ module Conv = struct
     let body = build (Param closure_param) 0 params in
     Func.Decl
       { params = (closure_param, Type.Rvar Env) :: params
-      ; body = Value (body, ref_eq)
+      ; body = Exceptions.function_body_value body ref_eq
       ; type_decl = None
       }
 
@@ -2295,7 +2300,9 @@ module ToWasm = struct
         in
         let body, result =
           match body with
-          | Value (body, typ) -> (conv_expr body, [ C.result typ ])
+          | Value body ->
+            let exprs, typs = List.split body in
+            (List.concat_map conv_expr exprs, List.map C.result typs)
           | No_value body -> (conv_no_value body, [])
         in
         C.func ~name ~type_decl ~params ~locals ~result ~body

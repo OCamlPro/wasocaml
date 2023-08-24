@@ -478,7 +478,7 @@ and print_no_return ppf no_return =
 let let_ var typ defining_expr body = Let { var; typ; defining_expr; body }
 
 type function_body =
-  | Value of t * Type.atom
+  | Value of (t * Type.atom) list
   | No_value of no_value_expression
 
 let required_locals body =
@@ -592,7 +592,8 @@ let required_locals body =
     | Unreachable -> acc
   in
   match body with
-  | Value (expr, _typ) -> loop Local.Map.empty expr
+  | Value t_expr ->
+    List.fold_left (fun acc (arg, _) -> loop acc arg) Local.Map.empty t_expr
   | No_value expr -> loop_no_value Local.Map.empty expr
 
 [@@@ocaml.warning "-32"]

@@ -9,6 +9,9 @@ let print_list f sep ppf l =
     ~pp_sep:(fun ppf () -> Format.fprintf ppf "%s@ " sep)
     f ppf l
 
+let printconv f g ppf e =
+  g ppf (f e)
+
 module Func = struct
   type t =
     | Decl of
@@ -30,8 +33,12 @@ module Func = struct
         Format.fprintf ppf "(%a: %a)" Param.print p Type.print_atom typ
       in
       let print_body ppf = function
-        | Expr.Value (e, typ) ->
+        | Expr.Value [e, typ] ->
           Format.fprintf ppf " -> %a@ {@ %a@ }" Type.print_atom typ Expr.print e
+        | Expr.Value l ->
+            Format.fprintf ppf " -> %a@ {@ %a@ }"
+              (print_list (printconv snd Type.print_atom) " ") l
+              (print_list (printconv fst Expr.print) " ") l
         | Expr.No_value e ->
           Format.fprintf ppf "@ {@ %a@ }" Expr.print_no_value e
       in

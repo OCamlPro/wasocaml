@@ -389,6 +389,11 @@ module C = struct
     | Binarien -> descr
     | Reference -> node "sub" [ type_name name; descr ]
 
+  let opt_tuple fields =
+    match mode with
+    | Binarien -> [ node "tuple.make" fields ]
+    | Reference -> fields
+
   let tuple_make fields = node "tuple.make" fields
 
   let tuple_extract field tuple = node "tuple.extract" [ int field; tuple ]
