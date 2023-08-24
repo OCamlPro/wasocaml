@@ -24,7 +24,7 @@ module Conv = struct
     type handler
     val toplevel : handler
     val function_return : handler
-    val raise : handler -> Expr.t -> Expr.t
+    val raise : handler -> Expr.t -> Expr.no_return
     val try_with :
          handler
       -> local:Local.var
@@ -37,7 +37,7 @@ module Conv = struct
     type handler = unit
     let toplevel = ()
     let function_return = ()
-    let raise () (e : Expr.t) : Expr.t = Throw e
+    let raise () (e : Expr.t) : Expr.no_return = Throw e
     let try_with () ~local ~body ~handler : Expr.t =
       Try
         { body = body ()
@@ -56,11 +56,11 @@ module Conv = struct
     let toplevel = Toplevel
     let function_return = Function_return
 
-    let raise handler (e : Expr.t) : Expr.t =
+    let raise handler (e : Expr.t) : Expr.no_return =
       match handler with
       | Toplevel -> assert false
       | Function_return -> assert false
-      | Block block_id -> Apply_cont { cont = block_id; args = [ e ] }
+      | Block block_id -> NR_br { cont = block_id; args = [ e ] }
 
     let try_with _current_handler ~local ~body ~handler =
       let block_id = Block_id.fresh "exception_handler" in
@@ -993,7 +993,7 @@ module Conv = struct
             id
       in
       let args = List.map (conv_var env) args in
-      Apply_cont { cont; args }
+      NR (NR_br { cont; args })
     | While (cond, body) ->
       let cond : Expr.t = WInt.untag (conv_expr ~tail:false env cond) in
       let cont = Block_id.fresh "continue" in
@@ -1170,7 +1170,7 @@ module Conv = struct
           ; params = []
           ; body
           ; handler =
-              NR_br { cont = fallthrough; arg = conv_expr ~tail env branch }
+              NR_br { cont = fallthrough; args = [conv_expr ~tail env branch] }
           }
       in
       let body = List.fold_left add_def body defs in
@@ -1423,7 +1423,7 @@ module Conv = struct
     | Pasrbint t -> WBint.binop_with_int t (Shr S) (args2 args)
     | Pbintcomp (t, cop) -> WBint.relop t cop (args2 args)
     | Praise _raise_kind ->
-      Exceptions.raise env.current_exception_handler (arg1 args)
+      NR (Exceptions.raise env.current_exception_handler (arg1 args))
     | Pbyteslength | Pstringlength ->
       let typ : Type.Var.t = String in
       i31 (Unop (Array_len typ, Ref_cast { typ; r = arg1 args }))
@@ -2155,7 +2155,6 @@ module ToWasm = struct
         in
         [ C.block fallthrough [ ref_eq ] (set_locals @ handler_expr) ]
     end
-    | Apply_cont { cont; args } -> [ C.br cont (List.map conv_expr_group args) ]
     | Br_on_cast { value; typ; if_cast; if_else } ->
       [ C.drop (C.br_on_cast if_cast typ (conv_expr_group value)) ]
       @ conv_expr if_else
@@ -2163,11 +2162,6 @@ module ToWasm = struct
       [ C.br_if if_true (conv_expr_group cond) ] @ conv_expr if_else
     | Br_table { cond; cases; default } ->
       [ C.br_table (conv_expr_group cond) (cases @ [ default ]) ]
-    | Throw e -> begin
-      match mode with
-      | Reference -> [ C.unreachable ]
-      | Binarien -> [ C.throw (conv_expr_group e) ]
-    end
     | Try { body; handler; result_typ; param = local, typ } -> begin
       match mode with
       | Reference ->
@@ -2239,8 +2233,13 @@ module ToWasm = struct
       [ C.if_then_else [] (conv_expr_group cond) (conv_no_return if_expr)
           (conv_no_return else_expr)
       ]
-    | NR_br { cont; arg } -> [ C.br cont [ conv_expr_group arg ] ]
+    | NR_br { cont; args } -> [ C.br cont [ C.br cont (List.map conv_expr_group args) ] ]
     | NR_return arg -> [ C.return [ conv_expr_group arg ] ]
+    | Throw e -> begin
+      match mode with
+      | Reference -> [ C.unreachable ]
+      | Binarien -> [ C.throw (conv_expr_group e) ]
+    end
     | Unreachable -> [ C.unreachable ]
 
   let conv_const name export (const : Const.t) =

@@ -155,10 +155,6 @@ type t =
       ; handler : t
       ; body : t
       }
-  | Apply_cont of
-      { cont : Block_id.t
-      ; args : t list
-      }
   | Br_on_cast of
       { value : t
       ; typ : Type.Var.t
@@ -181,7 +177,6 @@ type t =
       ; result_typ : Type.atom
       ; handler : t
       }
-  | Throw of t
   | NR of no_return
   | Unit of no_value_expression
 
@@ -239,9 +234,10 @@ and no_return =
       }
   | NR_br of
       { cont : Block_id.t
-      ; arg : t
+      ; args : t list
       }
   | NR_return of t
+  | Throw of t
   | Unreachable
 
 let print_list f sep ppf l =
@@ -403,9 +399,6 @@ let rec print ppf = function
              local Type.print_atom typ )
          ", " )
       params print handler print body
-  | Apply_cont { cont; args } ->
-    Format.fprintf ppf "@[<hov 2>Apply_cont(%a(%a))@]" Block_id.print cont
-      (print_list print ",") args
   | Br_on_cast { value; typ; if_cast; if_else } ->
     Format.fprintf ppf "@[<hov 2>Br_on_cast(%a %a -> (%a) else %a)@]" print
       value Type.Var.print typ Block_id.print if_cast print if_else
@@ -422,7 +415,6 @@ let rec print ppf = function
        @[<hov>%a@]@]@]@]"
       Type.print_atom result_typ print body Local.print_var var Type.print_atom
       typ print handler
-  | Throw e -> Format.fprintf ppf "@[<hov 2>Throw (@ %a@ )@]" print e
   | Unit nv -> Format.fprintf ppf "@[<hov 2>Unit (@ %a@ )@]" print_no_value nv
   | NR nr -> print_no_return ppf nr
 
@@ -475,9 +467,11 @@ and print_no_return ppf no_return =
              local Type.print_atom typ )
          ", " )
       params print_no_return handler print_no_return body
-  | NR_br { cont; arg } ->
-    Format.fprintf ppf "@[<hov 2>Br(%a, %a)@]" Block_id.print cont print arg
+  | NR_br { cont; args } ->
+    Format.fprintf ppf "@[<hov 2>Br(%a(%a))@]" Block_id.print cont
+      (print_list print ",") args
   | NR_return arg -> Format.fprintf ppf "@[<hov 2>Return(%a)@]" print arg
+  | Throw e -> Format.fprintf ppf "@[<hov 2>Throw (@ %a@ )@]" print e
   | Unreachable -> Format.fprintf ppf "Unreachable"
 
 let let_ var typ defining_expr body = Let { var; typ; defining_expr; body }
@@ -545,8 +539,6 @@ let required_locals body =
       let acc = let_cont_reqs acc ~cont ~params in
       let acc = loop acc handler in
       loop acc body
-    | Apply_cont { cont = _; args } ->
-      List.fold_left (fun acc arg -> loop acc arg) acc args
     | Br_on_cast { value; if_cast = _; if_else } ->
       let acc = loop acc value in
       loop acc if_else
@@ -558,7 +550,6 @@ let required_locals body =
       let acc = add local typ acc in
       let acc = loop acc body in
       loop acc handler
-    | Throw e -> loop acc e
     | Unit nv -> loop_no_value acc nv
     | NR nr -> loop_no_return acc nr
   and loop_no_value acc nv =
@@ -594,7 +585,10 @@ let required_locals body =
       let acc = let_cont_reqs acc ~cont ~params in
       let acc = loop_no_return acc handler in
       loop_no_return acc body
-    | NR_br { cont = _; arg } | NR_return arg -> loop acc arg
+    | NR_br { cont = _; args } ->
+        List.fold_left (fun acc arg -> loop acc arg) acc args
+    | NR_return arg -> loop acc arg
+    | Throw e -> loop acc e
     | Unreachable -> acc
   in
   match body with
