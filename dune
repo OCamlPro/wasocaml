@@ -147,7 +147,9 @@
    wexpr
    wmodule
    wast
+   block_repr
    emit_wast
+   link_wast
  )
 )
 
