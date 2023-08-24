@@ -411,8 +411,8 @@ let rec print ppf = function
       cases Block_id.print default
   | Try { body; param = var, typ; result_typ; handler } ->
     Format.fprintf ppf
-      "@[<v>@[<hov 2>Try -> %a {@ @[<hov 2>%a@ @]}@]@ @[<hov 2>With@ @[<hov 2>%a : %a@ ->@ \
-       @[<hov>%a@]@]@]@]"
+      "@[<v>@[<hov 2>Try -> %a {@ @[<hov 2>%a@ @]}@]@ @[<hov 2>With@ @[<hov \
+       2>%a : %a@ ->@ @[<hov>%a@]@]@]@]"
       Type.print_atom result_typ print body Local.print_var var Type.print_atom
       typ print handler
   | Unit nv -> Format.fprintf ppf "@[<hov 2>Unit (@ %a@ )@]" print_no_value nv
