@@ -61,7 +61,7 @@ module Conv = struct
 
     let raise handler (e : Expr.t) : Expr.no_return =
       match handler with
-      | Toplevel -> assert false
+      | Toplevel -> Unreachable
       | Function_return -> NR_return [ exception_i32; e ]
       | Block block_id -> NR_br { cont = block_id; args = [ e ] }
 

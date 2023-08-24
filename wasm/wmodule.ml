@@ -36,9 +36,9 @@ module Func = struct
         | Expr.Value [e, typ] ->
           Format.fprintf ppf " -> %a@ {@ %a@ }" Type.print_atom typ Expr.print e
         | Expr.Value l ->
-            Format.fprintf ppf " -> %a@ {@ %a@ }"
+            Format.fprintf ppf " -> %a@ {@ @[<v>%a@]@ }"
               (print_list (printconv snd Type.print_atom) " ") l
-              (print_list (printconv fst Expr.print) " ") l
+              (print_list (printconv fst Expr.print) ";") l
         | Expr.No_value e ->
           Format.fprintf ppf "@ {@ %a@ }" Expr.print_no_value e
       in
