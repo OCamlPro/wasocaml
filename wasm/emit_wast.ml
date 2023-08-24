@@ -2099,7 +2099,9 @@ module ToWasm = struct
            But return call is not handled by the gc branch so we play a trick
            with return_call_ref
         *)
-        [ C.return_call_ref typ (args @ [ C.ref_func func ]) ]
+        let _ = typ in
+        [ C.return_call func args ]
+        (* [ C.return_call_ref typ (args @ [ C.ref_func func ]) ] *)
       else [ C.call func args ]
     | Ref_cast { typ; r } -> [ C.ref_cast typ [ conv_expr_group r ] ]
     | Global_get g -> [ C.global_get g ]
@@ -2209,7 +2211,9 @@ module ToWasm = struct
            But return call is not handled by the gc branch so we play a trick
            with return_call_ref
         *)
-        [ C.return_call_ref typ (args @ [ C.ref_func func ]) ]
+        let _ = typ in
+        [ C.return_call func args ]
+        (* [ C.return_call_ref typ (args @ [ C.ref_func func ]) ] *)
       else [ C.call func args ]
 
   and conv_no_return (nr : Expr.no_return) =
