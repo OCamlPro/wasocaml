@@ -91,13 +91,6 @@
         )))
   )
 
-  ;; (func $array_length (export "array_length") (param $arr (ref eq)) (result (ref eq))
-  ;;   (i31.new (array.len
-  ;;     (block $floatarray (result (ref $FloatArray))
-  ;;       (br_on_cast $floatarray $FloatArray (local.get $arr))
-  ;;       (return (i31.new (array.len (ref.cast $Array)))))))
-  ;; )
-
   ;; (func $array_get_float_safe (param $arr (ref $FloatArray)) (param $field (ref eq)) (result (ref $Float))
   ;;   ;; TODO exceptions
   ;;   (struct.new_canon $Float

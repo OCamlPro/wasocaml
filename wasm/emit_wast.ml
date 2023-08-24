@@ -29,12 +29,17 @@ module Conv = struct
       local:Local.var -> body:(handler -> Expr.t) -> handler:Expr.t -> Expr.t
     val function_body_value : Expr.t -> Type.atom -> Expr.function_body
     val function_call_handling : handler -> tail:bool -> Expr.t -> Expr.t
+
+    val func_result_type : Type.atom list -> Type.atom list
   end
 
   module Exceptions_native : Exceptions = struct
     type handler = unit
     let toplevel = ()
     let function_return = ()
+
+    let func_result_type t = t
+
     let raise () (e : Expr.t) : Expr.no_return = Throw e
     let try_with ~local ~body ~handler : Expr.t =
       Try
@@ -55,6 +60,8 @@ module Conv = struct
 
     let toplevel = Toplevel
     let function_return = Function_return
+
+    let func_result_type t : Type.atom list = I32 :: t
 
     let no_exception_i32 : Expr.t = I32 0l
     let exception_i32 : Expr.t = I32 1l
@@ -706,6 +713,7 @@ module Conv = struct
       let effect : Expr.t = conv_expr ~tail:false expr_env expr in
       conv_body env body (drop effect :: effects)
     | End _end_symbol ->
+      (* TODO clean *)
       let not_really_start : Func_id.t = Runtime "not_really_start" in
       let func_type = Type.Var.{ params = []; results = [] } in
       let typ = Type.Var.C_import_func func_type in
@@ -1603,11 +1611,17 @@ module Conv = struct
 
   let func_type size : Type.descr =
     let params = List.init size (fun _ -> ref_eq) in
-    Func { params = params @ [ Type.Rvar Env ]; results = [ ref_eq ] }
+    Func
+      { params = params @ [ Type.Rvar Env ]
+      ; results = Exceptions.func_result_type [ ref_eq ]
+      }
 
   let caml_apply_type size : Type.descr =
     let params = List.init size (fun _ -> ref_eq) in
-    Func { params = [ Type.Rvar Env ] @ params; results = [ ref_eq ] }
+    Func
+      { params = [ Type.Rvar Env ] @ params
+      ; results = Exceptions.func_result_type [ ref_eq ]
+      }
 
   let caml_curry_apply ~param_arg ~env_arg n =
     assert (n > 1);
@@ -1776,7 +1790,7 @@ module Conv = struct
     let params = List.init arity (fun _ -> ref_eq) @ [ Type.Rvar Env ] in
     Func.Import
       { params
-      ; result = [ ref_eq ]
+      ; result = Exceptions.func_result_type [ ref_eq ]
       ; typ = Some (Func { arity })
       ; module_
       ; name
