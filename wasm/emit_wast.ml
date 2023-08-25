@@ -2148,6 +2148,7 @@ module ToWasm = struct
            with return_call_ref
         *)
         let _ = typ in
+        (* TODO do something about C calls that does not return exceptions ? *)
         [ C.return_call func args ]
         (* [ C.return_call_ref typ (args @ [ C.ref_func func ]) ] *)
       else [ C.call func args ]
@@ -2343,9 +2344,19 @@ module ToWasm = struct
         in
         let body, result =
           match body with
-          | Value body ->
-            let exprs, typs = List.split body in
-            (List.concat_map conv_expr exprs, List.map C.result typs)
+          | Value body -> begin
+            match body with
+            | [ (expr, typ) ] -> (conv_expr expr, [ C.result typ ])
+            | _ ->
+              let exprs =
+                List.map
+                  (fun (expr, typ) -> C.group_block [ typ ] (conv_expr expr))
+                  body
+              in
+              let _, typs = List.split body in
+              let exprs = [ C.tuple_make exprs ] in
+              (exprs, List.map C.result typs)
+          end
           | No_value body -> (conv_no_value body, [])
         in
         C.func ~name ~type_decl ~params ~locals ~result ~body
