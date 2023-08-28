@@ -2063,11 +2063,7 @@ module ToWasm = struct
       | Reference -> Cst.node "ref.cast" [ Cst.atom "i31"; arg ]
       | Binarien -> Cst.node "ref.as_i31" [ arg ]
     end
-    | Is_i31 -> begin
-      match mode with
-      | Binarien -> Cst.node "ref.is_i31" [ arg ]
-      | Reference -> Cst.node "ref.test" [ Cst.atom "i31"; arg ]
-    end
+    | Is_i31 -> Cst.node "ref.test" [ Cst.atom "i31"; arg ]
     | Array_len t -> C.array_len t arg
     | Reinterpret { from_type; to_type } ->
       let name =
