@@ -596,7 +596,8 @@ module Conv = struct
         in
         State.add_caml_apply arity;
         let typ = Type.Var.Caml_apply_func { arity } in
-        Call { typ; func = Caml_apply arity; args; tail }
+        Exceptions.function_call_handling ~tail env.current_exception_handler
+          (Call { typ; func = Caml_apply arity; args; tail })
     end
     | Direct closure_id ->
       let func = Func_id.of_closure_id closure_id in
@@ -1717,12 +1718,13 @@ module Conv = struct
     let params = List.init n (fun i -> (param_i i, ref_eq)) in
     let rec build closure_var n params : Expr.t =
       let mk_call ~tail param =
-        Expr.Call_ref
-          { typ = Func { arity = 1 }
-          ; args = [ Var (Param param); Var closure_var ]
-          ; func = Closure.get_gen_func (Var closure_var)
-          ; tail
-          }
+        Exceptions.function_call_handling ~tail Exceptions.function_return
+          (Expr.Call_ref
+             { typ = Func { arity = 1 }
+             ; args = [ Var (Param param); Var closure_var ]
+             ; func = Closure.get_gen_func (Var closure_var)
+             ; tail
+             } )
       in
       match params with
       | [] -> assert false
