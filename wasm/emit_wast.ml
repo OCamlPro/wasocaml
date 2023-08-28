@@ -668,6 +668,9 @@ module Conv = struct
     in
     let typ = Type.Var.C_import_func func_type in
     State.add_c_import_func_type func_type;
+    (* TODO fix: either prim have the right type, or handle tail call of prim differently *)
+    ignore tail;
+    let tail = false in
     Call { typ; func; args; tail }
 
   let unimplemented args =
@@ -1380,6 +1383,9 @@ module Conv = struct
         | Same_as_ocaml_repr -> tail
         | _ -> false
       in
+      (* TODO fix: either prim have the right type, or handle tail call of prim differently *)
+      ignore tail;
+      let tail = false in
       box_result descr.prim_native_repr_res
         (Call { typ; tail; args; func = Func_id.prim_name descr })
     | Pmakeblock (tag, _mut, _shape) -> Block.make ~tag args
