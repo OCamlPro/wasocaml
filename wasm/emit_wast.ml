@@ -2060,11 +2060,7 @@ module ToWasm = struct
     | Struct_get { typ; field } -> C.struct_get typ field arg
     | Struct_get_packed { typ; field; extend } ->
       C.struct_get_packed extend typ field arg
-    | Ref_cast_i31 -> begin
-      match mode with
-      | Reference -> Cst.node "ref.cast" [ Cst.atom "i31"; arg ]
-      | Binarien -> Cst.node "ref.as_i31" [ arg ]
-    end
+    | Ref_cast_i31 -> Cst.node "ref.cast" [ Cst.atom "i31"; arg ]
     | Is_i31 -> Cst.node "ref.test" [ Cst.atom "i31"; arg ]
     | Array_len t -> C.array_len t arg
     | Reinterpret { from_type; to_type } ->

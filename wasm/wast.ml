@@ -247,9 +247,7 @@ module C = struct
   let call func args = node "call" ([ !$(Func_id.name func) ] @ args)
 
   let ref_cast typ arg =
-    let name =
-      match mode with Binarien -> "ref.cast_static" | Reference -> "ref.cast"
-    in
+    let name = "ref.cast" in
     node name ([ type_name typ ] @ arg)
 
   let declare_func f =

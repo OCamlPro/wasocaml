@@ -157,14 +157,14 @@
   (func (export "caml_compare") (param $a (ref eq)) (param $b (ref eq)) (result (ref i31))
     (local $a_block (ref $Gen_block))
     (local $b_block (ref $Gen_block))
-    (if (result (ref i31)) (ref.is_i31 (local.get $a))
+    (if (result (ref i31)) (ref.test i31 (local.get $a))
       (then
-        (if (result (ref i31)) (ref.is_i31 (local.get $b))
+        (if (result (ref i31)) (ref.test i31 (local.get $b))
         (then (return_call $compare_int (local.get $a) (local.get $b)))
         (else (i31.new (i32.const -1))))
       )
       (else
-        (if (result (ref i31)) (ref.is_i31 (local.get $b))
+        (if (result (ref i31)) (ref.test i31 (local.get $b))
         (then (i31.new (i32.const 1)))
         (else
           (local.set $b_block
@@ -212,14 +212,14 @@
   (func $caml_equal (export "caml_equal") (param $a (ref eq)) (param $b (ref eq)) (result (ref i31))
     (local $a_block (ref $Gen_block))
     (local $b_block (ref $Gen_block))
-    (if (result (ref i31)) (ref.is_i31 (local.get $a))
+    (if (result (ref i31)) (ref.test i31 (local.get $a))
       (then
-        (if (result (ref i31)) (ref.is_i31 (local.get $b))
+        (if (result (ref i31)) (ref.test i31 (local.get $b))
         (then (i31.new (ref.eq (local.get $a) (local.get $b))))
         (else (i31.new (i32.const 0))))
       )
       (else
-        (if (result (ref i31)) (ref.is_i31 (local.get $b))
+        (if (result (ref i31)) (ref.test i31 (local.get $b))
         (then (i31.new (i32.const 0)))
         (else
           (local.set $b_block
