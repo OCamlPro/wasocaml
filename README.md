@@ -54,6 +54,12 @@ For a complete example using the compiler installed as an opam switch, see [waso
 
 ### Publications & talks
 
+#### Publications
+
+- [Wasocaml: compiling OCaml to WebAssembly]
+
+#### Talks
+
 - [Wasm GC meeting] - January 2023 - Online
 - [Foundations of WebAssembly (Dagstuhl Seminar 23101)] - March 2023 - Dagstuhl (Germany)
 - [IFL'23] - August 2023 - Braga (Portugal)
@@ -69,4 +75,5 @@ For a complete example using the compiler installed as an opam switch, see [waso
 [Wasm-GC]: https://github.com/WebAssembly/gc
 [Wasm GC meeting]: https://github.com/WebAssembly/meetings/blob/main/gc/2023/GC-01-10.md
 [Wasm Research Day]: https://www.cs.cmu.edu/wrc/wrc-events
+[Wasocaml: compiling OCaml to WebAssembly]: https://inria.hal.science/hal-04311345
 [wasocaml-demo]: https://github.com/ocamlpro/wasocaml-demo
