@@ -1,4 +1,3 @@
-open Wstate
 open Wident
 module Expr = Wexpr
 module Type = Wtype
@@ -166,19 +165,11 @@ module C = struct
   let reft name = node "ref" [ type_name name ]
 
   let struct_new_canon typ fields =
-    let name =
-      match mode with
-      | Binarien -> "struct.new"
-      | Reference -> "struct.new_canon"
-    in
-    node name (type_name typ :: fields)
+    node "struct.new" (type_name typ :: fields)
 
   let array_new_canon_fixed typ size args =
-    match mode with
-    | Binarien -> node "array.init_static" ([ type_name typ ] @ args)
-    | Reference ->
-      node "array.new_canon_fixed"
-        ([ type_name typ; Int (Int64.of_int size) ] @ args)
+    node "array.new_fixed"
+      ([ type_name typ; Int (Int64.of_int size) ] @ args)
 
   let int i =
     (* XXX TODO remove this is wrong,
@@ -288,19 +279,10 @@ module C = struct
   let field f = node "field" [ node "mut" [ type_atom f ] ]
 
   let struct_type ~sub fields =
-    match mode with
-    | Reference -> begin
-        let descr = node "struct" (List.map field fields) in
-        match sub with
-        | None -> descr
-        | Some name -> node "sub" [ type_name name; descr ]
-      end
-    | Binarien -> begin
-        match sub with
-        | None -> node "struct" (List.map field fields)
-        | Some name ->
-          node "struct_subtype" (List.map field fields @ [ type_name name ])
-      end
+    let descr = node "struct" (List.map field fields) in
+    match sub with
+    | None -> descr
+    | Some name -> node "sub" [ type_name name; descr ]
 
   let array_type f = node "array" [ node "mut" [ type_atom f ] ]
 
@@ -317,13 +299,6 @@ module C = struct
     node "func" (name @ typ @ List.map param_t params @ res)
 
   let if_then_else typ cond if_expr else_expr =
-    let nopise e =
-      match mode with
-      | Reference -> e
-      | Binarien -> ( match e with [] -> [ node_p "nop" [] ] | _ -> e )
-    in
-    let if_expr = nopise if_expr in
-    let else_expr = nopise else_expr in
     node "if"
       [ results typ; cond; node_p "then" if_expr; node_p "else" else_expr ]
 
@@ -336,29 +311,15 @@ module C = struct
     nodehv "loop" [ !$(Block_id.name id); results result ] body
 
   let br id args =
-    match (mode, args) with
-    | Binarien, _ :: _ :: _ ->
-      node "br" [ !$(Block_id.name id); node "tuple.make" args ]
-    | _ -> node "br" ([ !$(Block_id.name id) ] @ args)
+    node "br" ([ !$(Block_id.name id) ] @ args)
 
   let br' id = node "br" [ !$(Block_id.name id) ]
 
   let return args =
-    match (mode, args) with
-    | Binarien, _ :: _ :: _ -> node "return" [ node "tuple.make" args ]
-    | _ -> node "return" args
+    node "return" args
 
   let br_on_cast id typ arg =
-    match mode with
-    | Binarien -> begin
-        match typ with
-        | Type.Var.I31 ->
-          node "drop" [ node "br_on_i31" [ !$(Block_id.name id); arg ] ]
-        | _ ->
-          node "br_on_cast_static" [ !$(Block_id.name id); type_name typ; arg ]
-      end
-    | Reference ->
-      node "br_on_cast" [ !$(Block_id.name id); type_name typ; arg ]
+    node "br_on_cast" [ !$(Block_id.name id); type_name typ; arg ]
 
   let br_if id cond = node "br_if" [ !$(Block_id.name id); cond ]
 
@@ -383,14 +344,10 @@ module C = struct
       ]
 
   let sub name descr =
-    match mode with
-    | Binarien -> descr
-    | Reference -> node "sub" [ type_name name; descr ]
+    node "sub" [ type_name name; descr ]
 
   let opt_tuple fields =
-    match mode with
-    | Binarien -> [ node "tuple.make" fields ]
-    | Reference -> fields
+    fields
 
   let tuple_make fields = node "tuple.make" fields
 
@@ -407,7 +364,7 @@ module C = struct
       (node "tag" [ !$"exc"; node "param" [ node "ref" [ atom "eq" ] ] ])
 
   let module_ m =
-    let m = match mode with Reference -> m | Binarien -> import_tag :: m in
+    let m = import_tag :: m in
     nodev "module" m
 
   let register name = node "register" [ String (module_name name) ]

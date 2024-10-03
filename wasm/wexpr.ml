@@ -1,4 +1,3 @@
-open Wstate
 module Type = Wtype
 open Wident
 module Local = Wident.Local
@@ -499,8 +498,8 @@ let required_locals body =
         acc params
     in
     let acc =
-      match (mode, params) with
-      | Binarien, _ :: _ :: _ ->
+      match ( params) with
+      | _ :: _ :: _ ->
         let var = Local.Block_result cont in
         add var (Type.Tuple (List.map snd params)) acc
       | _ -> acc

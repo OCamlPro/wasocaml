@@ -6,13 +6,6 @@ type block_repr =
   | Struct_block
   | Array_block
 
-type mode =
-  | Reference
-  | Binarien
-
-let mode = Binarien
-(* let mode = Reference *)
-
 let block_repr = Array_block
 (* let block_repr = Struct_block *)
 

@@ -84,24 +84,21 @@ module Conv = struct
     let function_call_handling handler ~tail call : Expr.t =
       if tail then call
       else
-        match mode with
-        | Reference -> failwith "TODO reference call"
-        | Binarien ->
-          let var = Local.fresh "call_result" in
-          let body : Expr.t =
-            If_then_else
-              { cond = Unop (Tuple_extract 0, Var (V var))
-              ; if_expr =
-                  NR (raise handler (Unop (Tuple_extract 1, Var (V var))))
-              ; else_expr = Unop (Tuple_extract 1, Var (V var))
-              }
-          in
-          Let
-            { var
-            ; typ = Type.Tuple [ I32; ref_eq ]
-            ; defining_expr = call
-            ; body
+        let var = Local.fresh "call_result" in
+        let body : Expr.t =
+          If_then_else
+            { cond = Unop (Tuple_extract 0, Var (V var))
+            ; if_expr =
+                NR (raise handler (Unop (Tuple_extract 1, Var (V var))))
+            ; else_expr = Unop (Tuple_extract 1, Var (V var))
             }
+        in
+        Let
+          { var
+          ; typ = Type.Tuple [ I32; ref_eq ]
+          ; defining_expr = call
+          ; body
+          }
   end
 
   let exceptions_module =
@@ -2169,6 +2166,7 @@ module ToWasm = struct
           C.block cont result_types [ C.br fallthrough [ conv_expr_group body ] ]
         in
         let handler_expr = conv_expr handler in
+        (*
         match mode with
         | Reference ->
           let handler =
@@ -2182,29 +2180,30 @@ module ToWasm = struct
           in
           [ C.block fallthrough [ ref_eq ] (body :: handler) ]
         | Binarien ->
-          let set_locals =
-            match params with
-            | [] -> [ body ]
-            | [ (None, _typ) ] -> [ C.drop body ]
-            | [ (Some var, _typ) ] -> [ C.local_set (Expr.Local.V var) body ]
-            | _ ->
-              let local_tuple = Expr.Local.Block_result cont in
-              let _i, assigns =
-                List.fold_left
-                  (fun (i, assigns) (var, _typ) ->
-                      match var with
-                      | Some var ->
-                        let project =
-                          C.tuple_extract i (C.local_get (Expr.Local.V local_tuple))
-                        in
-                        let expr = C.local_set (Expr.Local.V var) project in
-                        (i + 1, expr :: assigns)
-                      | None -> (i + 1, assigns) )
-                  (0, []) params
-              in
-              [ C.local_set (Expr.Local.V local_tuple) body ] @ assigns
-          in
-          [ C.block fallthrough [ ref_eq ] (set_locals @ handler_expr) ]
+            *)
+        let set_locals =
+          match params with
+          | [] -> [ body ]
+          | [ (None, _typ) ] -> [ C.drop body ]
+          | [ (Some var, _typ) ] -> [ C.local_set (Expr.Local.V var) body ]
+          | _ ->
+            let local_tuple = Expr.Local.Block_result cont in
+            let _i, assigns =
+              List.fold_left
+                (fun (i, assigns) (var, _typ) ->
+                    match var with
+                    | Some var ->
+                      let project =
+                        C.tuple_extract i (C.local_get (Expr.Local.V local_tuple))
+                      in
+                      let expr = C.local_set (Expr.Local.V var) project in
+                      (i + 1, expr :: assigns)
+                    | None -> (i + 1, assigns) )
+                (0, []) params
+            in
+            [ C.local_set (Expr.Local.V local_tuple) body ] @ assigns
+        in
+        [ C.block fallthrough [ ref_eq ] (set_locals @ handler_expr) ]
       end
     | Br_on_cast { value; typ; if_cast; if_else } ->
       [ C.drop (C.br_on_cast if_cast typ (conv_expr_group value)) ]
@@ -2213,16 +2212,10 @@ module ToWasm = struct
       [ C.br_if if_true (conv_expr_group cond) ] @ conv_expr if_else
     | Br_table { cond; cases; default } ->
       [ C.br_table (conv_expr_group cond) (cases @ [ default ]) ]
-    | Try { body; handler; result_typ; param = local, typ } -> begin
-        match mode with
-        | Reference ->
-          Format.eprintf "Warning exception not supported@.";
-          conv_expr body
-        | Binarien ->
-          let body = conv_expr body in
-          let handler = C.local_set (V local) (C.pop typ) :: conv_expr handler in
-          [ C.try_ ~result_typ ~body ~handler ~typ ]
-      end
+    | Try { body; handler; result_typ; param = local, typ } ->
+      let body = conv_expr body in
+      let handler = C.local_set (V local) (C.pop typ) :: conv_expr handler in
+      [ C.try_ ~result_typ ~body ~handler ~typ ]
     | Unit e -> conv_no_value e @ [ unit ]
     | NR nr -> conv_no_return nr
 
@@ -2289,11 +2282,7 @@ module ToWasm = struct
     | NR_br { cont; args } ->
       [ C.br cont [ C.br cont (List.map conv_expr_group args) ] ]
     | NR_return args -> [ C.return (List.map conv_expr_group args) ]
-    | Throw e -> begin
-        match mode with
-        | Reference -> [ C.unreachable ]
-        | Binarien -> [ C.throw (conv_expr_group e) ]
-      end
+    | Throw e -> [ C.throw (conv_expr_group e) ]
     | Unreachable -> [ C.unreachable ]
 
   let conv_const name export (const : Const.t) =
