@@ -318,5 +318,3 @@
                      (param (ref eq)) (result (ref eq)) (unreachable))
 
 )
-
-(register "import")
