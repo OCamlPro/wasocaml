@@ -196,5 +196,3 @@
     (unreachable))
 
 )
-
-(register "runtime")

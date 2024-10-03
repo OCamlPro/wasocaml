@@ -7,9 +7,9 @@ type tmp_file =
   ; filename : string
   }
 
-let out_file (name, (wast : Wast.t)) =
+let out_file (name, (wat : Wat.t)) =
   let filename, oc =
-    Filename.open_temp_file (tmp_dirname ^ "/" ^ name) ".wast"
+    Filename.open_temp_file (tmp_dirname ^ "/" ^ name) ".wat"
   in
   Format.printf "tmp_file: %s@." filename;
   let ppf = Format.formatter_of_out_channel oc in
@@ -18,9 +18,9 @@ let out_file (name, (wast : Wast.t)) =
       Format.fprintf ppf "@.";
       close_out oc )
     (fun () ->
-        Emit_wast.output_wast ppf wast.module_;
+        Emit_wat.output_wat ppf wat.module_;
         Format.fprintf ppf "@\n";
-        Emit_wast.output_wast ppf wast.register );
+        Emit_wat.output_wat ppf wat.register );
   { name; filename }
 
 let emit_text = "--emit-text"
@@ -46,7 +46,7 @@ let merge_files ~runtime_dir ~text files output =
   let command =
     let runtime_files =
       List.concat_map
-        (fun (file, name) -> [ Filename.concat runtime_dir (file ^ ".wast"); name ])
+        (fun (file, name) -> [ Filename.concat runtime_dir (file ^ ".wat"); name ])
         runtime
     in
     let ocaml_files =
@@ -69,14 +69,14 @@ let rec make_directory dir =
     Sys.mkdir dir 0o777
   end
 
-let link (modules : (wasm_compilation_unit * Wast.t) list) ~output =
-  let output_wast = output ^ ".wast" in
+let link (modules : (wasm_compilation_unit * Wat.t) list) ~output =
+  let output_wat = output ^ ".wat" in
   let output_wasm = output ^ ".wasm" in
-  Format.eprintf "OUTPUT: %s@." output_wast;
+  Format.eprintf "OUTPUT: %s@." output_wat;
   let dirname = Filename.concat (Filename.get_temp_dir_name ()) tmp_dirname in
   make_directory dirname;
   (* Sys.mkdir dirname 0o700; *)
   let tmp_modules = List.map out_file modules in
   let runtime_dir = Config.standard_library in
-  merge_files ~runtime_dir ~text:true tmp_modules output_wast;
+  merge_files ~runtime_dir ~text:true tmp_modules output_wat;
   merge_files ~runtime_dir ~text:false tmp_modules output_wasm

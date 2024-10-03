@@ -75,8 +75,8 @@ let add_closure_offsets result ~constant
     let fun_offset =
       1
       +
-      (* arity field *)
-      if arity > 1 then 1 else 0
+        (* arity field *)
+        if arity > 1 then 1 else 0
     in
     let fun_accessor =
       { field = fun_offset
@@ -130,9 +130,9 @@ let add_closure_offsets result ~constant
       let functions =
         Variable.Map.fold
           (fun _id (function_decl : Flambda.function_declaration) acc ->
-            let arity = Flambda_utils.function_arity function_decl in
-            let fields = if constant then 0 else 1 in
-            { arity; fields } :: acc )
+              let arity = Flambda_utils.function_arity function_decl in
+              let fields = if constant then 0 else 1 in
+              { arity; fields } :: acc )
           function_decls.funs []
       in
       let fields = Variable.Map.cardinal free_vars in

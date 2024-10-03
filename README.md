@@ -42,12 +42,12 @@ $ opam switch create wasocaml --repos default,wasocaml=git+https://github.com/oc
 
 ### Usage
 
-Running the compiler will produce two files: `a.out.wasm` (the Wasm binary) and `a.out.wast` (the Wast text format).
+Running the compiler will produce two files: `a.out.wasm` (the Wasm binary) and `a.out.wat` (the Wast text format).
 
 ```shell-session
 $ /usr/local/bin/ocamlopt file.ml
 $ ls
-a.out a.out.wasm a.out.wast
+a.out a.out.wasm a.out.wat
 ```
 
 For a complete example using the compiler installed as an opam switch, see [wasocaml-demo].

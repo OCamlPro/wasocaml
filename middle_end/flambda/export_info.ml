@@ -147,7 +147,7 @@ type t = {
   invariant_params : Variable.Set.t Variable.Map.t Set_of_closures_id.Map.t;
   recursive : Variable.Set.t Set_of_closures_id.Map.t;
   wasm_offsets : Wasm_closure_offsets.t;
-  wasm_contents : Wast.t option;
+  wasm_contents : Wat.t option;
 }
 
 type transient = {

@@ -84,24 +84,21 @@ module Conv = struct
     let function_call_handling handler ~tail call : Expr.t =
       if tail then call
       else
-        match mode with
-        | Reference -> failwith "TODO reference call"
-        | Binarien ->
-          let var = Local.fresh "call_result" in
-          let body : Expr.t =
-            If_then_else
-              { cond = Unop (Tuple_extract 0, Var (V var))
-              ; if_expr =
-                  NR (raise handler (Unop (Tuple_extract 1, Var (V var))))
-              ; else_expr = Unop (Tuple_extract 1, Var (V var))
-              }
-          in
-          Let
-            { var
-            ; typ = Type.Tuple [ I32; ref_eq ]
-            ; defining_expr = call
-            ; body
+        let var = Local.fresh "call_result" in
+        let body : Expr.t =
+          If_then_else
+            { cond = Unop (Tuple_extract 0, Var (V var))
+            ; if_expr =
+                NR (raise handler (Unop (Tuple_extract 1, Var (V var))))
+            ; else_expr = Unop (Tuple_extract 1, Var (V var))
             }
+        in
+        Let
+          { var
+          ; typ = Type.Tuple [ I32; ref_eq ]
+          ; defining_expr = call
+          ; body
+          }
   end
 
   let exceptions_module =
@@ -216,7 +213,7 @@ module Conv = struct
           raise e
 
     let project_closure ?(cast : unit option) (top_env : top_env) closure_id
-        set_of_closures : Expr.t =
+      set_of_closures : Expr.t =
       let accessor = closure_info top_env closure_id in
       if not accessor.recursive_set then set_of_closures
       else
@@ -229,7 +226,7 @@ module Conv = struct
         Unop (Struct_get { typ; field = accessor.field }, set_of_closures)
 
     let project_var ?(cast : unit option) (top_env : top_env) closure_id var
-        closure : Expr.t =
+      closure : Expr.t =
       let accessor = var_within_closure_info top_env var in
       let closure_info = closure_info top_env closure_id in
       if not accessor.recursive_set then begin
@@ -267,7 +264,7 @@ module Conv = struct
           (Struct_get { typ = set_typ; field = accessor.field }, set_of_closures)
 
     let move_within_set_of_closures ?(cast : unit option) (top_env : top_env)
-        ~start_from ~move_to closure : Expr.t =
+      ~start_from ~move_to closure : Expr.t =
       if Closure_id.equal start_from move_to then closure
       else begin
         let start_from_info =
@@ -511,12 +508,12 @@ module Conv = struct
       Seq (List.map drop l, last)
 
   let const_block ~symbols_being_bound tag fields :
-      Const.t * (int * Symbol.t) list =
+    Const.t * (int * Symbol.t) list =
     let size = List.length fields in
     State.add_block_size size;
     let fields_to_update = ref [] in
     let field i (f : Flambda.constant_defining_value_block_field) : Const.field
-        =
+      =
       match f with
       | Symbol s ->
         if Symbol.Set.mem s symbols_being_bound then begin
@@ -539,7 +536,7 @@ module Conv = struct
     Unop (Struct_get { typ; field = 0 }, Ref_cast { typ; r = x })
 
   let c_import_type_var (descr : Primitive.description) :
-      Type.Var.c_import_func_type =
+    Type.Var.c_import_func_type =
     let repr_type (t : Primitive.native_repr) : Type.Var.C_import_atom.t =
       if descr.prim_native_name = "" then
         assert (t = Primitive.Same_as_ocaml_repr);
@@ -572,33 +569,33 @@ module Conv = struct
     State.add_arity arity;
     match apply.kind with
     | Indirect -> begin
-      match apply.args with
-      | [] -> assert false
-      | [ arg ] ->
-        let func_typ = Type.Var.Func { arity = 1 } in
-        let var : Expr.Local.var = Indirec_call_closure { arity = 1 } in
-        let closure : Expr.t = Closure.cast (conv_var env apply.func) in
-        let func : Expr.t = Closure.get_gen_func (Var (V var)) in
-        let args : Expr.t list = [ conv_var env arg; Var (V var) ] in
-        Let
-          { var
-          ; typ = Rvar Env
-          ; defining_expr = closure
-          ; body =
-              Exceptions.function_call_handling env.current_exception_handler
-                ~tail
-                (Call_ref { typ = func_typ; func; args; tail })
-          }
-      | _ :: _ :: _ ->
-        let args =
-          Closure.cast (conv_var env apply.func)
-          :: List.map (conv_var env) apply.args
-        in
-        State.add_caml_apply arity;
-        let typ = Type.Var.Caml_apply_func { arity } in
-        Exceptions.function_call_handling ~tail env.current_exception_handler
-          (Call { typ; func = Caml_apply arity; args; tail })
-    end
+        match apply.args with
+        | [] -> assert false
+        | [ arg ] ->
+          let func_typ = Type.Var.Func { arity = 1 } in
+          let var : Expr.Local.var = Indirec_call_closure { arity = 1 } in
+          let closure : Expr.t = Closure.cast (conv_var env apply.func) in
+          let func : Expr.t = Closure.get_gen_func (Var (V var)) in
+          let args : Expr.t list = [ conv_var env arg; Var (V var) ] in
+          Let
+            { var
+            ; typ = Rvar Env
+            ; defining_expr = closure
+            ; body =
+                Exceptions.function_call_handling env.current_exception_handler
+                  ~tail
+                  (Call_ref { typ = func_typ; func; args; tail })
+            }
+        | _ :: _ :: _ ->
+          let args =
+            Closure.cast (conv_var env apply.func)
+            :: List.map (conv_var env) apply.args
+          in
+          State.add_caml_apply arity;
+          let typ = Type.Var.Caml_apply_func { arity } in
+          Exceptions.function_call_handling ~tail env.current_exception_handler
+            (Call { typ; func = Caml_apply arity; args; tail })
+      end
     | Direct closure_id ->
       let func = Func_id.of_closure_id closure_id in
       let () =
@@ -616,7 +613,7 @@ module Conv = struct
         (Call { typ; func; args; tail })
 
   let conv_allocated_const_expr (const : Allocated_const.t) : Type.atom * Expr.t
-      =
+    =
     match const with
     | Float f -> (Rvar Float, const_float f)
     | Int32 i -> (Rvar Int32, const_int32 i)
@@ -638,13 +635,13 @@ module Conv = struct
     Expr { typ; e }
 
   let closure_type_from_info (id : Set_of_closures_id.t)
-      (set_info : Wasm_closure_offsets.set_of_closures_id_type) =
+    (set_info : Wasm_closure_offsets.set_of_closures_id_type) =
     let name : Type.Var.t = Set_of_closures id in
     let func_types =
       List.fold_left
         (fun acc ({ arity; fields } : Wasm_closure_offsets.func) ->
-          let typ : Type.atom = Rvar (Closure { arity; fields }) in
-          typ :: acc )
+            let typ : Type.atom = Rvar (Closure { arity; fields }) in
+            typ :: acc )
         [] set_info.functions
     in
     let data_fields = List.init set_info.fields (fun _ -> ref_eq) in
@@ -679,7 +676,7 @@ module Conv = struct
     runtime_prim ~tail:false name args
 
   let rec conv_body (env : top_env) (expr : Flambda.program_body) effects :
-      Module.t =
+    Module.t =
     match expr with
     | Let_symbol (symbol, Set_of_closures set, body) ->
       let decl = closed_set_of_closures symbol set in
@@ -701,10 +698,10 @@ module Conv = struct
       let decls, effects =
         List.fold_left
           (fun (decls, effects) (symbol, const) ->
-            let decl, new_effecs =
-              conv_symbol ~symbols_being_bound symbol const
-            in
-            (decl @ decls, new_effecs @ effects) )
+              let decl, new_effecs =
+                conv_symbol ~symbols_being_bound symbol const
+              in
+              (decl @ decls, new_effecs @ effects) )
           ([], effects) decls
       in
       let body = conv_body env body effects in
@@ -739,38 +736,38 @@ module Conv = struct
                 ; body =
                     No_value
                       (NV_call
-                         { typ
-                         ; func = not_really_start
-                         ; args = []
-                         ; tail = false
-                         } )
+                          { typ
+                          ; func = not_really_start
+                          ; args = []
+                          ; tail = false
+                          } )
                 }
           }
       ]
 
   and conv_initialize_symbol env symbol tag fields :
-      _ * Expr.no_value_expression list =
+    _ * Expr.no_value_expression list =
     let fields =
       List.mapi
         (fun i field ->
-          (i, field, Initialize_symbol_to_let_symbol.constant_field field) )
+            (i, field, Initialize_symbol_to_let_symbol.constant_field field) )
         fields
     in
     let fields_to_update = ref [] in
     let predefined_fields =
       List.map
         (fun (i, expr, field) : Const.field ->
-          match field with
-          | None ->
-            let expr_env = empty_env ~top_env:env in
-            let expr = conv_expr ~tail:false expr_env expr in
-            fields_to_update := (i, expr) :: !fields_to_update;
-            I31 dummy_const
-          | Some (field : Flambda.constant_defining_value_block_field) -> (
             match field with
-            | Symbol s -> WSymbol.const s
-            | Const (Int i) -> I31 i
-            | Const (Char c) -> I31 (Char.code c) ) )
+            | None ->
+              let expr_env = empty_env ~top_env:env in
+              let expr = conv_expr ~tail:false expr_env expr in
+              fields_to_update := (i, expr) :: !fields_to_update;
+              I31 dummy_const
+            | Some (field : Flambda.constant_defining_value_block_field) -> (
+                match field with
+                | Symbol s -> WSymbol.const s
+                | Const (Int i) -> I31 i
+                | Const (Char c) -> I31 (Char.code c) ) )
         fields
     in
     let name = Global.of_symbol symbol in
@@ -788,7 +785,7 @@ module Conv = struct
 
   and conv_symbol ~symbols_being_bound symbol
       (const : Flambda.constant_defining_value) :
-      Decl.t list * Expr.no_value_expression list =
+    Decl.t list * Expr.no_value_expression list =
     match const with
     | Block (tag, fields) ->
       let name = Global.of_symbol symbol in
@@ -798,9 +795,9 @@ module Conv = struct
       let new_effects =
         List.map
           (fun (field_to_update, field_contents) : Expr.no_value_expression ->
-            Block.set_field ~cast:true ~field:field_to_update
-              ~block:(WSymbol.get symbol)
-              (WSymbol.get field_contents) )
+              Block.set_field ~cast:true ~field:field_to_update
+                ~block:(WSymbol.get symbol)
+                (WSymbol.get field_contents) )
           fields_to_update
       in
       ([ Const { name; export = Some symbol; descr } ], new_effects)
@@ -814,7 +811,7 @@ module Conv = struct
       ([ Const { name; export = Some symbol; descr } ], [])
 
   and closed_function_declaration (name : Variable.t)
-      (declaration : Flambda.function_declaration) : Decl.const =
+    (declaration : Flambda.function_declaration) : Decl.const =
     let function_name = Func_id.of_var_closure_id name in
     let arity = List.length declaration.params in
     let closure =
@@ -835,7 +832,7 @@ module Conv = struct
     { name = closure_name; export = Some closure_symbol; descr = closure }
 
   and closed_set_of_closures symbol (set_of_closures : Flambda.set_of_closures)
-      : Decl.t list =
+    : Decl.t list =
     let function_decls = set_of_closures.function_decls in
     let is_recursive = Variable.Map.cardinal function_decls.funs > 1 in
     if not is_recursive then begin
@@ -853,8 +850,8 @@ module Conv = struct
       let decls =
         Variable.Map.fold
           (fun name (declaration : Flambda.function_declaration) declarations ->
-            let decl = closed_function_declaration name declaration in
-            decl :: declarations )
+              let decl = closed_function_declaration name declaration in
+              decl :: declarations )
           set_of_closures.function_decls.funs []
       in
       let closure_decls = List.map (fun decl -> Decl.Const decl) decls in
@@ -869,18 +866,18 @@ module Conv = struct
       in
       closure_decls
       @ [ Decl.Const
-            { name = Global.of_symbol symbol
-            ; export =
-                Some symbol
-                (* This export might not be required, there is no reason for
-                   a cross module reference to a set of closure *)
-            ; descr = set_of_closures
-            }
-        ]
+          { name = Global.of_symbol symbol
+          ; export =
+              Some symbol
+          (* This export might not be required, there is no reason for
+             a cross module reference to a set of closure *)
+          ; descr = set_of_closures
+          }
+      ]
     end
 
   and conv_set_of_closures env (set_of_closures : Flambda.set_of_closures) :
-      Expr.t =
+    Expr.t =
     let function_decls = set_of_closures.function_decls in
     let is_recursive = Variable.Map.cardinal function_decls.funs > 1 in
     if not is_recursive then begin
@@ -892,7 +889,7 @@ module Conv = struct
       let rev_value_fields =
         Variable.Map.fold
           (fun _id (var : Flambda.specialised_to) acc ->
-            conv_var env var.var :: acc )
+              conv_var env var.var :: acc )
           set_of_closures.free_vars []
       in
       let func_id = Func_id.of_var_closure_id func_var in
@@ -909,7 +906,7 @@ module Conv = struct
     end
     else begin
       let add_closure func_var (function_decl : Flambda.function_declaration)
-          body : Expr.t =
+        body : Expr.t =
         let arity = Flambda_utils.function_arity function_decl in
         let typ : Type.Var.t = Closure { arity; fields = 1 } in
         State.add_closure_type ~arity ~fields:1;
@@ -933,7 +930,7 @@ module Conv = struct
         Set_of_closures function_decls.set_of_closures_id
       in
       let update_fields func_var (function_decl : Flambda.function_declaration)
-          updates : Expr.no_value_expression list =
+        updates : Expr.no_value_expression list =
         let arity = Flambda_utils.function_arity function_decl in
         let typ : Type.Var.t = Closure { arity; fields = 1 } in
         let field = if arity = 1 then 2 else 3 in
@@ -1083,7 +1080,7 @@ module Conv = struct
       let body : Expr.t =
         Unit
           (NV_if_then_else
-             { cond; if_expr = Loop { cont; body }; else_expr = NV } )
+              { cond; if_expr = Loop { cont; body }; else_expr = NV } )
       in
       Let
         { var = local
@@ -1117,14 +1114,14 @@ module Conv = struct
       let body =
         List.fold_left
           (fun body (str, branch) : Expr.t ->
-            let cond =
-              WInt.untag
-                (runtime_prim ~tail:false "string_eq"
-                   [ Expr.Var (V local); const_string str ] )
-            in
-            If_then_else
-              { cond; if_expr = conv_expr ~tail env branch; else_expr = body }
-            )
+              let cond =
+                WInt.untag
+                  (runtime_prim ~tail:false "string_eq"
+                      [ Expr.Var (V local); const_string str ] )
+              in
+              If_then_else
+                { cond; if_expr = conv_expr ~tail env branch; else_expr = body }
+          )
           body branches
       in
       Let
@@ -1162,14 +1159,14 @@ module Conv = struct
       else failwith msg
 
   and conv_switch ~tail (env : env) (cond : Expr.t) (switch : Flambda.switch) :
-      Expr.t =
+    Expr.t =
     let default_id = Block_id.fresh "switch_default" in
     let branches _set cases =
       let cases, defs =
         List.fold_left
           (fun (map, defs) (i, branch) ->
-            let id = Block_id.fresh (Printf.sprintf "switch_%i" i) in
-            (Numbers.Int.Map.add i id map, (id, branch) :: defs) )
+              let id = Block_id.fresh (Printf.sprintf "switch_%i" i) in
+              (Numbers.Int.Map.add i id map, (id, branch) :: defs) )
           (Numbers.Int.Map.empty, [])
           cases
       in
@@ -1179,16 +1176,16 @@ module Conv = struct
           let max, max_branch = Numbers.Int.Map.max_binding cases in
           ( max
           , match switch.failaction with
-            | None -> max_branch
-            | Some _ -> default_id )
+          | None -> max_branch
+          | Some _ -> default_id )
       in
       let cases =
         (* TODO max_branch should be sufficient sometimes: the default
            can replace the last case *)
         List.init (max_branch + 1) (fun i ->
-            match Numbers.Int.Map.find_opt i cases with
-            | None -> default_branch
-            | Some branch -> branch )
+          match Numbers.Int.Map.find_opt i cases with
+          | None -> default_branch
+          | Some branch -> branch )
       in
       (cases, defs)
     in
@@ -1286,7 +1283,7 @@ module Conv = struct
       e
 
   and conv_prim ~tail env ~(prim : Clambda_primitives.primitive) ~args : Expr.t
-      =
+    =
     let args = List.map (conv_var env) args in
     let arg1 args =
       match args with
@@ -1342,23 +1339,23 @@ module Conv = struct
     | Pdivfloat ->
       box_float (Expr.Binop (Expr.f64_div, args2 (List.map unbox_float args)))
     | Pfloatcomp cmp -> begin
-      let relop, is_not = float_comparision cmp in
-      let cmp_op : Expr.t =
-        F_relop (S64, relop, args2 (List.map unbox_float args))
-      in
-      let op = match is_not with Id -> cmp_op | Not -> bool_not cmp_op in
-      i31 op
-    end
+        let relop, is_not = float_comparision cmp in
+        let cmp_op : Expr.t =
+          F_relop (S64, relop, args2 (List.map unbox_float args))
+        in
+        let op = match is_not with Id -> cmp_op | Not -> bool_not cmp_op in
+        i31 op
+      end
     | Pintoffloat ->
       i31
         (Unop
-           ( Trunc { from_type = S64; to_type = S32; sign = S }
-           , unbox_float (arg1 args) ) )
+            ( Trunc { from_type = S64; to_type = S32; sign = S }
+            , unbox_float (arg1 args) ) )
     | Pfloatofint ->
       box_float
         (Unop
-           ( Convert { from_type = S32; to_type = S64; sign = S }
-           , i32 (arg1 args) ) )
+            ( Convert { from_type = S32; to_type = S64; sign = S }
+            , i32 (arg1 args) ) )
     | Pccall descr ->
       let unbox_arg (t : Primitive.native_repr) arg =
         match t with
@@ -1403,23 +1400,23 @@ module Conv = struct
     | Pmakearray ((Pintarray | Paddrarray), _) ->
       Array_new_fixed { typ = Array; fields = args }
     | Pmakearray (Pgenarray, _) -> begin
-      match args with
-      | [] -> Array_new_fixed { typ = Array; fields = [] }
-      | first :: _ ->
-        let cont = Block_id.fresh "make_float_array" in
-        let handler : Expr.t =
-          Array_new_fixed
-            { typ = FloatArray; fields = List.map unbox_float args }
-        in
-        let if_else : Expr.t = Array_new_fixed { typ = Array; fields = args } in
-        Let_cont
-          { cont
-          ; params = [ (None, Rvar Float) ]
-          ; handler
-          ; body =
-              Br_on_cast { value = first; typ = Float; if_cast = cont; if_else }
-          }
-    end
+        match args with
+        | [] -> Array_new_fixed { typ = Array; fields = [] }
+        | first :: _ ->
+          let cont = Block_id.fresh "make_float_array" in
+          let handler : Expr.t =
+            Array_new_fixed
+              { typ = FloatArray; fields = List.map unbox_float args }
+          in
+          let if_else : Expr.t = Array_new_fixed { typ = Array; fields = args } in
+          Let_cont
+            { cont
+            ; params = [ (None, Rvar Float) ]
+            ; handler
+            ; body =
+                Br_on_cast { value = first; typ = Float; if_cast = cont; if_else }
+            }
+      end
     | Pduparray (_, _) -> runtime_prim "duparray"
     | Pfloatfield field ->
       let arg = arg1 args in
@@ -1432,16 +1429,16 @@ module Conv = struct
     | Pisint -> WInt.tag (Unop (Is_i31, arg1 args))
     | Pintcomp Ceq -> i31 (Expr.Binop (Ref_eq, args2 args))
     | Pintcomp cop -> begin
-      let op : Expr.t =
-        match cop with
-        | Ceq -> Binop (Ref_eq, args2 args)
-        | Cne -> bool_not (Binop (Ref_eq, args2 args))
-        | Clt | Cgt | Cle | Cge ->
-          let cmp = integer_comparision cop in
-          I_relop (S32, cmp, args2 (List.map i32 args))
-      in
-      i31 op
-    end
+        let op : Expr.t =
+          match cop with
+          | Ceq -> Binop (Ref_eq, args2 args)
+          | Cne -> bool_not (Binop (Ref_eq, args2 args))
+          | Clt | Cgt | Cle | Cge ->
+            let cmp = integer_comparision cop in
+            I_relop (S32, cmp, args2 (List.map i32 args))
+        in
+        i31 op
+      end
     | Pcompare_ints -> runtime_prim "compare_ints"
     | Pcompare_floats -> runtime_prim "compare_floats"
     | Pcompare_bints Pint64 -> runtime_prim "compare_i64"
@@ -1500,21 +1497,21 @@ module Conv = struct
       let array, field, value = args3 args in
       Unit
         (Array_set
-           { typ
-           ; array = Ref_cast { typ; r = array }
-           ; field = i32 field
-           ; value
-           } )
+            { typ
+            ; array = Ref_cast { typ; r = array }
+            ; field = i32 field
+            ; value
+            } )
     | Parraysetu Pfloatarray ->
       let typ : Type.Var.t = FloatArray in
       let array, field, value = args3 args in
       Unit
         (Array_set
-           { typ
-           ; array = Ref_cast { typ; r = array }
-           ; field = i32 field
-           ; value = unbox_float value
-           } )
+            { typ
+            ; array = Ref_cast { typ; r = array }
+            ; field = i32 field
+            ; value = unbox_float value
+            } )
     | Parraysetu Pgenarray -> runtime_prim "array_set_unsafe"
     | Parraysets (Paddrarray | Pintarray) ->
       runtime_prim "array_set_int_or_addr_safe"
@@ -1526,18 +1523,18 @@ module Conv = struct
       let arr, idx = args2 args in
       i31
         (Binop
-           ( Array_get_packed { typ = String; extend = S }
-           , (Ref_cast { typ = String; r = arr }, i32 idx) ) )
+            ( Array_get_packed { typ = String; extend = S }
+            , (Ref_cast { typ = String; r = arr }, i32 idx) ) )
     | Pbytessets -> runtime_prim "bytes_set"
     | Pbytessetu ->
       let array, field, value = args3 args in
       Unit
         (Array_set
-           { typ = String
-           ; array = Ref_cast { typ = String; r = array }
-           ; field = i32 field
-           ; value = i32 value
-           } )
+            { typ = String
+            ; array = Ref_cast { typ = String; r = array }
+            ; field = i32 field
+            ; value = i32 value
+            } )
     | Pbigarrayref _ | Pbigarrayset _ | Pbigarraydim _ | Pbigstring_load _
     | Pbigstring_set _ | Pstring_load _ | Pbytes_load _ | Pbytes_set _
     | Pbswap16 | Pbbswap _ | Pint_as_pointer | _ ->
@@ -1556,20 +1553,20 @@ module Conv = struct
     in
     List.fold_left
       (fun decls (set_of_closures : Flambda.set_of_closures) ->
-        let function_decls = set_of_closures.function_decls in
-        let constant_function =
-          Set_of_closures_id.Set.mem function_decls.set_of_closures_id
-            constant_sets
-        in
-        let closure_functions = Variable.Map.keys function_decls.funs in
-        Variable.Map.fold
-          (fun var function_declaration decls ->
-            let decl =
-              conv_function_declaration ~top_env ~closure_functions var
-                ~constant_function function_declaration
-            in
-            decl :: decls )
-          function_decls.funs decls )
+          let function_decls = set_of_closures.function_decls in
+          let constant_function =
+            Set_of_closures_id.Set.mem function_decls.set_of_closures_id
+              constant_sets
+          in
+          let closure_functions = Variable.Map.keys function_decls.funs in
+          Variable.Map.fold
+            (fun var function_declaration decls ->
+                let decl =
+                  conv_function_declaration ~top_env ~closure_functions var
+                    ~constant_function function_declaration
+                in
+                decl :: decls )
+            function_decls.funs decls )
       []
       (Flambda_utils.all_sets_of_closures flambda)
 
@@ -1639,10 +1636,10 @@ module Conv = struct
     let closure_args =
       let first_arg_field = 3 in
       List.init (n - 1) (fun i : Expr.t ->
-          let field = first_arg_field + i in
-          Unop
-            ( Struct_get { typ = partial_closure_arg_typ; field }
-            , Expr.Var (Expr.Local.V partial_closure_var) ) )
+        let field = first_arg_field + i in
+        Unop
+          ( Struct_get { typ = partial_closure_arg_typ; field }
+          , Expr.Var (Expr.Local.V partial_closure_var) ) )
     in
     let args =
       closure_args @ [ Expr.Var param_arg; Expr.Var (V closure_var) ]
@@ -1653,11 +1650,11 @@ module Conv = struct
     Expr.let_ partial_closure_var (Type.Rvar partial_closure_arg_typ)
       (Ref_cast { typ = partial_closure_arg_typ; r = Var env_arg })
       (Expr.let_ closure_var (Type.Rvar closure_arg_typ)
-         (Unop
-            ( Struct_get { typ = partial_closure_arg_typ; field = 2 }
-            , Expr.Var (Expr.Local.V partial_closure_var) ) )
-         (Call_ref
-            { tail = true; typ = Type.Var.Func { arity = n }; args; func } ) )
+          (Unop
+              ( Struct_get { typ = partial_closure_arg_typ; field = 2 }
+              , Expr.Var (Expr.Local.V partial_closure_var) ) )
+          (Call_ref
+              { tail = true; typ = Type.Var.Func { arity = n }; args; func } ) )
 
   let caml_curry_alloc ~param_arg ~env_arg n m : Expr.t =
     (* arity, func, env, arg1..., argn-1, argn *)
@@ -1667,9 +1664,9 @@ module Conv = struct
     let closure_args =
       let first_arg_field = 3 in
       List.init m (fun i : Expr.t ->
-          let field = first_arg_field + i in
-          Unop
-            (Struct_get { typ = closure_arg_typ; field }, Expr.Var closure_local) )
+        let field = first_arg_field + i in
+        Unop
+          (Struct_get { typ = closure_arg_typ; field }, Expr.Var closure_local) )
     in
     let closure_field =
       if m = 0 then
@@ -1720,11 +1717,11 @@ module Conv = struct
       let mk_call ~tail param =
         Exceptions.function_call_handling ~tail Exceptions.function_return
           (Expr.Call_ref
-             { typ = Func { arity = 1 }
-             ; args = [ Var (Param param); Var closure_var ]
-             ; func = Closure.get_gen_func (Var closure_var)
-             ; tail
-             } )
+              { typ = Func { arity = 1 }
+              ; args = [ Var (Param param); Var closure_var ]
+              ; func = Closure.get_gen_func (Var closure_var)
+              ; tail
+              } )
       in
       match params with
       | [] -> assert false
@@ -1843,9 +1840,9 @@ module Conv = struct
     let sizes = List.init (max_size + 1) (fun i -> i) in
     List.fold_left
       (fun decls size ->
-        let name = name size in
-        let decl = decl name size in
-        decl @ decls )
+          let name = name size in
+          let decl = decl name size in
+          decl @ decls )
       decls (List.rev sizes)
 
   let make_common () =
@@ -1853,60 +1850,60 @@ module Conv = struct
     let decls =
       Arity.Set.fold
         (fun arity decls ->
-          let ms = List.init (max arity 1) (fun i -> i) in
-          List.fold_left
-            (fun decls applied_args ->
-              let decl =
-                Decl.Func
-                  { name = Func_id.Caml_curry (arity, applied_args)
-                  ; descr = caml_curry arity applied_args
-                  }
-              in
-              decl :: decls )
-            decls ms )
+            let ms = List.init (max arity 1) (fun i -> i) in
+            List.fold_left
+              (fun decls applied_args ->
+                  let decl =
+                    Decl.Func
+                      { name = Func_id.Caml_curry (arity, applied_args)
+                      ; descr = caml_curry arity applied_args
+                      }
+                  in
+                  decl :: decls )
+              decls ms )
         (Arity.Set.remove 1 !State.arities)
         decls
     in
     let decls =
       Arity.Set.fold
         (fun arity decls ->
-          let decl =
-            Decl.Func
-              { name = Func_id.Caml_apply arity; descr = caml_apply arity }
-          in
-          decl :: decls )
+            let decl =
+              Decl.Func
+                { name = Func_id.Caml_apply arity; descr = caml_apply arity }
+            in
+            decl :: decls )
         !State.caml_applies decls
     in
     let decls =
       C_import.Set.fold
         (fun (descr : Primitive.description) decls ->
-          let name = Func_id.prim_name descr in
-          let descr = c_import descr in
-          Decl.Func { name; descr } :: decls )
+            let name = Func_id.prim_name descr in
+            let descr = c_import descr in
+            Decl.Func { name; descr } :: decls )
         !State.c_imports decls
     in
     let decls =
       Runtime_import.Set.fold
         (fun (descr : Runtime_import.t) decls ->
-          let name = Func_id.Runtime descr.name in
-          let descr = runtime_import descr in
-          Decl.Func { name; descr } :: decls )
+            let name = Func_id.Runtime descr.name in
+            let descr = runtime_import descr in
+            Decl.Func { name; descr } :: decls )
         !State.runtime_imports decls
     in
     let decls =
       Global_import.Set.fold
         (fun (sym : Global_import.t) decls ->
-          let name = Global.Sym sym in
-          let descr = global_import sym in
-          Decl.Const { name; export = None; descr } :: decls )
+            let name = Global.Sym sym in
+            let descr = global_import sym in
+            Decl.Const { name; export = None; descr } :: decls )
         !State.global_imports decls
     in
     let decls =
       Func_import.Set.fold
         (fun (import : Func_import.t) decls ->
-          let name = Func_id.of_closure_id import.id in
-          let descr = func_import import in
-          Decl.Func { name; descr } :: decls )
+            let name = Func_id.of_closure_id import.id in
+            let descr = func_import import in
+            Decl.Func { name; descr } :: decls )
         !State.func_imports decls
     in
     let decls =
@@ -1924,57 +1921,57 @@ module Conv = struct
     let decls =
       Arity.Set.fold
         (fun arity decls ->
-          let ms = List.init arity (fun i -> i) in
-          List.fold_left
-            (fun decls applied_args ->
-              let decl =
-                Decl.Type
-                  ( Type.Var.Partial_closure (arity, applied_args)
-                  , partial_closure_type ~arity ~applied:applied_args )
-              in
-              decl :: decls )
-            decls ms )
+            let ms = List.init arity (fun i -> i) in
+            List.fold_left
+              (fun decls applied_args ->
+                  let decl =
+                    Decl.Type
+                      ( Type.Var.Partial_closure (arity, applied_args)
+                      , partial_closure_type ~arity ~applied:applied_args )
+                  in
+                  decl :: decls )
+              decls ms )
         (Arity.Set.remove 1 !State.arities)
         decls
     in
     let decls =
       Closure_type.Set.fold
         (fun { arity; fields } decls ->
-          let name = Type.Var.Closure { arity; fields } in
-          let descr = closure_type ~arity ~fields in
-          Decl.Type (name, descr) :: decls )
+            let name = Type.Var.Closure { arity; fields } in
+            let descr = closure_type ~arity ~fields in
+            Decl.Type (name, descr) :: decls )
         !State.closure_types decls
     in
     let decls =
       Arity.Set.fold
         (fun arity decls ->
-          let name = Type.Var.Gen_closure { arity } in
-          let descr = gen_closure_type ~arity in
-          Decl.Type (name, descr) :: decls )
+            let name = Type.Var.Gen_closure { arity } in
+            let descr = gen_closure_type ~arity in
+            Decl.Type (name, descr) :: decls )
         !State.arities decls
     in
     let decls =
       C_import_func_type.Set.fold
         (fun (descr : Type.Var.c_import_func_type) decls ->
-          c_import_type descr :: decls )
+            c_import_type descr :: decls )
         !State.c_import_func_types decls
     in
     let decls = Block.gen_block_decl @ decls in
     let decls =
       Arity.Set.fold
         (fun arity decls ->
-          let name = Type.Var.Func { arity } in
-          let descr = func_type arity in
-          Decl.Type (name, descr) :: decls )
+            let name = Type.Var.Func { arity } in
+            let descr = func_type arity in
+            Decl.Type (name, descr) :: decls )
         (Arity.Set.remove 1 !State.arities)
         decls
     in
     let decls =
       Arity.Set.fold
         (fun arity decls ->
-          let name = Type.Var.Caml_apply_func { arity } in
-          let descr = caml_apply_type arity in
-          Decl.Type (name, descr) :: decls )
+            let name = Type.Var.Caml_apply_func { arity } in
+            let descr = caml_apply_type arity in
+            Decl.Type (name, descr) :: decls )
         (Arity.Set.remove 1 !State.caml_applies)
         decls
     in
@@ -1986,8 +1983,8 @@ module Conv = struct
 end
 
 module ToWasm = struct
-  module Cst = Wast.Cst
-  module C = Wast.C
+  module Cst = Wat.Cst
+  module C = Wat.C
 
   let option_to_list = function None -> [] | Some v -> [ v ]
 
@@ -2163,25 +2160,27 @@ module ToWasm = struct
           (conv_expr else_expr)
       ]
     | Let_cont { cont; params; handler; body } -> begin
-      let result_types = List.map snd params in
-      let fallthrough = Block_id.not_id cont in
-      let body =
-        C.block cont result_types [ C.br fallthrough [ conv_expr_group body ] ]
-      in
-      let handler_expr = conv_expr handler in
-      match mode with
-      | Reference ->
-        let handler =
-          List.map
-            (fun (var, _typ) ->
-              match var with
-              | Some var -> C.local_set' (Expr.Local.V var)
-              | None -> C.drop' )
-            params
-          @ handler_expr
+        let result_types = List.map snd params in
+        let fallthrough = Block_id.not_id cont in
+        let body =
+          C.block cont result_types [ C.br fallthrough [ conv_expr_group body ] ]
         in
-        [ C.block fallthrough [ ref_eq ] (body :: handler) ]
-      | Binarien ->
+        let handler_expr = conv_expr handler in
+        (*
+        match mode with
+        | Reference ->
+          let handler =
+            List.map
+              (fun (var, _typ) ->
+                  match var with
+                  | Some var -> C.local_set' (Expr.Local.V var)
+                  | None -> C.drop' )
+              params
+            @ handler_expr
+          in
+          [ C.block fallthrough [ ref_eq ] (body :: handler) ]
+        | Binarien ->
+            *)
         let set_locals =
           match params with
           | [] -> [ body ]
@@ -2192,20 +2191,20 @@ module ToWasm = struct
             let _i, assigns =
               List.fold_left
                 (fun (i, assigns) (var, _typ) ->
-                  match var with
-                  | Some var ->
-                    let project =
-                      C.tuple_extract i (C.local_get (Expr.Local.V local_tuple))
-                    in
-                    let expr = C.local_set (Expr.Local.V var) project in
-                    (i + 1, expr :: assigns)
-                  | None -> (i + 1, assigns) )
+                    match var with
+                    | Some var ->
+                      let project =
+                        C.tuple_extract i (C.local_get (Expr.Local.V local_tuple))
+                      in
+                      let expr = C.local_set (Expr.Local.V var) project in
+                      (i + 1, expr :: assigns)
+                    | None -> (i + 1, assigns) )
                 (0, []) params
             in
             [ C.local_set (Expr.Local.V local_tuple) body ] @ assigns
         in
         [ C.block fallthrough [ ref_eq ] (set_locals @ handler_expr) ]
-    end
+      end
     | Br_on_cast { value; typ; if_cast; if_else } ->
       [ C.drop (C.br_on_cast if_cast typ (conv_expr_group value)) ]
       @ conv_expr if_else
@@ -2213,16 +2212,10 @@ module ToWasm = struct
       [ C.br_if if_true (conv_expr_group cond) ] @ conv_expr if_else
     | Br_table { cond; cases; default } ->
       [ C.br_table (conv_expr_group cond) (cases @ [ default ]) ]
-    | Try { body; handler; result_typ; param = local, typ } -> begin
-      match mode with
-      | Reference ->
-        Format.eprintf "Warning exception not supported@.";
-        conv_expr body
-      | Binarien ->
-        let body = conv_expr body in
-        let handler = C.local_set (V local) (C.pop typ) :: conv_expr handler in
-        [ C.try_ ~result_typ ~body ~handler ~typ ]
-    end
+    | Try { body; handler; result_typ; param = local, typ } ->
+      let body = conv_expr body in
+      let handler = C.local_set (V local) (C.pop typ) :: conv_expr handler in
+      [ C.try_ ~result_typ ~body ~handler ~typ ]
     | Unit e -> conv_no_value e @ [ unit ]
     | NR nr -> conv_no_return nr
 
@@ -2275,9 +2268,9 @@ module ToWasm = struct
       let handler =
         List.map
           (fun (var, _typ) ->
-            match var with
-            | Some var -> C.local_set' (Expr.Local.V var)
-            | None -> C.drop' )
+              match var with
+              | Some var -> C.local_set' (Expr.Local.V var)
+              | None -> C.drop' )
           params
         @ conv_no_return handler
       in
@@ -2289,11 +2282,7 @@ module ToWasm = struct
     | NR_br { cont; args } ->
       [ C.br cont [ C.br cont (List.map conv_expr_group args) ] ]
     | NR_return args -> [ C.return (List.map conv_expr_group args) ]
-    | Throw e -> begin
-      match mode with
-      | Reference -> [ C.unreachable ]
-      | Binarien -> [ C.throw (conv_expr_group e) ]
-    end
+    | Throw e -> [ C.throw (conv_expr_group e) ]
     | Unreachable -> [ C.unreachable ]
 
   let conv_const name export (const : Const.t) =
@@ -2345,18 +2334,18 @@ module ToWasm = struct
         let body, result =
           match body with
           | Value body -> begin
-            match body with
-            | [ (expr, typ) ] -> (conv_expr expr, [ C.result typ ])
-            | _ ->
-              let exprs =
-                List.map
-                  (fun (expr, typ) -> C.group_block [ typ ] (conv_expr expr))
-                  body
-              in
-              let _, typs = List.split body in
-              let exprs = [ C.tuple_make exprs ] in
-              (exprs, List.map C.result typs)
-          end
+              match body with
+              | [ (expr, typ) ] -> (conv_expr expr, [ C.result typ ])
+              | _ ->
+                let exprs =
+                  List.map
+                    (fun (expr, typ) -> C.group_block [ typ ] (conv_expr expr))
+                    body
+                in
+                let _, typs = List.split body in
+                let exprs = [ C.tuple_make exprs ] in
+                (exprs, List.map C.result typs)
+            end
           | No_value body -> (conv_no_value body, [])
         in
         C.func ~name ~type_decl ~params ~locals ~result ~body
@@ -2396,24 +2385,21 @@ module ToWasm = struct
   let conv_module module_ = C.module_ (conv_decl module_)
 end
 
-(* let output_wast ppf wast = *)
-(*   ToWasm.Cst.emit ppf wast *)
-
-let output_wast ppf wast = Format.pp_print_string ppf wast
+let output_wat ppf wat = Format.pp_print_string ppf wat
 
 let output_file ~output_prefix ~module_ ~register =
-  let wastfile = output_prefix ^ ".wast" in
-  let oc = open_out_bin wastfile in
+  let watfile = output_prefix ^ ".wat" in
+  let oc = open_out_bin watfile in
   let ppf = Format.formatter_of_out_channel oc in
   Misc.try_finally
     ~always:(fun () ->
       Format.fprintf ppf "@.";
       close_out oc )
-    (* ~exceptionally:(fun () -> Misc.remove_file wastfile) *)
-      (fun () ->
-      output_wast ppf module_;
-      Format.fprintf ppf "@\n";
-      output_wast ppf register )
+    (* ~exceptionally:(fun () -> Misc.remove_file watfile) *)
+    (fun () ->
+        output_wat ppf module_;
+        Format.fprintf ppf "@\n";
+        output_wat ppf register )
 
 let run ~output_prefix (flambda : Flambda.program) =
   State.reset ();
@@ -2445,17 +2431,17 @@ let run ~output_prefix (flambda : Flambda.program) =
     let ln =
       Compilation_unit.get_linkage_name (Compilation_unit.get_current_exn ())
     in
-    Wast.C.register (Linkage_name.to_string ln)
+    Wat.C.register (Linkage_name.to_string ln)
   in
   (* Format.printf "@.%a@." ToWasm.Cst.emit wasm; *)
-  let emit = if Wstate.pp_wast then ToWasm.Cst.pp else ToWasm.Cst.emit in
+  let emit = if Wstate.pp_wat then ToWasm.Cst.pp else ToWasm.Cst.emit in
   let wasm = Format.asprintf "%a" emit wasm in
   let register = Format.asprintf "%a" emit register in
-  Wast.{ module_ = wasm; register }
+  Wat.{ module_ = wasm; register }
 
 let emit ~to_file ~output_prefix (flambda : Flambda.program) =
   let r = run ~output_prefix flambda in
   if to_file then
     Profile.record_call "output_wasm" (fun () ->
-        output_file ~output_prefix ~module_:r.module_ ~register:r.register );
+      output_file ~output_prefix ~module_:r.module_ ~register:r.register );
   r
