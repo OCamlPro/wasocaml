@@ -395,11 +395,11 @@ let rec print ppf = function
     Format.fprintf ppf "@[<hov 2>Let_cont %a(%a) =@ %a@]@ in@ %a" Block_id.print
       cont
       (print_list
-         (fun ppf (local, typ) ->
-           Format.fprintf ppf "%a : %a"
-             (Format.pp_print_option Local.print_var)
-             local Type.print_atom typ )
-         ", " )
+          (fun ppf (local, typ) ->
+              Format.fprintf ppf "%a : %a"
+                (Format.pp_print_option Local.print_var)
+                local Type.print_atom typ )
+          ", " )
       params print handler print body
   | Br_on_cast { value; typ; if_cast; if_else } ->
     Format.fprintf ppf "@[<hov 2>Br_on_cast(%a %a -> (%a) else %a)@]" print
@@ -463,11 +463,11 @@ and print_no_return ppf no_return =
     Format.fprintf ppf "@[<hov 2>Let_cont %a(%a) =@ %a@]@ in@ %a" Block_id.print
       cont
       (print_list
-         (fun ppf (local, typ) ->
-           Format.fprintf ppf "%a : %a"
-             (Format.pp_print_option Local.print_var)
-             local Type.print_atom typ )
-         ", " )
+          (fun ppf (local, typ) ->
+              Format.fprintf ppf "%a : %a"
+                (Format.pp_print_option Local.print_var)
+                local Type.print_atom typ )
+          ", " )
       params print_no_return handler print_no_return body
   | NR_br { cont; args } ->
     Format.fprintf ppf "@[<hov 2>Br(%a(%a))@]" Block_id.print cont
@@ -495,7 +495,7 @@ let required_locals body =
     let acc =
       List.fold_left
         (fun acc (var, typ) ->
-          match var with None -> acc | Some var -> add var typ acc )
+            match var with None -> acc | Some var -> add var typ acc )
         acc params
     in
     let acc =

@@ -64,8 +64,8 @@ module Block_struct : Block = struct
       if size <= 1 then Gen_block else Block { size = size - 1 }
     in
     Struct { sub = Some sub; fields = (* Tag *)
-                                      I8 :: (* size *)
-                                            I16 :: fields }
+                               I8 :: (* size *)
+                                 I16 :: fields }
 
   let type_decl name size : Decl.t list = [ Decl.Type (name, type_descr size) ]
 end

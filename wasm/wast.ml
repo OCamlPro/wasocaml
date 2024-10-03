@@ -25,73 +25,73 @@ module Cst = struct
     | String s -> Format.fprintf ppf "\"%s\"" s
     | Atom s -> Format.pp_print_string ppf s
     | Node { name; args_h; args_v; force_paren } -> begin
-      match (args_h, args_v) with
-      | [], [] ->
-        if force_paren then Format.fprintf ppf "(%s)" name
-        else Format.pp_print_string ppf name
-      | _ ->
-        Format.fprintf ppf "@[<v 2>@[<hov 2>";
-        Format.fprintf ppf "(%s@ %a@]" name (print_lst pp) args_h;
-        ( match args_v with
-        | [] -> ()
-        | _ -> Format.fprintf ppf "@ %a" (print_lst pp) args_v );
-        Format.fprintf ppf ")@]"
-    end
+        match (args_h, args_v) with
+        | [], [] ->
+          if force_paren then Format.fprintf ppf "(%s)" name
+          else Format.pp_print_string ppf name
+        | _ ->
+          Format.fprintf ppf "@[<v 2>@[<hov 2>";
+          Format.fprintf ppf "(%s@ %a@]" name (print_lst pp) args_h;
+          ( match args_v with
+            | [] -> ()
+            | _ -> Format.fprintf ppf "@ %a" (print_lst pp) args_v );
+          Format.fprintf ppf ")@]"
+      end
 
   let rec emit ~indent buf = function
     | Int i -> Buffer.add_string buf (Int64.to_string i)
     | Float f -> Buffer.add_string buf (Printf.sprintf "%h" f)
     | String s ->
-        Buffer.add_char buf '"';
-        Buffer.add_string buf s;
-        Buffer.add_char buf '"'
+      Buffer.add_char buf '"';
+      Buffer.add_string buf s;
+      Buffer.add_char buf '"'
     | Atom s ->
-        Buffer.add_string buf s
+      Buffer.add_string buf s
     | Node { name; args_h; args_v; force_paren } -> begin
-      match (args_h, args_v) with
-      | [], [] ->
+        match (args_h, args_v) with
+        | [], [] ->
           if force_paren then begin
             Buffer.add_char buf '(';
             Buffer.add_string buf name;
             Buffer.add_char buf ')'
           end else
             Buffer.add_string buf name
-      | _ ->
+        | _ ->
           Buffer.add_char buf '(';
           Buffer.add_string buf name;
           Buffer.add_char buf ' ';
           emit_h_list ~indent buf args_h;
           (match args_v with
-           | [] -> ()
-           | _ ->
-               Buffer.add_char buf '\n';
-               emit_v_list ~indent buf args_v);
+            | [] -> ()
+            | _ ->
+              Buffer.add_char buf '\n';
+              emit_v_list ~indent buf args_v);
           Buffer.add_char buf ')'
-    end
+      end
 
   and emit_h_list ~indent buf = function
     | [] -> ()
     | [v] ->
-        emit ~indent buf v
+      emit ~indent buf v
     | h :: t ->
-        emit ~indent buf h;
-        Buffer.add_char buf ' ';
-        emit_h_list ~indent buf t
+      emit ~indent buf h;
+      Buffer.add_char buf ' ';
+      emit_h_list ~indent buf t
 
   and emit_v_list ~indent buf = function
     | [] -> ()
     | [v] ->
-        for _ = 1 to indent do
-          Buffer.add_char buf ' '
-        done;
-        emit ~indent:(1+indent) buf v
+      for _ = 1 to indent do
+        Buffer.add_char buf ' '
+      done;
+      emit ~indent:(1+indent) buf v
     | h :: t ->
-        for _ = 1 to indent do
-          Buffer.add_char buf ' '
-        done;
-        emit ~indent:(1+indent) buf h;
-        Buffer.add_char buf '\n';
-        emit_v_list ~indent buf t
+      for _ = 1 to indent do
+        Buffer.add_char buf ' '
+      done;
+      emit ~indent:(1+indent) buf h;
+      Buffer.add_char buf '\n';
+      emit_v_list ~indent buf t
 
   let emit ppf e =
     let b = Buffer.create 100 in
@@ -290,17 +290,17 @@ module C = struct
   let struct_type ~sub fields =
     match mode with
     | Reference -> begin
-      let descr = node "struct" (List.map field fields) in
-      match sub with
-      | None -> descr
-      | Some name -> node "sub" [ type_name name; descr ]
-    end
+        let descr = node "struct" (List.map field fields) in
+        match sub with
+        | None -> descr
+        | Some name -> node "sub" [ type_name name; descr ]
+      end
     | Binarien -> begin
-      match sub with
-      | None -> node "struct" (List.map field fields)
-      | Some name ->
-        node "struct_subtype" (List.map field fields @ [ type_name name ])
-    end
+        match sub with
+        | None -> node "struct" (List.map field fields)
+        | Some name ->
+          node "struct_subtype" (List.map field fields @ [ type_name name ])
+      end
 
   let array_type f = node "array" [ node "mut" [ type_atom f ] ]
 
@@ -351,12 +351,12 @@ module C = struct
   let br_on_cast id typ arg =
     match mode with
     | Binarien -> begin
-      match typ with
-      | Type.Var.I31 ->
-        node "drop" [ node "br_on_i31" [ !$(Block_id.name id); arg ] ]
-      | _ ->
-        node "br_on_cast_static" [ !$(Block_id.name id); type_name typ; arg ]
-    end
+        match typ with
+        | Type.Var.I31 ->
+          node "drop" [ node "br_on_i31" [ !$(Block_id.name id); arg ] ]
+        | _ ->
+          node "br_on_cast_static" [ !$(Block_id.name id); type_name typ; arg ]
+      end
     | Reference ->
       node "br_on_cast" [ !$(Block_id.name id); type_name typ; arg ]
 
@@ -379,7 +379,7 @@ module C = struct
       [ result result_typ
       ; node "do" body
       ; node "catch" (!$"exc" :: (* type_atom typ :: *)
-                                 handler)
+            handler)
       ]
 
   let sub name descr =
