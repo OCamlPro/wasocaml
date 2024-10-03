@@ -146,10 +146,10 @@ WASM = \
   wasm/wident.cmo \
   wasm/wexpr.cmo \
   wasm/wmodule.cmo \
-  wasm/wast.cmo \
+  wasm/wat.cmo \
   wasm/block_repr.cmo \
-  wasm/emit_wast.cmo \
-  wasm/link_wast.cmo
+  wasm/emit_wat.cmo \
+  wasm/link_wat.cmo
 WASM_CMI =
 
 COMP = \

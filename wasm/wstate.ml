@@ -18,7 +18,7 @@ let block_repr = Array_block
 
 let exception_repr = Multi_return
 
-let pp_wast = false
+let pp_wat = false
 
 let unmangle_module_name = true
 let uncapitalize_module_name = false

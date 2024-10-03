@@ -232,7 +232,7 @@ stdlib__%.cmo:
 
 WASMOPT=~/test/wasm/binaryen/bin/wasm-opt
 
-%.wasm: %.wast
+%.wasm: %.wat
 	$(WASMOPT) \
 	  --enable-reference-types --enable-gc --enable-tail-call --enable-exception-handling \
 	  --enable-multivalue \

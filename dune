@@ -146,10 +146,10 @@
    wident
    wexpr
    wmodule
-   wast
+   wat
    block_repr
-   emit_wast
-   link_wast
+   emit_wat
+   link_wat
  )
 )
 

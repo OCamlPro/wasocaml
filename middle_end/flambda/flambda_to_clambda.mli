@@ -37,6 +37,6 @@ type result = {
 *)
 val convert
    : ppf_dump:Format.formatter
-  -> wasm_contents:Wast.t option
+  -> wasm_contents:Wat.t option
   -> Flambda.program * Export_info.transient
   -> result

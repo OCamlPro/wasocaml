@@ -1986,8 +1986,8 @@ module Conv = struct
 end
 
 module ToWasm = struct
-  module Cst = Wast.Cst
-  module C = Wast.C
+  module Cst = Wat.Cst
+  module C = Wat.C
 
   let option_to_list = function None -> [] | Some v -> [ v ]
 
@@ -2396,24 +2396,21 @@ module ToWasm = struct
   let conv_module module_ = C.module_ (conv_decl module_)
 end
 
-(* let output_wast ppf wast = *)
-(*   ToWasm.Cst.emit ppf wast *)
-
-let output_wast ppf wast = Format.pp_print_string ppf wast
+let output_wat ppf wat = Format.pp_print_string ppf wat
 
 let output_file ~output_prefix ~module_ ~register =
-  let wastfile = output_prefix ^ ".wast" in
-  let oc = open_out_bin wastfile in
+  let watfile = output_prefix ^ ".wat" in
+  let oc = open_out_bin watfile in
   let ppf = Format.formatter_of_out_channel oc in
   Misc.try_finally
     ~always:(fun () ->
       Format.fprintf ppf "@.";
       close_out oc )
-    (* ~exceptionally:(fun () -> Misc.remove_file wastfile) *)
+    (* ~exceptionally:(fun () -> Misc.remove_file watfile) *)
     (fun () ->
-        output_wast ppf module_;
+        output_wat ppf module_;
         Format.fprintf ppf "@\n";
-        output_wast ppf register )
+        output_wat ppf register )
 
 let run ~output_prefix (flambda : Flambda.program) =
   State.reset ();
@@ -2445,13 +2442,13 @@ let run ~output_prefix (flambda : Flambda.program) =
     let ln =
       Compilation_unit.get_linkage_name (Compilation_unit.get_current_exn ())
     in
-    Wast.C.register (Linkage_name.to_string ln)
+    Wat.C.register (Linkage_name.to_string ln)
   in
   (* Format.printf "@.%a@." ToWasm.Cst.emit wasm; *)
-  let emit = if Wstate.pp_wast then ToWasm.Cst.pp else ToWasm.Cst.emit in
+  let emit = if Wstate.pp_wat then ToWasm.Cst.pp else ToWasm.Cst.emit in
   let wasm = Format.asprintf "%a" emit wasm in
   let register = Format.asprintf "%a" emit register in
-  Wast.{ module_ = wasm; register }
+  Wat.{ module_ = wasm; register }
 
 let emit ~to_file ~output_prefix (flambda : Flambda.program) =
   let r = run ~output_prefix flambda in

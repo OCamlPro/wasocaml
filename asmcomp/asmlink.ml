@@ -365,7 +365,7 @@ let link ~ppf_dump objfiles output_name =
                 | Some w -> Some (ui.ui_name, w))
           units_tolink
       in
-      Link_wast.link fl_export ~output:output_name;
+      Link_wat.link fl_export ~output:output_name;
     in
     Clflags.ccobjs := !Clflags.ccobjs @ !lib_ccobjs;
     Clflags.all_ccopts := !lib_ccopts @ !Clflags.all_ccopts;

@@ -230,8 +230,8 @@ let lambda_to_clambda ~backend ~prefixname ~ppf_dump
   let wasm_contents =
     try
       Some (
-        Profile.record_call "emit_wast" (fun () ->
-            Emit_wast.emit ~to_file:do_wasm ~output_prefix:prefixname program))
+        Profile.record_call "emit_wat" (fun () ->
+            Emit_wat.emit ~to_file:do_wasm ~output_prefix:prefixname program))
     with Failure s ->
       Format.eprintf "No wasm generated@.%s@." s;
       None

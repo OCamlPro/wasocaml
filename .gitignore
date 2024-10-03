@@ -57,7 +57,7 @@ _build
 /ocamlopt.opt
 /ocamlnat
 /_opam
-/o*.wast
+/o*.wat
 /o*.wasm
 
 # specific files and patterns in sub-directories
