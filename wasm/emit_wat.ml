@@ -2053,12 +2053,12 @@ module ToWasm = struct
   let conv_unop (op : Expr.unop) arg =
     match op with
     | I31_get_s -> Cst.node "i31.get_s" [ arg ]
-    | I31_new -> Cst.node "i31.new" [ arg ]
+    | I31_new -> Cst.node "ref.i31" [ arg ]
     | Struct_get { typ; field } -> C.struct_get typ field arg
     | Struct_get_packed { typ; field; extend } ->
       C.struct_get_packed extend typ field arg
-    | Ref_cast_i31 -> Cst.node "ref.cast" [ Cst.atom "i31"; arg ]
-    | Is_i31 -> Cst.node "ref.test" [ Cst.atom "i31"; arg ]
+    | Ref_cast_i31 -> Cst.node "ref.cast" [ Cst.node "ref" [Cst.atom "i31"]; arg ]
+    | Is_i31 -> Cst.node "ref.test" [ Cst.node "ref" [Cst.atom "i31"]; arg ]
     | Array_len t -> C.array_len t arg
     | Reinterpret { from_type; to_type } ->
       let name =
