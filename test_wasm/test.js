@@ -58,6 +58,17 @@ const bindings = {
 }
 
 const src = "./a.out.wasm"
-const code = fetch(src)
+const code = fetch(src, {
+    // ...
+    referrerPolicy: "unsafe-url"
+});
 const imports = {"js_runtime":bindings}
-const wasmModule = await WebAssembly.instantiateStreaming(code,imports)
+const wasmModule = await WebAssembly.instantiateStreaming(code, imports).then(module => {
+    console.log("module loaded!");
+    //console.log(typeof(module.instance.exports));
+    //for (let key in module.instance.exports) {
+    //        console.log(key);
+    //}
+    //module.instance.exports.print_string("hello");
+    console.log("done");
+});
