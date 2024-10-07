@@ -255,8 +255,7 @@ module C = struct
 
   let tuple_make fields =
     match fields with
-    | [] -> atom "_____ishouldnotexist"
-    (* assert false *)
+    | [] -> assert false
     | [ field ] ->  field
     | fields ->
       node "tuple.make" (Atom (List.length fields |> string_of_int) :: fields )
@@ -318,7 +317,10 @@ module C = struct
     nodehv "loop" [ !$(Block_id.name id); results result ] body
 
   let br id args =
-    node "br" [ !$(Block_id.name id); tuple_make args ]
+    match args with
+    | [] -> node "br" [ !$(Block_id.name id)]
+    | [arg] -> node "br" [ !$(Block_id.name id); arg ]
+    | _ -> node "br" [ !$(Block_id.name id); tuple_make args ]
 
   let br' id = node "br" [ !$(Block_id.name id) ]
 
