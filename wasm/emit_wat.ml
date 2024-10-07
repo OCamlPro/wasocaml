@@ -2362,7 +2362,7 @@ module ToWasm = struct
     | Array { sub; fields } ->
       let descr = C.array_type fields in
       let descr =
-        match sub with None -> descr | Some sub -> C.sub sub descr
+        C.sub sub descr
       in
       C.type_ name descr
     | Func { params; results } -> C.type_ name (C.func_type params results)

@@ -288,7 +288,7 @@ module C = struct
   let struct_type ~sub fields =
     let descr = node "struct" (List.map field fields) in
     match sub with
-    | None -> descr
+    | None -> node "sub" [ descr ]
     | Some name -> node "sub" [ type_name name; descr ]
 
   let array_type f = node "array" [ node "mut" [ type_atom f ] ]
@@ -351,7 +351,9 @@ module C = struct
       ]
 
   let sub name descr =
-    node "sub" [ type_name name; descr ]
+    match name with
+    | None -> node "sub" [ descr ]
+    | Some name -> node "sub" [ type_name name; descr ]
 
   let opt_tuple fields =
     [ tuple_make fields ]
