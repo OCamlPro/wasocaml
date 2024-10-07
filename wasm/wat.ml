@@ -254,6 +254,9 @@ module C = struct
     | Rvar v -> reft v
     | Tuple l -> node "" (List.map type_atom l)
 
+
+  let tuple_make fields = node "tuple.make" (Atom (List.length fields |> string_of_int) :: fields )
+
   let local l t = node "local" [ !$(Expr.Local.var_name l); type_atom t ]
 
   let param p t = node "param" [ !$(Param.name p); type_atom t ]
@@ -311,12 +314,12 @@ module C = struct
     nodehv "loop" [ !$(Block_id.name id); results result ] body
 
   let br id args =
-    node "br" [ !$(Block_id.name id); node (Format.sprintf "tuple.make %d" (List.length args)) args ]
+    node "br" [ !$(Block_id.name id); tuple_make args ]
 
   let br' id = node "br" [ !$(Block_id.name id) ]
 
   let return args =
-    node "return" [ node (Format.sprintf "tuple.make %d" (List.length args)) args ]
+    node "return" [ tuple_make args ]
 
   let br_on_cast id typ arg =
     node "br_on_cast" [ !$(Block_id.name id); type_name typ; arg ]
@@ -347,9 +350,7 @@ module C = struct
     node "sub" [ type_name name; descr ]
 
   let opt_tuple fields =
-    [ node (Format.sprintf "tuple.make %d" (List.length fields)) fields ]
-
-  let tuple_make fields = node (Format.sprintf "tuple.make %d" (List.length fields)) fields
+    [ tuple_make fields ]
 
   let tuple_extract field tuple = node "tuple.extract" [ int field; tuple ]
 
