@@ -64,10 +64,9 @@ const code = fetch(src, {
 });
 const imports = {"js_runtime":bindings}
 const wasmModule = await WebAssembly.instantiateStreaming(code, imports).then(module => {
-    console.log("module loaded!");
-    console.log(typeof(module.instance.exports));
+    console.log("module loaded! listing its exports:");
     for (let key in module.instance.exports) {
             console.log(key);
     }
-    console.log("done");
+    console.log("done!");
 });
