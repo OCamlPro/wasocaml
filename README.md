@@ -28,13 +28,12 @@ You can now build and install Wasocaml. You can either build the compiler locall
 ##### Locally
 
 ```shell-session
-$ ./configure
+$ ./configure --enable-flambda
 $ make
 $ sudo make install
 ```
 
 ##### Opam switch
-
 
 ```shell-session
 $ opam switch create wasocaml --repos default,wasocaml=git+https://github.com/ocamlpro/wasocaml-opam.git ocaml-variants.4.14.1+wasocaml
