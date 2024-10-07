@@ -254,7 +254,12 @@ module C = struct
     | Rvar v -> reft v
     | Tuple l -> node "tuple" (List.map type_atom l)
 
-  let tuple_make fields = node "tuple.make" (Atom (List.length fields |> string_of_int) :: fields )
+  let tuple_make fields =
+    match fields with
+    | [] -> assert false
+    | [ field ] ->  field
+    | fields ->
+      node "tuple.make" (Atom (List.length fields |> string_of_int) :: fields )
 
   let local l t = node "local" [ !$(Expr.Local.var_name l); type_atom t ]
 
