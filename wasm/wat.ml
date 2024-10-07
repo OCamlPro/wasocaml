@@ -252,8 +252,7 @@ module C = struct
     | I64 -> atom "i64"
     | F64 -> atom "f64"
     | Rvar v -> reft v
-    | Tuple l -> node "" (List.map type_atom l)
-
+    | Tuple l -> node "tuple" (List.map type_atom l)
 
   let tuple_make fields = node "tuple.make" (Atom (List.length fields |> string_of_int) :: fields )
 
