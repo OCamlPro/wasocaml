@@ -134,6 +134,7 @@ module State = struct
   let add_block_float_size i = Arity.Set.(block_float_sizes += i)
 
   let add_closure_type ~arity ~fields =
+    add_arity arity;
     Closure_type.Set.(closure_types += { arity; fields })
 
   let add_c_import_func_type typ =
@@ -144,7 +145,9 @@ module State = struct
   let add_global_import description =
     Global_import.Set.(global_imports += description)
 
-  let add_func_import description = Func_import.Set.(func_imports += description)
+  let add_func_import description =
+    add_arity description.Func_import.arity;
+    Func_import.Set.(func_imports += description)
 
   let add_runtime_import description =
     Runtime_import.Set.(runtime_imports += description)

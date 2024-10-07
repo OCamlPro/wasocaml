@@ -231,6 +231,7 @@ module Conv = struct
       let closure_info = closure_info top_env closure_id in
       if not accessor.recursive_set then begin
         let typ : Type.Var.t =
+          State.add_closure_type ~arity:closure_info.arity ~fields:accessor.closure_size;
           Closure { arity = closure_info.arity; fields = accessor.closure_size }
         in
         let closure : Expr.t =
@@ -244,6 +245,7 @@ module Conv = struct
       end
       else
         let closure_typ : Type.Var.t =
+          State.add_closure_type ~arity:closure_info.arity ~fields:1;
           Closure { arity = closure_info.arity; fields = 1 }
         in
         let closure : Expr.t =
@@ -274,6 +276,7 @@ module Conv = struct
           Closure_id.Map.find move_to top_env.offsets.function_accessors
         in
         let closure_typ : Type.Var.t =
+          State.add_closure_type ~arity:start_from_info.arity ~fields:1;
           Closure { arity = start_from_info.arity; fields = 1 }
         in
         let closure : Expr.t =
@@ -640,6 +643,7 @@ module Conv = struct
     let func_types =
       List.fold_left
         (fun acc ({ arity; fields } : Wasm_closure_offsets.func) ->
+            State.add_closure_type ~arity ~fields;
             let typ : Type.atom = Rvar (Closure { arity; fields }) in
             typ :: acc )
         [] set_info.functions
