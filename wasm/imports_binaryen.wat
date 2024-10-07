@@ -1,8 +1,8 @@
 (module
-  (type $Float (struct (field (mut f64))))
+  (type $Float (sub (struct (field (mut f64)))))
   (type $Int64 (struct (field (mut i64))))
-  (type $String (array (mut i8)))
-  (type $Gen_block (array (mut (ref eq))))
+  (type $String (sub (array (mut i8))))
+  (type $Gen_block (sub (array (mut (ref eq)))))
 
 
   (import "js_runtime" "print_string" (func $print_string (param (ref $String))))

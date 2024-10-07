@@ -1,9 +1,9 @@
 (module
-  (type $Float (struct (field (mut f64))))
-  (type $String (array (mut i8)))
-  (type $Array (array (mut (ref eq))))
-  (type $FloatArray (array (mut f64)))
-  (type $Gen_block (array (mut (ref eq))))
+  (type $Float (sub (struct (field (mut f64)))))
+  (type $String (sub (array (mut i8))))
+  (type $Array (sub (array (mut (ref eq)))))
+  (type $FloatArray (sub (array (mut f64))))
+  (type $Gen_block (sub (array (mut (ref eq)))))
   (import "exn_tag" "exc" (tag $exc (param (ref eq))))
 
   ;; ==========
