@@ -1992,7 +1992,7 @@ module ToWasm = struct
 
   let gvar v = Global.name v
 
-  let unit = Cst.node "i31.new" [ C.i32 0l ]
+  let unit = Cst.node "ref.i31" [ C.i32 0l ]
 
   let nn_name (nn : Expr.nn) = match nn with S32 -> "32" | S64 -> "64"
 
