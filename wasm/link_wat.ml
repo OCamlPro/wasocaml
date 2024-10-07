@@ -20,7 +20,7 @@ let out_file (name, (wat : Wat.t)) =
     (fun () ->
         Emit_wat.output_wat ppf wat.module_;
         Format.fprintf ppf "@\n";
-        Emit_wat.output_wat ppf wat.register );
+    );
   { name; filename }
 
 let emit_text = "--emit-text"

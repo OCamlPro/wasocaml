@@ -121,7 +121,6 @@ type printable_expr = string
 
 type t = {
   module_ : string;
-  register : string;
 }
 
 module C = struct
@@ -256,7 +255,8 @@ module C = struct
 
   let tuple_make fields =
     match fields with
-    | [] -> assert false
+    | [] -> atom "_____ishouldnotexist"
+    (* assert false *)
     | [ field ] ->  field
     | fields ->
       node "tuple.make" (Atom (List.length fields |> string_of_int) :: fields )
@@ -372,5 +372,4 @@ module C = struct
     let m = import_tag :: m in
     nodev "module" m
 
-  let register name = node "register" [ String (module_name name) ]
 end

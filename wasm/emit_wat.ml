@@ -2387,7 +2387,7 @@ end
 
 let output_wat ppf wat = Format.pp_print_string ppf wat
 
-let output_file ~output_prefix ~module_ ~register =
+let output_file ~output_prefix ~module_ =
   let watfile = output_prefix ^ ".wat" in
   let oc = open_out_bin watfile in
   let ppf = Format.formatter_of_out_channel oc in
@@ -2398,8 +2398,7 @@ let output_file ~output_prefix ~module_ ~register =
     (* ~exceptionally:(fun () -> Misc.remove_file watfile) *)
     (fun () ->
         output_wat ppf module_;
-        Format.fprintf ppf "@\n";
-        output_wat ppf register )
+        Format.fprintf ppf "@\n")
 
 let run ~output_prefix (flambda : Flambda.program) =
   State.reset ();
@@ -2427,21 +2426,14 @@ let run ~output_prefix (flambda : Flambda.program) =
   let wasm =
     Profile.record_call "ToWasm" (fun () -> ToWasm.conv_module (common @ m))
   in
-  let register =
-    let ln =
-      Compilation_unit.get_linkage_name (Compilation_unit.get_current_exn ())
-    in
-    Wat.C.register (Linkage_name.to_string ln)
-  in
   (* Format.printf "@.%a@." ToWasm.Cst.emit wasm; *)
   let emit = if Wstate.pp_wat then ToWasm.Cst.pp else ToWasm.Cst.emit in
   let wasm = Format.asprintf "%a" emit wasm in
-  let register = Format.asprintf "%a" emit register in
-  Wat.{ module_ = wasm; register }
+  Wat.{ module_ = wasm }
 
 let emit ~to_file ~output_prefix (flambda : Flambda.program) =
   let r = run ~output_prefix flambda in
   if to_file then
     Profile.record_call "output_wasm" (fun () ->
-      output_file ~output_prefix ~module_:r.module_ ~register:r.register );
+      output_file ~output_prefix ~module_:r.module_  );
   r
