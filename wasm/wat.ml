@@ -356,7 +356,7 @@ module C = struct
   let opt_tuple fields =
     [ tuple_make fields ]
 
-  let tuple_extract field tuple = node "tuple.extract" [ int field; tuple ]
+  let tuple_extract ~arity ~field tuple = node "tuple.extract" [ int arity; int field; tuple ]
 
   let rec_ l = node "rec" l
 

@@ -87,10 +87,10 @@ module Conv = struct
         let var = Local.fresh "call_result" in
         let body : Expr.t =
           If_then_else
-            { cond = Unop (Tuple_extract 0, Var (V var))
+            { cond = Unop (Tuple_extract { arity = 2; field = 0 }, Var (V var))
             ; if_expr =
-                NR (raise handler (Unop (Tuple_extract 1, Var (V var))))
-            ; else_expr = Unop (Tuple_extract 1, Var (V var))
+                NR (raise handler (Unop (Tuple_extract { arity = 2; field = 1 }, Var (V var))))
+            ; else_expr = Unop (Tuple_extract { arity = 2; field = 1 }, Var (V var))
             }
         in
         Let
@@ -2083,7 +2083,8 @@ module ToWasm = struct
       Cst.node name [ arg ]
     | Abs_float -> Cst.node "f64.abs" [ arg ]
     | Neg_float -> Cst.node "f64.neg" [ arg ]
-    | Tuple_extract i -> C.tuple_extract i arg
+    | Tuple_extract { arity; field } ->
+        C.tuple_extract ~arity ~field arg
 
   let irelop_name nn (op : Expr.irelop) =
     match op with
@@ -2187,6 +2188,7 @@ module ToWasm = struct
           | [ (None, _typ) ] -> [ C.drop body ]
           | [ (Some var, _typ) ] -> [ C.local_set (Expr.Local.V var) body ]
           | _ ->
+            let arity = List.length params in
             let local_tuple = Expr.Local.Block_result cont in
             let _i, assigns =
               List.fold_left
@@ -2194,7 +2196,7 @@ module ToWasm = struct
                     match var with
                     | Some var ->
                       let project =
-                        C.tuple_extract i (C.local_get (Expr.Local.V local_tuple))
+                        C.tuple_extract ~arity ~field:i (C.local_get (Expr.Local.V local_tuple))
                       in
                       let expr = C.local_set (Expr.Local.V var) project in
                       (i + 1, expr :: assigns)

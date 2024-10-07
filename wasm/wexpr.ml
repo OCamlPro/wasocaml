@@ -102,7 +102,7 @@ type unop =
       }
   | Abs_float
   | Neg_float
-  | Tuple_extract of int
+  | Tuple_extract of { field : int; arity : int }
 
 (* Every expression returns exactly one value *)
 type t =
@@ -345,7 +345,8 @@ let print_unop ppf = function
       print_sign sign
   | Abs_float -> Format.fprintf ppf "Abs_float"
   | Neg_float -> Format.fprintf ppf "Neg_float"
-  | Tuple_extract i -> Format.fprintf ppf "Tuple_extract.%i" i
+  | Tuple_extract { arity = _; field = i } ->
+      Format.fprintf ppf "Tuple_extract.%i" i
 
 let rec print ppf = function
   | Var l -> Local.print ppf l
