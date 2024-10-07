@@ -187,7 +187,7 @@ module C = struct
 
   let f64 f = node "f64.const" [ Float f ]
 
-  let i31_new i = node "i31.new" [ i ]
+  let i31_new i = node "ref.i31" [ i ]
 
   let drop arg = node "drop" [ arg ]
 
@@ -239,7 +239,7 @@ module C = struct
 
   let ref_cast typ arg =
     let name = "ref.cast" in
-    node name ([ type_name typ ] @ arg)
+    node name ([ node "ref" [(type_name typ) ]] @ arg)
 
   let declare_func f =
     node "elem" [ atom "declare"; atom "func"; !$(Func_id.name f) ]
@@ -311,12 +311,12 @@ module C = struct
     nodehv "loop" [ !$(Block_id.name id); results result ] body
 
   let br id args =
-    node "br" [ !$(Block_id.name id); node "tuple.make" args ]
+    node "br" [ !$(Block_id.name id); node (Format.sprintf "tuple.make %d" (List.length args)) args ]
 
   let br' id = node "br" [ !$(Block_id.name id) ]
 
   let return args =
-    node "return" [ node "tuple.make" args ]
+    node "return" [ node (Format.sprintf "tuple.make %d" (List.length args)) args ]
 
   let br_on_cast id typ arg =
     node "br_on_cast" [ !$(Block_id.name id); type_name typ; arg ]
@@ -347,9 +347,9 @@ module C = struct
     node "sub" [ type_name name; descr ]
 
   let opt_tuple fields =
-    [ node "tuple.make" fields ]
+    [ node (Format.sprintf "tuple.make %d" (List.length fields)) fields ]
 
-  let tuple_make fields = node "tuple.make" fields
+  let tuple_make fields = node (Format.sprintf "tuple.make %d" (List.length fields)) fields
 
   let tuple_extract field tuple = node "tuple.extract" [ int field; tuple ]
 
