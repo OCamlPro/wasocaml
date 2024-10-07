@@ -1,6 +1,10 @@
+let rec fib n =  if n < 2 then 1 else fib (n - 1) + fib (n - 2);;
 
 let () =
-  for i = 1 to 5 do
+  for i = 0 to 35 do
+    print_string "fib (";
     print_int i;
-    print_string " plop\n"
+    print_string ") = ";
+    print_int (fib i);
+    print_string "\n"
   done
