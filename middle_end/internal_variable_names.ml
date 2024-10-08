@@ -292,7 +292,9 @@ let unbox_free_vars_of_closures = "unbox_free_vars_of_closures"
 let unit = "unit"
 let zero = "zero"
 
-let anon_fn_with_loc (sloc: Lambda.scoped_location) =
+let anon_fn_with_loc (_sloc: Lambda.scoped_location) =
+  "anon_fn"
+  (*
   let loc = Debuginfo.Scoped_location.to_location sloc in
   let (file, line, startchar) = Location.get_pos_info loc.loc_start in
   let endchar = loc.loc_end.pos_cnum - loc.loc_start.pos_bol in
@@ -302,6 +304,7 @@ let anon_fn_with_loc (sloc: Lambda.scoped_location) =
   else
     Format.asprintf "anon_fn[%s:%i%t]"
       (Filename.basename file) line pp_chars
+  *)
 
 let of_primitive : Lambda.primitive -> string = function
   | Pbytes_of_string -> pbytes_of_string
