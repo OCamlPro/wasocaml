@@ -97,6 +97,8 @@ _build
 /lex/ocamllex
 /lex/ocamllex.opt
 /lex/parser.output
+lex/ocamllex.opt.wasm
+lex/ocamllex.opt.wat
 
 /manual/src/cmds/warnings-help.etex
 /manual/src/html_processing/src/common.ml
@@ -278,6 +280,8 @@ _build
 /tools/eventlog_metadata
 /tools/*.wast
 /tools/*.wasm
+tools/ocamlmklib.opt.wat
+tools/ocamlprof.opt.wat
 
 /toplevel/byte/topeval.mli
 /toplevel/byte/trace.mli
