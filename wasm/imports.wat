@@ -19,7 +19,7 @@
   (import "js_runtime" "memory" (memory $mem 1))
 
   (import "runtime" "compare_ints"
-    (func $compare_int (param (ref eq)) (param (ref eq)) (result (ref i31))))
+    (func $compare_int (param (ref eq)) (param (ref eq)) (result (ref eq))))
 
   (import "runtime" "string_eq"
     (func $string_eq (param $a (ref eq)) (param $b (ref eq)) (result (ref eq))))
@@ -118,7 +118,7 @@
                (br $loop))))
       (i32.sub (local.get $l1) (local.get $l2)))
 
-  (func $caml_string_compare (param $a (ref eq)) (param $b (ref eq)) (result (ref i31))
+  (func $caml_string_compare (param $a (ref eq)) (param $b (ref eq)) (result (ref eq))
       (ref.i31 (call $compare_strings
         (ref.cast (ref $String) (local.get $a))
         (ref.cast (ref $String) (local.get $b)))))
@@ -187,7 +187,7 @@
     )
   )
 
-  (func $caml_compare_data_non_block (export "compare_data_non_block") (param $a (ref eq)) (param $b (ref eq)) (result (ref i31))
+  (func $caml_compare_data_non_block (export "compare_data_non_block") (param $a (ref eq)) (param $b (ref eq)) (result (ref eq))
     ;; (block $both_string (result (ref $String))
 
     ;; )
