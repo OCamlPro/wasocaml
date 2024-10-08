@@ -35,18 +35,14 @@ let options =
 
 let wasm_merge = "wasm-merge"
 
-let runtime =
-  [ (Wstate.exc_tag_module, Wstate.exc_tag_module)
-  ; (Wstate.runtime_module ^ "_binaryen", Wstate.runtime_module)
-  ; (Wstate.imports_module ^ "_binaryen", Wstate.imports_module)
-  ]
+let runtime = [ "exn_tag"; "runtime"; "imports" ]
 
 let merge_files ~runtime_dir ~text files output =
   let text = if text then [ emit_text ] else [] in
   let command =
     let runtime_files =
       List.concat_map
-        (fun (file, name) -> [ Filename.concat runtime_dir (file ^ ".wat"); name ])
+        (fun name -> [ Filename.concat runtime_dir (name ^ ".wat"); name ])
         runtime
     in
     let ocaml_files =

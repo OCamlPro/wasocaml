@@ -32,17 +32,17 @@
   (func (export "caml_int64_float_of_bits_unboxed") (param $x i64) (result f64)
       (f64.reinterpret_i64 (local.get $x)))
 
-  ;; (func (export "caml_obj_tag") (param $obj (ref eq)) (result (ref eq))
-  ;;     (unreachable))
+  (func $C_caml_obj_tag (export "caml_obj_tag") (param $obj (ref eq)) (result (ref eq))
+      (unreachable))
 
-  ;; (func (export "caml_obj_make_forward") (param $a (ref eq)) (param $b (ref eq)) (result (ref eq))
-  ;;     (unreachable))
+  (func $C_caml_obj_make_forward (export "caml_obj_make_forward") (param $a (ref eq)) (param $b (ref eq)) (result (ref eq))
+      (unreachable))
 
-  ;; (func (export "caml_lazy_make_forward") (param $a (ref eq)) (result (ref eq))
-  ;;     (unreachable))
+  (func $C_caml_lazy_make_forward (export "caml_lazy_make_forward") (param $a (ref eq)) (result (ref eq))
+      (unreachable))
 
-  ;; (func (export "caml_obj_block") (param $tag (ref eq)) (param $size (ref eq)) (result (ref eq))
-  ;;     (unreachable))
+  (func $C_caml_obj_block (export "caml_obj_block") (param $tag (ref eq)) (param $size (ref eq)) (result (ref eq))
+      (unreachable))
 
   (global $oo_id (mut i32) (i32.const 0))
 
@@ -62,33 +62,32 @@
       (array.new_default $String (i31.get_s (ref.cast (ref i31) (local.get $size))))
   )
 
-  ;; (func $caml_fill_bytes (param $arr (ref $String))
-  ;;                        (param $off i32) (param $length i32)
-  ;;                        (param $value i32)
-  ;;   (block $break
-  ;;     (loop $continue
-  ;;       (br_if $break (i32.le_s (local.get $length) (i32.const 0)))
-  ;;       (array.set $String (local.get $arr) (local.get $off) (local.get $value))
-  ;;       (local.set $off (i32.add (local.get $off) (i32.const 1)))
-  ;;       (local.set $length (i32.sub (local.get $length) (i32.const 1)))
-  ;;       (br $continue)
-  ;;     )
-  ;;   )
-  ;; )
+  (func $caml_fill_bytes (param $arr (ref $String))
+                         (param $off i32) (param $length i32)
+                         (param $value i32)
+    (block $break
+      (loop $continue
+        (br_if $break (i32.le_s (local.get $length) (i32.const 0)))
+        (array.set $String (local.get $arr) (local.get $off) (local.get $value))
+        (local.set $off (i32.add (local.get $off) (i32.const 1)))
+        (local.set $length (i32.sub (local.get $length) (i32.const 1)))
+        (br $continue)
+      )
+    )
+  )
 
-  ;; (func (export "caml_fill_bytes") (param $arr (ref eq))
-  ;;                                  (param $off (ref eq)) (param $length (ref eq))
-  ;;                                  (param $value (ref eq)) (result (ref eq))
-  ;;   (call $caml_fill_bytes
-  ;;     (ref.cast $String (local.get $arr))
-  ;;     (i31.get_s (ref.cast i31 (local.get $off)))
-  ;;     (i31.get_s (ref.cast i31 (local.get $length)))
-  ;;     (i31.get_s (ref.cast i31 (local.get $value))))
-  ;;   (i31.new (i32.const 0)))
+  (func (export "caml_fill_bytes") (param $arr (ref eq))
+                                   (param $off (ref eq)) (param $length (ref eq))
+                                   (param $value (ref eq)) (result (ref eq))
+    (call $caml_fill_bytes
+      (ref.cast (ref $String) (local.get $arr))
+      (i31.get_s (ref.cast (ref i31) (local.get $off)))
+      (i31.get_s (ref.cast (ref i31) (local.get $length)))
+      (i31.get_s (ref.cast (ref i31) (local.get $value))))
+    (ref.i31 (i32.const 0)))
 
   (export "caml_bytes_equal" (func $string_eq))
   (export "caml_string_equal" (func $string_eq))
-
 
    ;; Stolen from Jerome's wasm_of_ocaml
    (func $compare_strings
@@ -145,9 +144,9 @@
   ;; Stdlib
   ;; ======
 
-  ;; (func (export "caml_classify_float_unboxed") (param f64) (result (ref eq))
-  ;;     ;; TODO
-  ;;     (unreachable))
+  (func (export "caml_classify_float_unboxed") (param f64) (result (ref eq))
+      ;; TODO
+      (unreachable))
 
   ;; ==========
   ;; Comparison
@@ -539,7 +538,6 @@
  (func $C_caml_ml_runtime_warnings_enabled  (export "caml_ml_runtime_warnings_enabled") (param (ref eq)) (result (ref eq)) (unreachable))
  (func $C_caml_ml_enable_runtime_warnings  (export "caml_ml_enable_runtime_warnings") (param (ref eq)) (result (ref eq)) (unreachable))
  (func $C_caml_install_signal_handler  (export "caml_install_signal_handler") (param (ref eq) (ref eq)) (result (ref eq)) (unreachable))
- (func $C_caml_obj_tag  (export "caml_obj_tag") (param (ref eq)) (result (ref eq)) (unreachable))
  (func $C_caml_obj_raw_field  (export "caml_obj_raw_field") (param (ref eq) (ref eq)) (result (ref eq)) (unreachable))
  (func $C_caml_floatarray_set  (export "caml_floatarray_set") (param (ref eq) (ref eq) (ref eq)) (result (ref eq)) (unreachable))
  (func $C_caml_floatarray_get  (export "caml_floatarray_get") (param (ref eq) (ref eq)) (result (ref eq)) (unreachable))
@@ -556,9 +554,6 @@
  (func $C_caml_ephe_check_data  (export "caml_ephe_check_data") (param (ref eq)) (result (ref eq)) (unreachable))
  (func $C_caml_ephe_blit_key  (export "caml_ephe_blit_key") (param (ref eq) (ref eq) (ref eq) (ref eq) (ref eq)) (result (ref eq)) (unreachable))
  (func $C_caml_ephe_blit_data  (export "caml_ephe_blit_data") (param (ref eq) (ref eq)) (result (ref eq)) (unreachable))
- (func $C_caml_obj_make_forward  (export "caml_obj_make_forward") (param (ref eq) (ref eq)) (result (ref eq)) (unreachable))
- (func $C_caml_obj_block  (export "caml_obj_block") (param (ref eq) (ref eq)) (result (ref eq)) (unreachable))
- (func $C_caml_lazy_make_forward  (export "caml_lazy_make_forward") (param (ref eq)) (result (ref eq)) (unreachable))
 
   (func (export "caml_gc_major") (param (ref eq)) (result (ref eq))
     (ref.i31 (i32.const 0)))
