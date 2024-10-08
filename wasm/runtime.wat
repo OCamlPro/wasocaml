@@ -135,16 +135,17 @@
        (ref.i31 (i32.const 0))
    )
 
-   (func $array_set_int_or_addr_unsafe (param $arr (ref $Array)) (param $field (ref eq))
+   (func $array_set_int_or_addr_unsafe (export "array_set_int_or_addr_unsafe") (param $arr (ref eq)) (param $field (ref eq))
                                        (param $value (ref eq)) (result (ref eq))
        (array.set $Array
-         (local.get $arr)
+         (ref.cast (ref $Array) (local.get $arr))
          (i31.get_s (ref.cast (ref i31) (local.get $field)))
          (local.get $value))
        (ref.i31 (i32.const 0))
    )
 
-
+   ;; TODO: exception + implement properly
+   (export "array_set_int_or_addr_safe" (func $array_set_int_or_addr_unsafe))
 
    (func $array_set_unsafe (export "array_set_unsafe")
                            (param $arr (ref eq)) (param $field (ref eq))
@@ -166,6 +167,31 @@
                           (param $value (ref eq)) (result (ref eq))
     ;; TODO exceptions
     (call $array_set_unsafe (local.get $arr) (local.get $field) (local.get $value))
+  )
+
+  (func (export "duparray") (param $src (ref eq)) (result (ref eq))
+        (local $a (ref null $Array)) (local $dst (ref null $Array))
+
+    unreachable
+    (;
+    (local.set $a (ref.cast (ref $Array) (local.get $src)))
+
+    (local.set $dst
+      (array.new $Array
+        (ref.null eq)
+        (array.len (local.get $a))))
+
+    (array.copy $Array $Array
+      (local.get $a)
+      (i32.const 0)
+      (local.get $dst)
+      (i32.const 0)
+      (array.len (local.get $a))
+    )
+
+    local.get $dst
+    ref.as_non_null
+    ;)
   )
 
   ;; ============
