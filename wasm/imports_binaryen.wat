@@ -154,7 +154,7 @@
   ;; ==========
 
   ;; int < block < unknown
-  (func (export "caml_compare") (param $a (ref eq)) (param $b (ref eq)) (result (ref i31))
+  (func (export "caml_compare") (param $a (ref eq)) (param $b (ref eq)) (result (ref eq))
     (local $a_block (ref $Gen_block))
     (local $b_block (ref $Gen_block))
     (if (result (ref i31)) (ref.test (ref i31) (local.get $a))
@@ -209,7 +209,7 @@
     (unreachable)
   )
 
-  (func $caml_equal (export "caml_equal") (param $a (ref eq)) (param $b (ref eq)) (result (ref i31))
+  (func $caml_equal (export "caml_equal") (param $a (ref eq)) (param $b (ref eq)) (result (ref eq))
     (local $a_block (ref $Gen_block))
     (local $b_block (ref $Gen_block))
     (if (result (ref i31)) (ref.test (ref i31) (local.get $a))
