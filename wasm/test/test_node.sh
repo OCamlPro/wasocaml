@@ -4,20 +4,25 @@ set -eu
 
 alias time='/usr/bin/time -f"real %e user %U sys %S"'
 
+NODE='node-canary'
+
 bench() {
   echo "*** Running ${1}"
   echo -n "Wasocaml (node):    "
-  ../../ocamlopt -O2 ./${2}.ml > /dev/null
-  time node-canary ./main_node.mjs > /dev/null
+  ../../ocamlopt -O3 ./${2}.ml > /dev/null
+  time $NODE ./main_node.mjs > /dev/null
+  wasm-opt --enable-gc --enable-reference-types --enable-exception-handling --enable-multivalue --enable-tail-call a.out.wasm -o a.out.wasm -O3
+  echo -n "Wasocaml + wasm-opt (node):    "
+  time $NODE ./main_node.mjs > /dev/null
   echo -n "OCaml native:       "
-  ocamlopt -O2 ./${2}.ml > /dev/null
+  ocamlopt -O3 ./${2}.ml > /dev/null
   time ./a.out > /dev/null
   echo -n "OCaml bytecode:     "
   ocamlc ./${2}.ml > /dev/null
   time ocamlrun ./a.out > /dev/null
   echo -n "js_of_ocaml (node): "
   js_of_ocaml compile --target-env=nodejs --opt=3 ./a.out
-  time node-canary ./a.js > /dev/null
+  time $NODE ./a.js > /dev/null
 }
 
 bench "Knuth-Bendix" "kb"
