@@ -2,6 +2,7 @@
   (type $Float (sub (struct (field (mut f64)))))
   (type $Int64 (struct (field (mut i64))))
   (type $String (sub (array (mut i8))))
+  (type $Array (sub (array (mut (ref eq)))))
   (type $Gen_block (sub (array (mut (ref eq)))))
 
 
@@ -576,7 +577,11 @@
   ;; Array
   ;; =====
 
-  (func (export "caml_make_vect") (param (ref eq)) (param (ref eq)) (result (ref eq)) (unreachable))
+  (func (export "caml_make_vect") (param $size (ref eq)) (param $value (ref eq)) (result (ref eq))
+      (array.new $Array
+        (local.get $value)
+        (i31.get_s (ref.cast (ref i31) (local.get $size))))
+  )
   (func (export "caml_make_float_vect") (param (ref eq)) (result (ref eq)) (unreachable))
   (func (export "caml_array_sub") (param (ref eq)) (param (ref eq)) (param (ref eq)) (result (ref eq)) (unreachable))
   (func (export "caml_array_append") (param (ref eq)) (param (ref eq)) (result (ref eq)) (unreachable))
