@@ -68,7 +68,7 @@ let rec make_directory dir =
 let link (modules : (wasm_compilation_unit * Wat.t) list) ~output =
   let output_wat = output ^ ".wat" in
   let output_wasm = output ^ ".wasm" in
-  Format.eprintf "OUTPUT: %s@." output_wat;
+  if false then Format.eprintf "OUTPUT: %s@." output_wat;
   let dirname = Filename.concat (Filename.get_temp_dir_name ()) tmp_dirname in
   make_directory dirname;
   (* Sys.mkdir dirname 0o700; *)

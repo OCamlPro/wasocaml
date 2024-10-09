@@ -354,7 +354,7 @@ let link ~ppf_dump objfiles output_name =
     let () =
       let fl_export =
         List.filter_map (fun ((ui:Cmx_format.unit_infos), name, _) ->
-            Format.eprintf "name %s ui_name %s@." name ui.ui_name;
+          if false then Format.eprintf "name %s ui_name %s@." name ui.ui_name;
             match ui.ui_export_info with
             | Clambda _ -> None
             | Flambda e ->
