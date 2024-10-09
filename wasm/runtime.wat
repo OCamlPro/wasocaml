@@ -178,9 +178,9 @@
         (ref.i31 (i32.const 42))
         (array.len (local.get $a))))
     (array.copy $Array $Array
-      (local.get $a)
-      (i32.const 0)
       (local.get $dst)
+      (i32.const 0)
+      (local.get $a)
       (i32.const 0)
       (array.len (local.get $a))
     )
