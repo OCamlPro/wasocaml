@@ -4,7 +4,7 @@ set -eu
 
 alias time='/usr/bin/time -f"real %e user %U sys %S"'
 
-NODE='node-canary'
+NODE='node-canary --stack-size=10000'
 
 bench() {
   echo "*** Running ${1}"
