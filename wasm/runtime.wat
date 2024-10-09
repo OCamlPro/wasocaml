@@ -170,17 +170,13 @@
   )
 
   (func (export "duparray") (param $src (ref eq)) (result (ref eq))
-        (local $a (ref null $Array)) (local $dst (ref null $Array))
-
-    unreachable
-    (;
+    (local $a (ref $Array))
+    (local $dst (ref $Array))
     (local.set $a (ref.cast (ref $Array) (local.get $src)))
-
     (local.set $dst
       (array.new $Array
-        (ref.null eq)
+        (ref.i31 (i32.const 42))
         (array.len (local.get $a))))
-
     (array.copy $Array $Array
       (local.get $a)
       (i32.const 0)
@@ -188,10 +184,7 @@
       (i32.const 0)
       (array.len (local.get $a))
     )
-
-    local.get $dst
-    ref.as_non_null
-    ;)
+    (local.get $dst)
   )
 
   ;; ============
