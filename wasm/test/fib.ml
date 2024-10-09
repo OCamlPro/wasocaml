@@ -4,7 +4,7 @@ let rec fib n =
 
 let () =
   let n = 40 in
-  assert (fib n = 165580141)
+  assert (fib n = 102334155)
   (*
   for i = 0 to 40 do
     print_string "fib (";
