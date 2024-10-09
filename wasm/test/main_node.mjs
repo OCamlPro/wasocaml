@@ -67,11 +67,11 @@ const imports = {"js_runtime":bindings}
 async function f() {
 
   const wasmModule = await WebAssembly.instantiate(code, imports).then(module => {
-    console.log("module loaded! listing its exports:");
-    for (let key in module.instance.exports) {
-      console.log(key);
-    }
-    console.log("done!");
+    console.log("module loaded!");
+    //for (let key in module.instance.exports) {
+    //  console.log(key);
+    //}
+    //console.log("done!");
   });
 }
 
