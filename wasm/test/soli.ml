@@ -5,15 +5,15 @@
 type peg = Out | Empty | Peg
 
 let initial_board = [|
- [| Out; Out; Out; Out; Out; Out; Out; Out; Out|];
- [| Out; Out; Out; Peg; Peg; Peg; Out; Out; Out|];
- [| Out; Out; Out; Peg; Peg; Peg; Out; Out; Out|];
- [| Out; Peg; Peg; Peg; Peg; Peg; Peg; Peg; Out|];
- [| Out; Peg; Peg; Peg; Empty; Peg; Peg; Peg; Out|];
- [| Out; Peg; Peg; Peg; Peg; Peg; Peg; Peg; Out|];
- [| Out; Out; Out; Peg; Peg; Peg; Out; Out; Out|];
- [| Out; Out; Out; Peg; Peg; Peg; Out; Out; Out|];
- [| Out; Out; Out; Out; Out; Out; Out; Out; Out|]
+  [| Out; Out; Out; Out; Out; Out; Out; Out; Out|];
+  [| Out; Out; Out; Peg; Peg; Peg; Out; Out; Out|];
+  [| Out; Out; Out; Peg; Peg; Peg; Out; Out; Out|];
+  [| Out; Peg; Peg; Peg; Peg; Peg; Peg; Peg; Out|];
+  [| Out; Peg; Peg; Peg; Empty; Peg; Peg; Peg; Out|];
+  [| Out; Peg; Peg; Peg; Peg; Peg; Peg; Peg; Out|];
+  [| Out; Out; Out; Peg; Peg; Peg; Out; Out; Out|];
+  [| Out; Out; Out; Peg; Peg; Peg; Out; Out; Out|];
+  [| Out; Out; Out; Out; Out; Out; Out; Out; Out|]
 |]
 
 let print_peg = function
@@ -22,18 +22,18 @@ let print_peg = function
   | Peg -> print_string "$"
 
 let print_board board =
- for i=0 to 8 do
-   for j=0 to 8 do
-    print_peg board.(i).(j)
-   done;
-   print_string "\n"
- done
+  for i=0 to 8 do
+    for j=0 to 8 do
+      print_peg board.(i).(j)
+    done;
+    print_string "\n"
+  done
 
 
 type direction = { dx: int; dy: int }
 
 let dir = [| {dx = 0; dy = 1}; {dx = 1; dy = 0};
-             {dx = 0; dy = -1}; {dx = -1; dy = 0} |]
+  {dx = 0; dy = -1}; {dx = -1; dy = 0} |]
 
 type move = { x1: int; y1: int; x2: int; y2: int }
 
@@ -53,9 +53,9 @@ let rec solve board m =
         print_int !counter; print_string "\n"
       end;
       for i=1 to 7 do
-      for j=1 to 7 do
-        match board.(i).(j) with
-          Peg ->
+        for j=1 to 7 do
+          match board.(i).(j) with
+            Peg ->
             for k=0 to 3 do
               let d1 = dir.(k).dx in
               let d2 = dir.(k).dy in
@@ -65,25 +65,25 @@ let rec solve board m =
               let j2 = j1+d2 in
               match board.(i1).(j1) with
                 Peg ->
-                  begin match board.(i2).(j2) with
+                begin match board.(i2).(j2) with
                     Empty ->
-                      board.(i).(j) <- Empty;
-                      board.(i1).(j1) <- Empty;
-                      board.(i2).(j2) <- Peg;
-                      if solve board (m+1) then begin
-                        moves.(m) <- { x1=i; y1=j; x2=i2; y2=j2 };
-                        raise Found
-                      end;
-                      board.(i).(j) <- Peg;
-                      board.(i1).(j1) <- Peg;
-                      board.(i2).(j2) <- Empty
-                    | _ -> ()
-                  end
+                    board.(i).(j) <- Empty;
+                    board.(i1).(j1) <- Empty;
+                    board.(i2).(j2) <- Peg;
+                    if solve board (m+1) then begin
+                      moves.(m) <- { x1=i; y1=j; x2=i2; y2=j2 };
+                      raise Found
+                    end;
+                    board.(i).(j) <- Peg;
+                    board.(i1).(j1) <- Peg;
+                    board.(i2).(j2) <- Empty
+                  | _ -> ()
+                end
               | _ -> ()
             done
-        | _ ->
+          | _ ->
             ()
-      done
+        done
       done;
       false
     with Found ->
