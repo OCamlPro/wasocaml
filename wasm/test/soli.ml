@@ -102,5 +102,5 @@ let rec runbench n =
   end
 
 let _ =
-  let nruns = 2000 in
+  let nruns = 500 in
   runbench nruns
