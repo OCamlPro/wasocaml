@@ -170,20 +170,20 @@
   )
 
   (func (export "duparray") (param $src (ref eq)) (result (ref eq))
+    ;; src is a block
     (local $a (ref $Array))
     (local $dst (ref $Array))
     (local.set $a (ref.cast (ref $Array) (local.get $src)))
     (local.set $dst
       (array.new $Array
         (ref.i31 (i32.const 42))
-        (array.len (local.get $a))))
+        (i32.add (i32.const -1) (array.len (local.get $a)))))
     (array.copy $Array $Array
       (local.get $dst)
       (i32.const 0)
       (local.get $a)
-      (i32.const 0)
-      (array.len (local.get $a))
-    )
+      (i32.const 1)
+      (i32.add (i32.const -1) (array.len (local.get $a))))
     (local.get $dst)
   )
 
