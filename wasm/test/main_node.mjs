@@ -55,7 +55,10 @@ const bindings = {
     "print_endline": print_endline,
     "putchar": putchar,
     "flush": flush,
-    "memory": memory
+    "memory": memory,
+    "atan2": Math.atan2,
+    "sin": Math.sin,
+    "cos": Math.cos,
 }
 
 const src = "./a.out.wasm"

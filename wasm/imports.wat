@@ -16,6 +16,9 @@
 
   (import "js_runtime" "putchar" (func $putchar (param i32)))
   (import "js_runtime" "flush" (func $flush))
+  (import "js_runtime" "atan2" (func $atan2 (param f64 f64) (result f64)))
+  (import "js_runtime" "sin" (func $sin (param f64) (result f64)))
+  (import "js_runtime" "cos" (func $cos (param f64) (result f64)))
 
   (import "js_runtime" "memory" (memory $mem 1))
 
@@ -53,6 +56,31 @@
         (i32.add (i32.const 1)
           (local.tee $oo_id (global.get $oo_id))))
       (ref.i31 (local.get $oo_id))
+  )
+
+  ;; ======
+  ;; Floats
+  ;; ======
+  (func $C_atan2 (export "atan2") (param f64 f64) (result f64)
+    local.get 1
+    local.get 0
+    call $atan2
+  )
+
+  ;; TODO: inline this
+  (func $C_sqrt (export "sqrt") (param f64) (result f64)
+    local.get 0
+    f64.sqrt
+  )
+
+  (func $C_sin (export "sin") (param f64) (result f64)
+    local.get 0
+    call $sin
+  )
+
+  (func $C_cos (export "cos") (param f64) (result f64)
+    local.get 0
+    call $cos
   )
 
   ;; =====
@@ -279,8 +307,14 @@
 
 
   (func (export "caml_notequal") (param (ref eq)) (param (ref eq)) (result (ref eq))
-      ;; TODO
-      (unreachable))
+    local.get 0
+    local.get 1
+    call $caml_equal
+    ref.cast (ref i31)
+    i31.get_s
+    i32.eqz
+    ref.i31
+  )
 
   (func (export "caml_lessequal") (param (ref eq)) (param (ref eq)) (result (ref eq))
       ;; TODO
@@ -289,6 +323,11 @@
   (func (export "caml_greaterequal") (param (ref eq)) (param (ref eq)) (result (ref eq))
       ;; TODO
       (unreachable))
+
+  (func $C_caml_greaterthan (export "caml_greaterthan")
+        (param (ref eq) (ref eq)) (result (ref eq))
+    unreachable
+  )
 
 
     ;; Conversions
