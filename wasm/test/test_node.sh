@@ -23,21 +23,26 @@ bench() {
   echo -n "js_of_ocaml (node):         "
   js_of_ocaml compile --target-env=nodejs --opt=3 ./a.out
   time $NODE ./a.js > /dev/null
+  echo -n "wasm_of_ocaml (node):       "
+  rm a.js a.wat || true 2> /dev/null
+  wasm_of_ocaml compile --opt=3 ./a.out > /dev/null
+  time $NODE ./a.js > /dev/null
+  rm -rf a.assets*
 }
 
 bench "Knuth-Bendix" "kb"
 bench "Soli" "soli"
 bench "Fibonacci" "fib"
-#bench "Almabench" "almabench"
+#bench "Almabench" "almabench" # global init must have correct type
 bench "Binary Decision Diagram" "bdd"
-#bench "Binary Trees" "binary_trees"
-#bench "Boyer" "boyer"
-#bench "Boyer no exceptions" "boyer_no_exc"
-#bench "Pfannkuchen" "fannkuch"
+#bench "Binary Trees" "binary_trees" # unreachable
+#bench "Boyer" "boyer" # unreachable
+#bench "Boyer no exceptions" "boyer_no_exc" # unreachable
+#bench "Pfannkuchen" "fannkuch" # unreachable
 #bench "Fast Fourier Transform" "fft"
 #bench "Hamming" "hamming"
 bench "Loop" "loop"
-#bench "Nucleic" "nucleic"
+#bench "Nucleic" "nucleic" # unreachable
 #bench "Quicksort" "quicksort"
 #bench "Ray-Trace" "raytrace"
 #bench "Splay Tree" "splay"
