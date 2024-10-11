@@ -126,10 +126,10 @@
   ;; TODO: implement get_unsafe properly
   (export "array_get_unsafe" (func $array_get_safe))
 
-  (func $array_set_float_unsafe (param $arr (ref $FloatArray)) (param $field (ref eq))
+  (func $array_set_float_unsafe (param $arr (ref eq)) (param $field (ref eq))
                                  (param $value (ref eq)) (result (ref eq))
        (array.set $FloatArray
-         (local.get $arr)
+         (ref.cast (ref $FloatArray) (local.get $arr))
          (i31.get_s (ref.cast (ref i31) (local.get $field)))
          (struct.get $Float 0 (ref.cast (ref $Float) (local.get $value))))
        (ref.i31 (i32.const 0))
@@ -168,6 +168,9 @@
     ;; TODO exceptions
     (call $array_set_unsafe (local.get $arr) (local.get $field) (local.get $value))
   )
+
+  ;; TODO: exceptions
+  (export "array_set_float_safe" (func $array_set_float_unsafe))
 
   (func (export "duparray") (param $src (ref eq)) (result (ref eq))
     ;; src is a block
