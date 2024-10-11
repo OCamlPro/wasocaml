@@ -1,6 +1,6 @@
 (module
   (type $Float (sub (struct (field (mut f64)))))
-  (type $Int64 (struct (field (mut i64))))
+  (type $Int64 (sub (struct (field (mut i64)))))
   (type $String (sub (array (mut i8))))
   (type $Array (sub (array (mut (ref eq)))))
   (type $Gen_block (sub (array (mut (ref eq)))))
