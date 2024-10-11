@@ -31,6 +31,7 @@ bench() {
 }
 
 bench "Knuth-Bendix" "kb"
+bench "Knuth-Bendix (no exception)" "kb_no_exc"
 bench "Soli" "soli"
 bench "Fibonacci" "fib"
 #bench "Almabench" "almabench" # global init must have correct type
@@ -39,6 +40,7 @@ bench "Binary Decision Diagram" "bdd"
 #bench "Boyer" "boyer" # unreachable
 #bench "Boyer no exceptions" "boyer_no_exc" # unreachable
 #bench "Pfannkuchen" "fannkuch" # unreachable
+#bench "Pfannkuchen 2" "fannkuch2" # unreachable
 #bench "Fast Fourier Transform" "fft"
 #bench "Hamming" "hamming"
 bench "Loop" "loop"
