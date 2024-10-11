@@ -360,8 +360,6 @@ module C = struct
   let opt_tuple fields =
     [ tuple_make fields ]
 
-  let tuple_extract ~arity ~field tuple = node "tuple.extract" [ int arity; int field; tuple ]
-
   let rec_ l = node "rec" l
 
   let import module_ name e = node "import" [ String (module_name module_); String (Wident.acceptable_string name); e ]
