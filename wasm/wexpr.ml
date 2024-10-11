@@ -346,7 +346,7 @@ let print_unop ppf = function
   | Abs_float -> Format.fprintf ppf "Abs_float"
   | Neg_float -> Format.fprintf ppf "Neg_float"
   | Tuple_extract { arity = _; field = i } ->
-      Format.fprintf ppf "Tuple_extract.%i" i
+    Format.fprintf ppf "Tuple_extract.%i" i
 
 let rec print ppf = function
   | Var l -> Local.print ppf l

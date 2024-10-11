@@ -2088,7 +2088,7 @@ module ToWasm = struct
     | Abs_float -> Cst.node "f64.abs" [ arg ]
     | Neg_float -> Cst.node "f64.neg" [ arg ]
     | Tuple_extract { arity; field } ->
-        C.tuple_extract ~arity ~field arg
+      C.tuple_extract ~arity ~field arg
 
   let irelop_name nn (op : Expr.irelop) =
     match op with
