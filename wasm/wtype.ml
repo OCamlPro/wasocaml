@@ -92,7 +92,6 @@ type atom =
   | I64
   | F64
   | Rvar of Var.t
-  | Tuple of atom list
 
 type descr =
   | Struct of
@@ -108,35 +107,10 @@ type descr =
       ; results : atom list
       }
 
-let rec print_atom ppf = function
+let print_atom ppf = function
   | I8 -> Format.fprintf ppf "i8"
   | I16 -> Format.fprintf ppf "i16"
   | I32 -> Format.fprintf ppf "i32"
   | I64 -> Format.fprintf ppf "i64"
   | F64 -> Format.fprintf ppf "f64"
   | Rvar v -> Format.fprintf ppf "ref_%a" Var.print v
-  | Tuple l -> Format.fprintf ppf "Tuple (%a)" (print_list print_atom " ") l
-
-let print_descr ppf = function
-  | Struct { sub; fields = atoms } ->
-    let pp_sub ppf = function
-      | None -> ()
-      | Some sub -> Format.fprintf ppf "sub: %a;@ " Var.print sub
-    in
-    Format.fprintf ppf "@[<hov 2>Struct {%a%a}@]" pp_sub sub
-      (print_list print_atom ";")
-      atoms
-  | Array { sub; fields = atom } ->
-    let pp_sub ppf = function
-      | None -> ()
-      | Some sub -> Format.fprintf ppf "sub: %a;@ " Var.print sub
-    in
-    Format.fprintf ppf "@[<hov 2>Array {%a%a}@]" pp_sub sub print_atom atom
-  | Func { params; results = [] } ->
-    Format.fprintf ppf "@[<hov 2>Func {%a}@]" (print_list print_atom ",") params
-  | Func { params; results } ->
-    Format.fprintf ppf "@[<hov 2>Func {%a} ->@ %a@]"
-      (print_list print_atom ",")
-      params
-      (print_list print_atom ",")
-      results

@@ -84,18 +84,22 @@ module Conv = struct
     let function_call_handling handler ~tail call : Expr.t =
       if tail then call
       else
-        let var = Local.fresh "call_result" in
+        let var1 = Local.fresh "call_result1" in
+        let var2 = Local.fresh "call_result2" in
+
         let body : Expr.t =
           If_then_else
-            { cond = Unop (Tuple_extract { arity = 2; field = 0 }, Var (V var))
+            { cond = Var (V var1)
             ; if_expr =
-                NR (raise handler (Unop (Tuple_extract { arity = 2; field = 1 }, Var (V var))))
-            ; else_expr = Unop (Tuple_extract { arity = 2; field = 1 }, Var (V var))
+                NR (raise handler (Var (V var2)))
+            ; else_expr = Var (V var2)
             }
         in
-        Let
-          { var
-          ; typ = Type.Tuple [ I32; ref_eq ]
+        Let2
+          { var1
+          ; var2
+          ; typ1 = I32
+          ; typ2 = ref_eq
           ; defining_expr = call
           ; body
           }
@@ -488,6 +492,7 @@ module Conv = struct
     match e with
     | Var _ | I32 _ | I64 _ | F64 _ | Global_get _ -> true
     | Unop (I31_new, e) -> expr_is_pure e
+    | Let2 { defining_expr; body; _ }
     | Let { defining_expr; body } ->
       expr_is_pure defining_expr && expr_is_pure body
     | _ -> false
@@ -2087,8 +2092,6 @@ module ToWasm = struct
       Cst.node name [ arg ]
     | Abs_float -> Cst.node "f64.abs" [ arg ]
     | Neg_float -> Cst.node "f64.neg" [ arg ]
-    | Tuple_extract { arity; field } ->
-        C.tuple_extract ~arity ~field arg
 
   let irelop_name nn (op : Expr.irelop) =
     match op with
@@ -2127,6 +2130,11 @@ module ToWasm = struct
     | Let { var; typ = _; defining_expr; body } ->
       C.local_set (Expr.Local.V var) (conv_expr_group defining_expr)
       :: conv_expr body
+    | Let2 { var1; typ1 = _; var2; typ2 = _; defining_expr; body } ->
+      C.local_set (Expr.Local.V var1)
+        (C.local_set (Expr.Local.V var2)
+            (conv_expr_group defining_expr))
+      :: conv_expr body
     | I32 i -> [ C.i32 i ]
     | I64 i -> [ C.i64 i ]
     | F64 f -> [ C.f64 f ]
@@ -2141,18 +2149,11 @@ module ToWasm = struct
     | Call_ref { typ; args; func; tail } ->
       let args = List.map conv_expr_group args @ [ conv_expr_group func ] in
       if tail then [ C.return_call_ref typ args ] else [ C.call_ref typ args ]
-    | Call { typ; args; func; tail } ->
+    | Call { typ = _; args; func; tail } ->
       let args = List.map conv_expr_group args in
       if tail then
-        (* This should be
-           {[ [ C.return_call func args ] ]}
-           But return call is not handled by the gc branch so we play a trick
-           with return_call_ref
-        *)
-        let _ = typ in
         (* TODO do something about C calls that does not return exceptions ? *)
         [ C.return_call func args ]
-        (* [ C.return_call_ref typ (args @ [ C.ref_func func ]) ] *)
       else [ C.call func args ]
     | Ref_cast { typ; r } -> [ C.ref_cast typ [ conv_expr_group r ] ]
     | Global_get g -> [ C.global_get g ]
@@ -2171,45 +2172,16 @@ module ToWasm = struct
           C.block cont result_types [ C.br fallthrough [ conv_expr_group body ] ]
         in
         let handler_expr = conv_expr handler in
-        (*
-        match mode with
-        | Reference ->
-          let handler =
-            List.map
-              (fun (var, _typ) ->
-                  match var with
-                  | Some var -> C.local_set' (Expr.Local.V var)
-                  | None -> C.drop' )
-              params
-            @ handler_expr
-          in
-          [ C.block fallthrough [ ref_eq ] (body :: handler) ]
-        | Binarien ->
-            *)
-        let set_locals =
-          match params with
-          | [] -> [ body ]
-          | [ (None, _typ) ] -> [ C.drop body ]
-          | [ (Some var, _typ) ] -> [ C.local_set (Expr.Local.V var) body ]
-          | _ ->
-            let arity = List.length params in
-            let local_tuple = Expr.Local.Block_result cont in
-            let _i, assigns =
-              List.fold_left
-                (fun (i, assigns) (var, _typ) ->
-                    match var with
-                    | Some var ->
-                      let project =
-                        C.tuple_extract ~arity ~field:i (C.local_get (Expr.Local.V local_tuple))
-                      in
-                      let expr = C.local_set (Expr.Local.V var) project in
-                      (i + 1, expr :: assigns)
-                    | None -> (i + 1, assigns) )
-                (0, []) params
-            in
-            [ C.local_set (Expr.Local.V local_tuple) body ] @ assigns
+        let handler =
+          List.map
+            (fun (var, _typ) ->
+                match var with
+                | Some var -> C.local_set' (Expr.Local.V var)
+                | None -> C.drop' )
+            (List.rev params)
+          @ handler_expr
         in
-        [ C.block fallthrough [ ref_eq ] (set_locals @ handler_expr) ]
+        [ C.block fallthrough [ ref_eq ] (body :: handler) ]
       end
     | Br_on_cast { value; typ; if_cast; if_else } ->
       [ C.drop (C.br_on_cast if_cast typ (conv_expr_group value)) ]
@@ -2349,7 +2321,6 @@ module ToWasm = struct
                     body
                 in
                 let _, typs = List.split body in
-                let exprs = [ C.tuple_make exprs ] in
                 (exprs, List.map C.result typs)
             end
           | No_value body -> (conv_no_value body, [])
@@ -2406,11 +2377,8 @@ let output_file ~output_prefix ~module_ =
         output_wat ppf module_;
         Format.fprintf ppf "@\n")
 
-let run ~output_prefix (flambda : Flambda.program) =
+let run (flambda : Flambda.program) =
   State.reset ();
-  let print_everything =
-    match Sys.getenv_opt "WASMPRINT" with None -> false | Some _ -> true
-  in
   let offsets = Wasm_closure_offsets.compute flambda in
   let top_env = Conv.{ offsets } in
   let m = Conv.conv_body top_env flambda.program_body [] in
@@ -2425,10 +2393,7 @@ let run ~output_prefix (flambda : Flambda.program) =
   in
   let functions = Conv.conv_functions ~top_env flambda in
   let m = closure_types @ m @ functions in
-  if print_everything then
-    Format.printf "WASM %s@.%a@." output_prefix Module.print m;
   let common = Conv.make_common () in
-  if print_everything then Format.printf "COMMON@.%a@." Module.print common;
   let wasm =
     Profile.record_call "ToWasm" (fun () -> ToWasm.conv_module (common @ m))
   in
@@ -2438,7 +2403,7 @@ let run ~output_prefix (flambda : Flambda.program) =
   Wat.{ module_ = wasm }
 
 let emit ~to_file ~output_prefix (flambda : Flambda.program) =
-  let r = run ~output_prefix flambda in
+  let r = run flambda in
   if to_file then
     Profile.record_call "output_wasm" (fun () ->
       output_file ~output_prefix ~module_:r.module_  );

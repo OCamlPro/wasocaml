@@ -4,6 +4,8 @@
    contributed by Isaac Gouy, transliterated from Mike Pall's Lua program
 *)
 
+exception Done
+
 let fannkuch n =
   let p = Array.make n 0 in
   let q = Array.make n 0 in
@@ -36,19 +38,19 @@ let fannkuch n =
         let qq = q.(!q0) in
         q.(!q0) <- !q0;
         (if !q0 >= 3
-         then
-           let i = ref 1 in
-           let j = ref (!q0 - 1) in
-           while
-             let t = q.(!i) in
-             q.(!i) <- q.(!j);
-             q.(!j) <- t;
-             incr i;
-             decr j;
-             !i < !j
-           do
-             ()
-           done);
+          then
+            let i = ref 1 in
+            let j = ref (!q0 - 1) in
+            while
+              let t = q.(!i) in
+              q.(!i) <- q.(!j);
+              q.(!j) <- t;
+              incr i;
+              decr j;
+              !i < !j
+            do
+              ()
+            done);
         q0 := qq;
         incr flips
       done);
@@ -73,7 +75,7 @@ let fannkuch n =
           if i = n - 1
           then (
             if false then Format.eprintf "%d %d@." !sum !maxflips;
-            exit 0);
+            raise Done);
           s.(i) <- i;
           let t = p.(0) in
           for j = 0 to i do
@@ -86,8 +88,4 @@ let fannkuch n =
 
 let n = 10
 
-let pf = fannkuch n
-
-(*
-//print(pf[0] + "\n" + "Pfannkuchen(" + n + ") = " + pf[1]);
-*)
+let () = try fannkuch n with Done -> ()

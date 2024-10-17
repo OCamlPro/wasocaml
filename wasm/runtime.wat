@@ -4,7 +4,8 @@
   (type $Array (sub (array (mut (ref eq)))))
   (type $FloatArray (sub (array (mut f64))))
   (type $Gen_block (sub (array (mut (ref eq)))))
-  (import "exn_tag" "exc" (tag $exc (param (ref eq))))
+  ;; TODO: re-enable exception
+  ;;(import "exn_tag" "exc" (tag $exc (param (ref eq))))
 
   ;; ==========
   ;; Exceptions
@@ -216,11 +217,15 @@
               (ref.cast (ref $String) (local.get $arr))
               (local.get $field))))
         (else
-          (throw $exc
+          unreachable
+          ;; TODO: re-enable exception
+          (;(throw $exc
             (array.new_fixed $Gen_block 3
               (ref.i31 (i32.const 0))
               (global.get $invalid_argument)
-              (global.get $index_out_of_bound_string)))))
+              (global.get $index_out_of_bound_string)))
+          ;)
+          ))
   )
 
   (func $string_eq (param $a (ref $String)) (param $b (ref $String)) (result i32)
