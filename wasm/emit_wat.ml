@@ -2177,7 +2177,7 @@ module ToWasm = struct
                 match var with
                 | Some var -> C.local_set' (Expr.Local.V var)
                 | None -> C.drop' )
-            params
+            (List.rev params)
           @ handler_expr
         in
         [ C.block fallthrough [ ref_eq ] (body :: handler) ]
