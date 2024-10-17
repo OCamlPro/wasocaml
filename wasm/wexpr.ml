@@ -339,20 +339,20 @@ let required_locals body =
       acc
     | exception Not_found -> Local.Map.add var typ acc
   in
-  let let_cont_reqs acc ~cont ~params =
+  let let_cont_reqs acc ~cont:_ ~params =
     let acc =
       List.fold_left
         (fun acc (var, typ) ->
             match var with None -> acc | Some var -> add var typ acc )
         acc params
     in
-    let acc =
-      match ( params) with
-      | _ :: _ :: _ ->
-        let var = Local.Block_result cont in
-        add var (Type.Tuple (List.map snd params)) acc
-      | _ -> acc
-    in
+    (* let acc = *)
+    (*   match ( params) with *)
+    (*   | _ :: _ :: _ -> *)
+    (*     let var = Local.Block_result cont in *)
+    (*     add var (Type.Tuple (List.map snd params)) acc *)
+    (*   | _ -> acc *)
+    (* in *)
     acc
   in
   let rec loop acc = function

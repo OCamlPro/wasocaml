@@ -2178,7 +2178,7 @@ module ToWasm = struct
                 match var with
                 | Some var -> C.local_set' (Expr.Local.V var)
                 | None -> C.drop' )
-            params
+            (List.rev params)
           @ handler_expr
         in
         [ C.block fallthrough [ ref_eq ] (body :: handler) ]
@@ -2321,7 +2321,6 @@ module ToWasm = struct
                     body
                 in
                 let _, typs = List.split body in
-                let exprs = [ C.tuple_make exprs ] in
                 (exprs, List.map C.result typs)
             end
           | No_value body -> (conv_no_value body, [])
