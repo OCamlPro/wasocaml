@@ -11,27 +11,41 @@ NODE="node-canary --stack-size=${STACK_SIZE}"
 ulimit -s $ULIMIT_STACK_SIZE
 
 bench() {
-  echo "*** Running ${1}"
-  echo -n "Wasocaml (node):            "
-  ../../ocamlopt -O3 ./${2}.ml > /dev/null
-  time $NODE ./main_node.mjs > /dev/null
-  wasm-opt --enable-gc --enable-reference-types --enable-multivalue --enable-tail-call a.out.wasm -o a.out.wasm -O3
-  echo -n "Wasocaml + wasm-opt (node): "
-  time $NODE ./main_node.mjs > /dev/null
-  echo -n "OCaml native:               "
+  echo "*** Running ${1}:"
+
+  echo ""
+
+  echo -n "    OCaml native:               "
   ocamlopt -O3 ./${2}.ml > /dev/null
   time ./a.out > /dev/null
-  echo -n "OCaml bytecode:             "
+
+  echo -n "    Wasocaml + wasm-opt (node): "
+  ../../ocamlopt -O3 ./${2}.ml > /dev/null
+  wasm-opt --enable-gc --enable-reference-types --enable-multivalue --enable-tail-call a.out.wasm -o a.out.wasm -O3
+  time $NODE ./main_node.mjs > /dev/null
+
+  #echo -n "    Wasocaml (node):            "
+  #../../ocamlopt -O3 ./${2}.ml > /dev/null
+  #time $NODE ./main_node.mjs > /dev/null
+
+  echo -n "    wasm_of_ocaml (node):       "
   ocamlc ./${2}.ml > /dev/null
-  time ocamlrun ./a.out > /dev/null
-  echo -n "js_of_ocaml (node):         "
-  js_of_ocaml compile --target-env=nodejs --opt=3 ./a.out
-  time $NODE ./a.js > /dev/null
-  echo -n "wasm_of_ocaml (node):       "
-  rm a.js a.wat || true 2> /dev/null
+  rm -f a.js a.wat || true 2> /dev/null
   wasm_of_ocaml compile --opt=3 ./a.out > /dev/null
   time $NODE ./a.js > /dev/null
   rm -rf a.assets*
+
+  echo -n "    js_of_ocaml (node):         "
+  ocamlc ./${2}.ml > /dev/null
+  rm -f a.js a.wat || true 2> /dev/null
+  js_of_ocaml compile --target-env=nodejs --opt=3 ./a.out
+  time $NODE ./a.js > /dev/null
+
+  echo -n "    OCaml bytecode:             "
+  ocamlc ./${2}.ml > /dev/null
+  time ocamlrun ./a.out > /dev/null
+
+  echo ""
 }
 
 bench "Knuth-Bendix" "kb"
