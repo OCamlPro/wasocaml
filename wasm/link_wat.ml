@@ -29,13 +29,17 @@ let options =
   [ "--enable-multivalue"
   ; "--enable-gc"
   ; "--enable-reference-types"
-  ; "--enable-exception-handling"
   ; "--enable-tail-call"
-  ]
+  ] @ match Wstate.exception_repr with
+    | Native_exceptions -> [ "--enable-exception-handling" ]
+    | Multi_return ->  []
 
 let wasm_merge = "wasm-merge"
 
-let runtime = [ "exn_tag"; "runtime"; "imports" ]
+let runtime = [  "runtime"; "imports" ]
+  @ match Wstate.exception_repr with
+    | Native_exceptions -> [ "exn_tag" ]
+    | Multi_return ->  []
 
 let merge_files ~runtime_dir ~text files output =
   let text = if text then [ emit_text ] else [] in

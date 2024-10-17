@@ -492,6 +492,7 @@ module Conv = struct
     match e with
     | Var _ | I32 _ | I64 _ | F64 _ | Global_get _ -> true
     | Unop (I31_new, e) -> expr_is_pure e
+    | Let2 { defining_expr; body; _ }
     | Let { defining_expr; body } ->
       expr_is_pure defining_expr && expr_is_pure body
     | _ -> false

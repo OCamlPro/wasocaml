@@ -371,7 +371,10 @@ module C = struct
       (node "tag" [ !$"exc"; node "param" [ node "ref" [ atom "eq" ] ] ])
 
   let module_ m =
-    let m = import_tag :: m in
+    let m = match Wstate.exception_repr with
+      | Native_exceptions -> import_tag :: m
+      | Multi_return -> m
+    in
     nodev "module" m
 
 end
