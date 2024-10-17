@@ -2320,7 +2320,6 @@ module ToWasm = struct
                     body
                 in
                 let _, typs = List.split body in
-                let exprs = [ C.tuple_make exprs ] in
                 (exprs, List.map C.result typs)
             end
           | No_value body -> (conv_no_value body, [])
