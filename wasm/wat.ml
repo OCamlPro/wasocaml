@@ -243,7 +243,7 @@ module C = struct
   let declare_func f =
     node "elem" [ atom "declare"; atom "func"; !$(Func_id.name f) ]
 
-  let rec type_atom (t : Type.atom) =
+  let type_atom (t : Type.atom) =
     match t with
     | I8 -> atom "i8"
     | I16 -> atom "i16"
@@ -251,14 +251,6 @@ module C = struct
     | I64 -> atom "i64"
     | F64 -> atom "f64"
     | Rvar v -> reft v
-    | Tuple l -> node "tuple" (List.map type_atom l)
-
-  let tuple_make fields =
-    match fields with
-    | [] -> assert false
-    | [ field ] ->  field
-    | fields ->
-      node "tuple.make" (Atom (List.length fields |> string_of_int) :: fields )
 
   let local l t = node "local" [ !$(Expr.Local.var_name l); type_atom t ]
 
@@ -317,15 +309,12 @@ module C = struct
     nodehv "loop" [ !$(Block_id.name id); results result ] body
 
   let br id args =
-    match args with
-    | [] -> node "br" [ !$(Block_id.name id)]
-    | [arg] -> node "br" [ !$(Block_id.name id); arg ]
-    | _ -> node "br" [ !$(Block_id.name id); tuple_make args ]
+    node "br" ((!$(Block_id.name id)) :: args)
 
   let br' id = node "br" [ !$(Block_id.name id) ]
 
   let return args =
-    node "return" [ tuple_make args ]
+    node "return" args
 
   let br_on_cast id typ arg =
     node "br_on_cast" [ !$(Block_id.name id); type_name typ; arg ]
@@ -357,10 +346,6 @@ module C = struct
     | None -> node "sub" [ descr ]
     | Some name -> node "sub" [ type_name name; descr ]
 
-  let opt_tuple fields =
-    [ tuple_make fields ]
-
-  let tuple_extract ~arity ~field tuple = node "tuple.extract" [ int arity; int field; tuple ]
 
   let rec_ l = node "rec" l
 
@@ -373,7 +358,10 @@ module C = struct
       (node "tag" [ !$"exc"; node "param" [ node "ref" [ atom "eq" ] ] ])
 
   let module_ m =
-    let m = import_tag :: m in
+    let m = match Wstate.exception_repr with
+      | Native_exceptions -> import_tag :: m
+      | Multi_return -> m
+    in
     nodev "module" m
 
 end

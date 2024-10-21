@@ -102,7 +102,6 @@ type unop =
       }
   | Abs_float
   | Neg_float
-  | Tuple_extract of { field : int; arity : int }
 
 (* Every expression returns exactly one value *)
 type t =
@@ -114,6 +113,14 @@ type t =
   | Let of
       { var : Local.var
       ; typ : Type.atom
+      ; defining_expr : t
+      ; body : t
+      }
+  | Let2 of
+      { var1 : Local.var
+      ; typ1 : Type.atom
+      ; var2 : Local.var
+      ; typ2 : Type.atom
       ; defining_expr : t
       ; body : t
       }
@@ -318,165 +325,6 @@ let print_sign ppf = function
   | S -> Format.fprintf ppf "s"
   | U -> Format.fprintf ppf "u"
 
-let print_unop ppf = function
-  | I31_get_s -> Format.fprintf ppf "I31_get_s"
-  | I31_new -> Format.fprintf ppf "I31_new"
-  | Struct_get { typ; field } ->
-    Format.fprintf ppf "@[<hov 2>Struct_get(%a).(%i)@]" Type.Var.print typ field
-  | Struct_get_packed { typ; field; extend } ->
-    let str = match extend with S -> "_s" | U -> "_u" in
-    Format.fprintf ppf "@[<hov 2>Struct_get%s(%a).(%i)@]" str Type.Var.print typ
-      field
-  | Ref_cast_i31 -> Format.fprintf ppf "Ref_cast_i31"
-  | Is_i31 -> Format.fprintf ppf "Is_i31"
-  | Array_len typ ->
-    Format.fprintf ppf "@[<hov 2>Array_len(%a)@]" Type.Var.print typ
-  | Reinterpret { from_type; to_type } ->
-    Format.fprintf ppf "%a.reinterpret_%a" print_num_type to_type print_num_type
-      from_type
-  | I32_wrap_i64 -> Format.fprintf ppf "I32_wrap_i64"
-  | I64_extend_i32 sign ->
-    Format.fprintf ppf "I64_extend_i32_%a" print_sign sign
-  | Convert { from_type; to_type; sign } ->
-    Format.fprintf ppf "f%a.convert_i%a_%a" print_nn to_type print_nn from_type
-      print_sign sign
-  | Trunc { from_type; to_type; sign } ->
-    Format.fprintf ppf "i%a.trunc_i%a_%a" print_nn to_type print_nn from_type
-      print_sign sign
-  | Abs_float -> Format.fprintf ppf "Abs_float"
-  | Neg_float -> Format.fprintf ppf "Neg_float"
-  | Tuple_extract { arity = _; field = i } ->
-      Format.fprintf ppf "Tuple_extract.%i" i
-
-let rec print ppf = function
-  | Var l -> Local.print ppf l
-  | I32 i -> Format.fprintf ppf "%li" i
-  | I64 i -> Format.fprintf ppf "%Li" i
-  | F64 f -> Format.fprintf ppf "%g" f
-  | Ref_func f -> Format.fprintf ppf "Ref_func %a" Func_id.print f
-  | Let { var; defining_expr; body } ->
-    Format.fprintf ppf "@[<hov 2>Let %a =@ %a@]@ in@ %a" Local.print_var var
-      print defining_expr print body
-  | I_relop (nn, op, (arg1, arg2)) ->
-    Format.fprintf ppf "@[<hov 2>I_relop(%a_%a:@ %a,@ %a)@]" print_irelop op
-      print_nn nn print arg1 print arg2
-  | F_relop (nn, op, (arg1, arg2)) ->
-    Format.fprintf ppf "@[<hov 2>F_relop(%a_%a:@ %a,@ %a)@]" print_frelop op
-      print_nn nn print arg1 print arg2
-  | Binop (binop, (arg1, arg2)) ->
-    Format.fprintf ppf "@[<hov 2>Binop(%a:@ %a,@ %a)@]" print_binop binop print
-      arg1 print arg2
-  | Unop (unop, arg) ->
-    Format.fprintf ppf "@[<hov 2>Unop(%a:@ %a)@]" print_unop unop print arg
-  | Struct_new (typ, args) ->
-    Format.fprintf ppf "@[<hov 2>Struct_new(%a:@ %a)@]" Type.Var.print typ
-      (print_list print ",") args
-  | Array_new_fixed { typ; fields } ->
-    Format.fprintf ppf "@[<hov 2>Array_new_fixed(%a:@ %a)@]" Type.Var.print typ
-      (print_list print ",") fields
-  | Call_ref { typ; args; func } ->
-    Format.fprintf ppf "@[<hov 2>Call_ref(%a:@ %a(%a))@]" Type.Var.print typ
-      print func (print_list print ",") args
-  | Call { args; func } ->
-    Format.fprintf ppf "@[<hov 2>Call(%a(%a))@]" Func_id.print func
-      (print_list print ",") args
-  | Ref_cast { typ; r } ->
-    Format.fprintf ppf "@[<hov 2>Ref_cast(%a:@ %a)@]" Type.Var.print typ print r
-  | Global_get g ->
-    Format.fprintf ppf "@[<hov 2>Global_get(%a)@]" Global.print g
-  | Seq (effects, last) ->
-    Format.fprintf ppf "@[<v 2>Seq(%a;%a)@]"
-      (print_list print_no_value ";")
-      effects print last
-  | If_then_else { cond; if_expr; else_expr } ->
-    Format.fprintf ppf "@[<hov 2>If(%a)@ Then(%a)@ Else(%a)@]" print cond print
-      if_expr print else_expr
-  | Let_cont { cont; params; handler; body } ->
-    Format.fprintf ppf "@[<hov 2>Let_cont %a(%a) =@ %a@]@ in@ %a" Block_id.print
-      cont
-      (print_list
-          (fun ppf (local, typ) ->
-              Format.fprintf ppf "%a : %a"
-                (Format.pp_print_option Local.print_var)
-                local Type.print_atom typ )
-          ", " )
-      params print handler print body
-  | Br_on_cast { value; typ; if_cast; if_else } ->
-    Format.fprintf ppf "@[<hov 2>Br_on_cast(%a %a -> (%a) else %a)@]" print
-      value Type.Var.print typ Block_id.print if_cast print if_else
-  | Br_if { cond; if_true; if_else } ->
-    Format.fprintf ppf "@[<hov 2>Br_if(%a -> (%a) else %a)@]" print cond
-      Block_id.print if_true print if_else
-  | Br_table { cond; cases; default } ->
-    Format.fprintf ppf "@[<hov 2>Br_table(%a -> (%a) %a@]" print cond
-      (print_list Block_id.print " ")
-      cases Block_id.print default
-  | Try { body; param = var, typ; result_typ; handler } ->
-    Format.fprintf ppf
-      "@[<v>@[<hov 2>Try -> %a {@ @[<hov 2>%a@ @]}@]@ @[<hov 2>With@ @[<hov \
-       2>%a : %a@ ->@ @[<hov>%a@]@]@]@]"
-      Type.print_atom result_typ print body Local.print_var var Type.print_atom
-      typ print handler
-  | Unit nv -> Format.fprintf ppf "@[<hov 2>Unit (@ %a@ )@]" print_no_value nv
-  | NR nr -> print_no_return ppf nr
-
-and print_no_value ppf no_value =
-  match no_value with
-  | NV_seq effects ->
-    Format.fprintf ppf "@[<v 2>Seq(%a)@]"
-      (print_list print_no_value ";")
-      effects
-  | NV_drop e -> Format.fprintf ppf "@[<hov 2>Drop (@ %a@ )@]" print e
-  | NV_binop (binop, (arg1, arg2)) ->
-    Format.fprintf ppf "@[<hov 2>Binop(%a:@ %a,@ %a)@]" print_nv_binop binop
-      print arg1 print arg2
-  | Assign { being_assigned; new_value } ->
-    Format.fprintf ppf "@[<v 2>Assign(%a <- %a)@]" Local.print_var
-      being_assigned print new_value
-  | Array_set { typ; array; field; value } ->
-    Format.fprintf ppf "@[<hov 2>Array_set(%a:@ %a.(%a) <- %a)@]" Type.Var.print
-      typ print array print field print value
-  | Loop { cont; body } ->
-    Format.fprintf ppf "@[<hov 2>Loop %a@ %a@]" Block_id.print cont
-      print_no_value body
-  | NV -> Format.fprintf ppf "Nil"
-  | NV_if_then_else { cond; if_expr; else_expr } ->
-    Format.fprintf ppf "@[<hov 2>If(%a)Then(%a)Else(%a)@]" print cond
-      print_no_value if_expr print_no_value else_expr
-  | NV_br_if { cond; if_true } ->
-    Format.fprintf ppf "@[<hov 2>Br_if(%a -> (%a))@]" print cond Block_id.print
-      if_true
-  | NV_call { args; func } ->
-    Format.fprintf ppf "@[<hov 2>Call(%a(%a))@]" Func_id.print func
-      (print_list print ",") args
-
-and print_no_return ppf no_return =
-  match no_return with
-  | NR_if_then_else { cond; if_expr; else_expr } ->
-    Format.fprintf ppf "@[<hov 2>If(%a)Then(%a)Else(%a)@]" print cond
-      print_no_return if_expr print_no_return else_expr
-  | NR_br_table { cond; cases; default } ->
-    Format.fprintf ppf "@[<hov 2>Br_table(%a -> (%a) %a@]" print cond
-      (print_list Block_id.print " ")
-      cases Block_id.print default
-  | NR_let_cont { cont; params; handler; body } ->
-    Format.fprintf ppf "@[<hov 2>Let_cont %a(%a) =@ %a@]@ in@ %a" Block_id.print
-      cont
-      (print_list
-          (fun ppf (local, typ) ->
-              Format.fprintf ppf "%a : %a"
-                (Format.pp_print_option Local.print_var)
-                local Type.print_atom typ )
-          ", " )
-      params print_no_return handler print_no_return body
-  | NR_br { cont; args } ->
-    Format.fprintf ppf "@[<hov 2>Br(%a(%a))@]" Block_id.print cont
-      (print_list print ",") args
-  | NR_return args ->
-    Format.fprintf ppf "@[<hov 2>Return(%a)@]" (print_list print ",") args
-  | Throw e -> Format.fprintf ppf "@[<hov 2>Throw (@ %a@ )@]" print e
-  | Unreachable -> Format.fprintf ppf "Unreachable"
-
 let let_ var typ defining_expr body = Let { var; typ; defining_expr; body }
 
 type function_body =
@@ -491,26 +339,31 @@ let required_locals body =
       acc
     | exception Not_found -> Local.Map.add var typ acc
   in
-  let let_cont_reqs acc ~cont ~params =
+  let let_cont_reqs acc ~cont:_ ~params =
     let acc =
       List.fold_left
         (fun acc (var, typ) ->
             match var with None -> acc | Some var -> add var typ acc )
         acc params
     in
-    let acc =
-      match ( params) with
-      | _ :: _ :: _ ->
-        let var = Local.Block_result cont in
-        add var (Type.Tuple (List.map snd params)) acc
-      | _ -> acc
-    in
+    (* let acc = *)
+    (*   match ( params) with *)
+    (*   | _ :: _ :: _ -> *)
+    (*     let var = Local.Block_result cont in *)
+    (*     add var (Type.Tuple (List.map snd params)) acc *)
+    (*   | _ -> acc *)
+    (* in *)
     acc
   in
   let rec loop acc = function
     | Var _ | I32 _ | I64 _ | F64 _ | Ref_func _ -> acc
     | Let { var; typ; defining_expr; body } ->
       let acc = add var typ acc in
+      let acc = loop acc defining_expr in
+      loop acc body
+    | Let2 { var1; var2; typ1; typ2; defining_expr; body } ->
+      let acc = add var1 typ1 acc in
+      let acc = add var2 typ2 acc in
       let acc = loop acc defining_expr in
       loop acc body
     | I_relop (_, _, (arg1, arg2))

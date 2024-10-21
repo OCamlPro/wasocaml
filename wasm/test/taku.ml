@@ -17,4 +17,4 @@ let rec tak (x, y, z) =
 
 let rec repeat n accu = if n <= 0 then accu else repeat (n - 1) (tak (18, 12, 6) + accu)
 
-let _ = assert (repeat 2000 0 = 14000)
+let () = print_int (repeat 20000 0)

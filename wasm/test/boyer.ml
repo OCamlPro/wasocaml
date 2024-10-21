@@ -1206,7 +1206,6 @@ let _ =
     print_string "Proved!\n"
   else
     print_string "Cannot prove!\n";
-  exit 0
 *)
 
 (*********

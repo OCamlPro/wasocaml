@@ -243,21 +243,16 @@ let test_hwb bdd vars =
   eval bdd vars = if !ntrue > 0 then vars.(!ntrue - 1) else false
 
 let main () =
-  let n = 22 in
+  let n = 25 in
   let ntests = 100 in
   let bdd = hwb n in
   let succeeded = ref true in
   for _ = 1 to ntests do
     succeeded := !succeeded && test_hwb bdd (random_vars n)
   done;
-  assert !succeeded
-
-(*
+  assert !succeeded;
   if !succeeded
   then print_string "OK\n"
-  else print_string "FAILED\n";
-Format.eprintf "%d@." !nodeC;
-  exit 0
-*)
+  else print_string "FAILED\n"
 
-let _ = main ()
+let () = main ()
