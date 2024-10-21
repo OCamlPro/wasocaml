@@ -6,9 +6,9 @@
   (type $Gen_block (sub (array (mut (ref eq)))))
 
 
+  ;; (import "js_runtime" "print_string_mem" (func $print_string_mem (param i32) (param i32)))
+
   (import "js_runtime" "print_string" (func $print_string (param (ref $String))))
-  (import "js_runtime" "print_string_mem"
-    (func $print_string_mem (param i32) (param i32)))
   (import "js_runtime" "print_endline" (func $print_endline))
 
   (import "js_runtime" "print_i32" (func $print_i32 (param i32)))
@@ -18,15 +18,19 @@
   (import "js_runtime" "flush" (func $flush))
   (import "js_runtime" "atan2" (func $atan2 (param f64 f64) (result f64)))
   (import "js_runtime" "sin" (func $sin (param f64) (result f64)))
+  (import "js_runtime" "asin" (func $asin (param f64) (result f64)))
   (import "js_runtime" "cos" (func $cos (param f64) (result f64)))
-
-  (import "js_runtime" "memory" (memory $mem 1))
+  (import "js_runtime" "fmod" (func $fmod (param f64 f64) (result f64)))
 
   (import "runtime" "compare_ints"
     (func $compare_int (param (ref eq)) (param (ref eq)) (result (ref eq))))
 
   (import "runtime" "string_eq"
     (func $string_eq (param $a (ref eq)) (param $b (ref eq)) (result (ref eq))))
+
+  ;; (import "js_runtime" "memory"
+          (memory $mem 1)
+  ;; )
 
   (func (export "caml_int64_float_of_bits") (param $x (ref eq)) (result (ref $Float))
     (struct.new $Float
@@ -81,6 +85,17 @@
   (func $C_cos (export "cos") (param f64) (result f64)
     local.get 0
     call $cos
+  )
+
+  (func $C_asin (export "asin") (param f64) (result f64)
+    local.get 0
+    call $asin
+  )
+
+  (func $C_fmod (export "fmod") (param f64 f64) (result f64)
+    local.get 1
+    local.get 0
+    call $fmod
   )
 
   ;; =====
@@ -668,10 +683,13 @@
 
 )
 
+  (;
   (func (export "print_string") (param $a (ref eq)) (result (ref eq))
     (call $print_string_mem (i32.const 0)
       (call $copy_string (ref.cast (ref $String) (local.get $a))))
     (ref.i31 (i32.const 0)))
+
+;)
 
   (func (export "print_endline") (param $a (ref eq)) (result (ref eq))
     (call $print_endline)

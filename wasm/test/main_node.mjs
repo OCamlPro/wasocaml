@@ -57,6 +57,8 @@ const bindings = {
   "memory": memory,
   "atan2": Math.atan2,
   "sin": Math.sin,
+  "asin": Math.asin,
+  "fmod": (x, y) => x % y,
   "cos": Math.cos,
 }
 
