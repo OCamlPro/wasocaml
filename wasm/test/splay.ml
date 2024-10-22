@@ -230,6 +230,10 @@ let splaySetup () =
 let splayTearDown t =
   let keys, length = exportKeys t in
   (*  // Verify that the splay tree has the right size. *)
+  print_string "splayTearDown:";
+  print_int length;
+  print_int kSplayTreeSize;
+  print_string "\n";
   if length <> kSplayTreeSize then failwith "Splay tree has wrong size";
   (*  // Verify that the splay tree has sorted, unique keys. *)
   match keys with

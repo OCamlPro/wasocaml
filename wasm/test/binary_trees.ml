@@ -49,8 +49,10 @@ let loop_depths d =
     print_int (2 * niter);
     print_string " trees of depth ";
     print_int d;
+    (*
     print_string " check ";
     print_int !c;
+    *)
     print_string "\n"
   done
 
