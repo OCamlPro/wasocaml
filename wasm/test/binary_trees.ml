@@ -10,16 +10,22 @@ type 'a tree =
   | Node of 'a tree * 'a * 'a tree
 
 let rec make i d =
-  (* if d = 0 then Empty *)
   if d = 0
   then Node (Empty, i, Empty)
   else
-    let i2 = 2 * i and d = d - 1 in
-    Node (make (i2 - 1) d, i, make i2 d)
+    let i2 = 2 * i in
+    let d = d - 1 in
+    let l = make (i2 - 1) in
+    let r = make i2 d in
+    let l = l d in
+    Node (l, i, r)
 
 let rec check = function
   | Empty -> 0
-  | Node (l, i, r) -> i + check l - check r
+  | Node (l, i, r) ->
+    let l = check l in
+    let r = check r in
+    i + l + r
 
 let min_depth = 4
 
@@ -27,36 +33,26 @@ let max_depth =
   let n = 10 in
   max (min_depth + 2) n
 
-let stretch_depth = max_depth + 1
-
-let () =
-  (* Gc.set { (Gc.get()) with Gc.minor_heap_size = 1024 * 1024; max_overhead = -1; }; *)
-  let _c = check (make 0 stretch_depth) in
-  ( (*
-  Printf.printf "stretch tree of depth %i\t check: %i\n" stretch_depth c
- *) )
-
 let long_lived_tree = make 0 max_depth
 
 let loop_depths d =
   for i = 0 to ((max_depth - d) / 2) + 1 - 1 do
     let d = d + (i * 2) in
-    let niter = 1 lsl (max_depth - d + min_depth) in
+    let r_lsl = max_depth - d + min_depth in
+    let niter = 1 lsl r_lsl in
     let c = ref 0 in
     for i = 1 to niter do
-      c := !c + check (make i d) + check (make (-i) d)
+      let a = check (make i d) in
+      let b = check (make (-i) d) in
+      c := !c + a + b;
     done;
-    ( (*
-      Printf.printf "%i\t trees of depth %i\t check: %i\n" (2 * niter) d !c;
- *) )
+    print_int (2 * niter);
+    print_string " trees of depth ";
+    print_int d;
+    print_string " check ";
+    print_int !c;
+    print_string "\n"
   done
 
 let () =
-  (*
-  flush stdout;
-*)
-  loop_depths min_depth;
-  ( (*
-  Printf.printf "long lived tree of depth %i\t check: %i\n"
-    max_depth (check long_lived_tree)
- *) )
+  loop_depths min_depth

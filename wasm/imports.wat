@@ -28,6 +28,9 @@
   (import "runtime" "string_eq"
     (func $string_eq (param $a (ref eq)) (param $b (ref eq)) (result (ref eq))))
 
+  (import "runtime" "string_neq"
+    (func $string_neq (param $a (ref eq)) (param $b (ref eq)) (result (ref eq))))
+
   ;; (import "js_runtime" "memory"
           (memory $mem 1)
   ;; )
@@ -132,6 +135,7 @@
 
   (export "caml_bytes_equal" (func $string_eq))
   (export "caml_string_equal" (func $string_eq))
+  (export "caml_string_notequal" (func $string_eq))
 
    ;; Stolen from Jerome's wasm_of_ocaml
    (func $compare_strings
@@ -197,7 +201,7 @@
   ;; ==========
 
   ;; int < block < unknown
-  (func (export "caml_compare") (param $a (ref eq)) (param $b (ref eq)) (result (ref eq))
+  (func $compare (export "caml_compare") (param $a (ref eq)) (param $b (ref eq)) (result (ref eq))
     (local $a_block (ref $Gen_block))
     (local $b_block (ref $Gen_block))
     (if (result (ref i31)) (ref.test (ref i31) (local.get $a))
@@ -322,9 +326,7 @@
 
 
   (func (export "caml_notequal") (param (ref eq)) (param (ref eq)) (result (ref eq))
-    local.get 0
-    local.get 1
-    call $caml_equal
+    (call $caml_equal (local.get 0) (local.get 1))
     ref.cast (ref i31)
     i31.get_s
     i32.eqz
@@ -332,16 +334,35 @@
   )
 
   (func (export "caml_lessequal") (param (ref eq)) (param (ref eq)) (result (ref eq))
-      ;; TODO
-      (unreachable))
+    (i32.le_s
+      (i31.get_s (ref.cast (ref i31) (call $compare (local.get 0) (local.get 1))))
+      (i32.const 0)
+    )
+    ref.i31
+  )
 
   (func (export "caml_greaterequal") (param (ref eq)) (param (ref eq)) (result (ref eq))
-      ;; TODO
-      (unreachable))
+    (i32.ge_s
+      (i31.get_s (ref.cast (ref i31) (call $compare (local.get 0) (local.get 1))))
+      (i32.const 0)
+    )
+    ref.i31
+  )
 
-  (func $C_caml_greaterthan (export "caml_greaterthan")
-        (param (ref eq) (ref eq)) (result (ref eq))
-    unreachable
+  (func $C_caml_greaterthan (export "caml_greaterthan") (param (ref eq)) (param (ref eq)) (result (ref eq))
+    (i32.gt_s
+      (i31.get_s (ref.cast (ref i31) (call $compare (local.get 0) (local.get 1))))
+      (i32.const 0)
+    )
+    ref.i31
+  )
+
+  (func $C_caml_lessthan (export "caml_lessthan") (param (ref eq)) (param (ref eq)) (result (ref eq))
+    (i32.lt_s
+      (i31.get_s (ref.cast (ref i31) (call $compare (local.get 0) (local.get 1))))
+      (i32.const 0)
+    )
+    ref.i31
   )
 
 

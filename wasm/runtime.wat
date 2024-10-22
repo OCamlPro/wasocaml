@@ -251,9 +251,19 @@
     (unreachable)
   )
 
+  (func $string_neq (param $a (ref $String)) (param $b (ref $String)) (result i32)
+    (call $string_eq (local.get $a) (local.get $b))
+    i32.eqz
+  )
+
   (func (export "string_eq") (param $a (ref eq)) (param $b (ref eq)) (result (ref eq))
     (ref.i31
       (call $string_eq (ref.cast (ref $String) (local.get $a)) (ref.cast (ref $String) (local.get $b))))
+  )
+
+  (func (export "string_neq") (param $a (ref eq)) (param $b (ref eq)) (result (ref eq))
+    (ref.i31
+      (call $string_neq (ref.cast (ref $String) (local.get $a)) (ref.cast (ref $String) (local.get $b))))
   )
 
 

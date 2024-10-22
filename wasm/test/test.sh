@@ -77,12 +77,11 @@ bench() {
   echo ""
 }
 
-
 #bench "Almabench" "almabench" # global init must have correct type
-#bench "Binary Trees" "binary_trees" # unreachable
+bench "Binary Trees" "binary_trees" # unreachable
 #bench "Boyer" "boyer" # unreachable
 #bench "Boyer no exceptions" "boyer_no_exc" # unreachable
-#bench "Pfannkuchen" "fannkuch" # unreachable
+bench "Pfannkuchen" "fannkuch" # unreachable
 #bench "Pfannkuchen 2" "fannkuch2" # missing "caml_string_notequal" and "caml_lessthan"
 #bench "Fast Fourier Transform" "fft" # unreachable
 #bench "Hamming" "hamming" # missing value let-rec
