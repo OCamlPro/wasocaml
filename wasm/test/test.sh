@@ -5,34 +5,36 @@ set -eu
 ULIMIT_STACK_SIZE=20000
 STACK_SIZE=10000
 NODE="node-canary --stack-size=${STACK_SIZE}"
+alias time='/usr/bin/time -f"real %e user %U sys %S"'
 
 ulimit -s $ULIMIT_STACK_SIZE
 
-#UNSAFE="-unsafe"
+#UNSAFE="-unsafe" # TODO: this requires the prim mod primitives
 UNSAFE=""
 
 bench_native() {
   echo -n "    OCaml native:               "
   ocamlopt $UNSAFE -O3 ./${2}.ml > /dev/null
-  ./a.out > output_${2}_ocaml_native.txt
-  echo "OK"
+  time ./a.out > output_${2}_ocaml_native.txt
 }
 
 bench_wasocaml_opt() {
   echo -n "    Wasocaml + wasm-opt (node): "
   ../../ocamlopt $UNSAFE -O3 ./${2}.ml > /dev/null
-  wasm-opt --enable-gc --enable-reference-types --enable-multivalue --enable-tail-call --enable-nontrapping-float-to-int --traps-never-happen --skip-pass=inlining-optimizing a.out.wasm -o a.out.wasm -O3
-  $NODE ./main_node.mjs > output_${2}_wasocaml_opt.txt
+  cat a.out.wat | grep -v "^ (export" > a.out.noexport.wat
+  WASMOPT="wasm-opt --enable-gc --enable-reference-types --enable-multivalue --enable-tail-call --enable-nontrapping-float-to-int --traps-never-happen -O3 --abstract-type-refining --cfp --coalesce-locals --closed-world --type-ssa --gufa-optimizing --type-merging --strip-debug --strip-dwarf --strip-producers --strip-target-features --type-refining --unsubtyping --vacuum --tuple-optimization --ssa --simplify-locals --simplify-globals-optimizing --signature-refining --signature-pruning --roundtrip --reorder-locals --reorder-globals --reorder-functions --remove-unused-types --remove-unused-names --remove-unused-module-elements --remove-unused-brs --remove-memory --precompute --optimize-instructions --optimize-casts --once-reduction --monomorphize --minimize-rec-groups --merge-similar-functions --merge-locals --merge-blocks --local-subtyping --local-cse --licm --intrinsic-lowering --inlining-optimizing --heap-store-optimization --gto --gsi --global-refining --duplicate-import-elimination --duplicate-function-elimination --directize --dce --dae-optimizing"
+  # TODO: try --flatten ; --rereloop ; --precompute-propagate ; --dfo
+  $WASMOPT -o a.out.wasm a.out.noexport.wat
+  $WASMOPT -S -o a.out.wat a.out.wasm
+  time $NODE ./main_node.mjs > output_${2}_wasocaml_opt.txt
   diff output_${2}_ocaml_native.txt output_${2}_wasocaml_opt.txt
-  echo "OK"
 }
 
 bench_wasocaml() {
   echo -n "    Wasocaml (node):            "
   ../../ocamlopt $UNSAFE -O3 ./${2}.ml > /dev/null
-  $NODE ./main_node.mjs > output_${2}_wasocaml.txt
+  time $NODE ./main_node.mjs > output_${2}_wasocaml.txt
   diff output_${2}_ocaml_native.txt output_${2}_wasocaml.txt
-  echo "OK"
 }
 
 bench_wsoo() {
@@ -40,9 +42,8 @@ bench_wsoo() {
   ocamlc $UNSAFE ./${2}.ml > /dev/null
   rm -rf a.assets* a.js a.wat || true 2> /dev/null
   wasm_of_ocaml compile --opt=3 ./a.out > /dev/null
-  $NODE ./a.js > output_${2}_wsoo.txt
+  time $NODE ./a.js > output_${2}_wsoo.txt
   diff output_${2}_ocaml_native.txt output_${2}_wsoo.txt
-  echo "OK"
 }
 
 bench_jsoo() {
@@ -50,17 +51,15 @@ bench_jsoo() {
   ocamlc $UNSAFE ./${2}.ml > /dev/null
   rm -f a.js a.wat || true 2> /dev/null
   js_of_ocaml compile --target-env=nodejs --opt=3 ./a.out
-  $NODE ./a.js > output_${2}_jsoo.txt
+  time $NODE ./a.js > output_${2}_jsoo.txt
   diff output_${2}_ocaml_native.txt output_${2}_jsoo.txt
-  echo "OK"
 }
 
 bench_bytecode() {
   echo -n "    OCaml bytecode:             "
   ocamlc $UNSAFE ./${2}.ml > /dev/null
-  ocamlrun ./a.out > output_${2}_bytecode.txt
+  time ocamlrun ./a.out > output_${2}_bytecode.txt
   diff output_${2}_ocaml_native.txt output_${2}_bytecode.txt
-  echo "OK"
 }
 
 bench() {
@@ -70,7 +69,7 @@ bench() {
 
   bench_native "${1}" "${2}"
   bench_wasocaml_opt "${1}" "${2}"
-  bench_wasocaml "${1}" "${2}"
+  #bench_wasocaml "${1}" "${2}"
   bench_wsoo "${1}" "${2}"
   bench_jsoo "${1}" "${2}"
   bench_bytecode "${1}" "${2}"
