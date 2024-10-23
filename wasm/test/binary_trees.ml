@@ -27,10 +27,10 @@ let rec check = function
     let r = check r in
     i + l + r
 
-let min_depth = 4
+let min_depth = 6
 
 let max_depth =
-  let n = 10 in
+  let n = 16 in
   max (min_depth + 2) n
 
 let long_lived_tree = make 0 max_depth
