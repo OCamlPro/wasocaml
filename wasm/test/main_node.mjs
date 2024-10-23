@@ -1,13 +1,5 @@
 import { readFile } from 'fs/promises';
 
-function print_string(str) {
-  let res = "";
-  for (let i = 0; i < get_length(str); i++) {
-    res = res + String.fromCharCode(get_char(str, i));
-  }
-  process.stdout.write(res);
-};
-
 let str_buff = "";
 
 function print_i32(arg) {
@@ -26,6 +18,7 @@ function print_endline() {
 function putchar(i_char) {
   let char = String.fromCharCode(i_char);
   str_buff = str_buff + char;
+  // flush(); // TODO: remove this
 };
 
 function flush() {
@@ -36,7 +29,6 @@ function flush() {
 const bindings = {
   "print_i32": print_i32,
   "print_f64": print_f64,
-  "print_string": print_string,
   "print_endline": print_endline,
   "putchar": putchar,
   "flush": flush,
@@ -61,3 +53,4 @@ async function f() {
 }
 
 f();
+//flush();
