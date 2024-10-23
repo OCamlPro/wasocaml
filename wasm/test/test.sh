@@ -77,14 +77,14 @@ bench() {
   echo ""
 }
 
+#bench "Pascal" "pascal"
 #bench "Almabench" "almabench" # global init must have correct type
-#bench "Boyer" "boyer" # unreachable
-#bench "Boyer no exceptions" "boyer_no_exc" # unreachable
-#bench "Fast Fourier Transform" "fft" # unreachable
+#bench "Boyer" "boyer" # unreachable: caml_compare_blocks
+#bench "Boyer no exceptions" "boyer_no_exc" # unreachable: caml_compare_blocks
+#bench "Fast Fourier Transform" "fft" # illegal cast on float array, see comment in file
 #bench "Hamming" "hamming" # missing value let-rec
 #bench "Ray-Trace" "raytrace" # global init must have correct type
-#bench "Splay Tree" "splay" # wrong result
-
+#bench "Splay Tree" "splay" # string_of_float is not supported
 
 bench "Binary Decision Diagram" "bdd"
 bench "Binary Trees" "binary_trees" # seems wrong if we uncomment the check print in loop_depths ?
