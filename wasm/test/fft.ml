@@ -122,12 +122,14 @@ let fft px py np =
   n
 
 let test np =
-  (*  print_int np; print_string "... "; flush stdout;*)
   let enp = float np in
   let npm = (np / 2) - 1 in
-  let pxr = Array.make (np + 2) 0.0 and pxi = Array.make (np + 2) 0.0 in
+  let pxr = Array.make (np + 2) 0.0 in
+  let pxi = Array.make (np + 2) 0.0 in
   let t = pi /. enp in
-  pxr.(1) <- (enp -. 1.0) *. 0.5;
+  (* print_string "BEFORE" *)
+  pxr.(1) <- (enp -. 1.0) *. 0.5; (* TODO: illegal cast here ! *)
+  (* print_string "AFTER" *)
   pxi.(1) <- 0.0;
   let n2 = np / 2 in
   pxr.(n2 + 1) <- -0.5;
@@ -168,12 +170,13 @@ let test np =
   (*print !zr; print !zi;*)
   if abs_float !zr <= 1e-8 && abs_float !zi <= 1e-8
   then ( (*print_string "ok"*) )
-  else assert false (*print_string "ERROR"*);
-  ( (*  print_newline()*) )
+  else begin
+    assert false
+  end
 
-let _ =
+let () =
   let np = ref 16 in
-  for _ = 1 to 16 do
+  for _i = 1 to 16 do
     test !np;
     np := !np * 2
   done
