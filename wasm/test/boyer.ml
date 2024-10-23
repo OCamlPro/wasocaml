@@ -1084,7 +1084,7 @@ let truep x lst =
   | Prop (head, _) -> head.name = "true" || List.mem x lst
   | _ -> List.mem x lst
 
-and falsep x lst =
+let falsep x lst =
   match x with
   | Prop (head, _) -> head.name = "false" || List.mem x lst
   | _ -> List.mem x lst
@@ -1194,7 +1194,7 @@ let term =
           ; CProp ("implies", [ CVar 23; CVar 22 ])
         ] ))
 
-let _ =
+let () =
   let ok = ref true in
   for _ = 1 to 50 do
     if not (tautp (apply_subst subst term)) then ok := false
