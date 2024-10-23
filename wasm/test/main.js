@@ -3,14 +3,6 @@ const memory = new WebAssembly.Memory({
   maximum: 1,
 });
 
-function print_string(str) {
-  let res = "";
-  for (i = 0; i < get_length(str); i++) {
-    res = res + String.fromCharCode(get_char(str, i));
-  }
-  console.log(res);
-};
-
 let str_buff = "";
 
 function print_i32(arg) {
@@ -39,7 +31,6 @@ function flush() {
 const bindings = {
   "print_i32": print_i32,
   "print_f64": print_f64,
-  "print_string": print_string,
   "print_endline": print_endline,
   "putchar": putchar,
   "flush": flush,
