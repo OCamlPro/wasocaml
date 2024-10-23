@@ -59,9 +59,10 @@ let fannkuch n =
   done;
   !maxflips, !checksum
 
-let _ =
-  let n = 10 in
-  let _maxflips, _checksum = fannkuch n in
-  ( (*
-        Printf.printf "%d\nPfannkuchen(%d) = %d\n" checksum n maxflips
- *) )
+let () =
+  let n = 11 in
+  let maxflips, checksum = fannkuch n in
+  print_int checksum;
+  print_string "\nPfannkuchen(";
+  print_int maxflips;
+  print_string ")\n"

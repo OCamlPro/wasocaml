@@ -86,6 +86,6 @@ let fannkuch n =
       with Exit -> ()
   done
 
-let n = 10
+let n = 11
 
 let () = try fannkuch n with Done -> ()
