@@ -7,6 +7,10 @@
   ;; TODO: re-enable exception
   ;;(import "exn_tag" "exc" (tag $exc (param (ref eq))))
 
+
+  ;; TODO: here for debug only in case of unimplemented functions, should be removed later
+  (import "imports" "print_string" (func $print_string (param (ref $String))))
+
   ;; ==========
   ;; Exceptions
   ;; ==========
@@ -217,7 +221,20 @@
               (ref.cast (ref $String) (local.get $arr))
               (local.get $field))))
         (else
-          unreachable
+    ;; TODO
+    i32.const 115
+    i32.const 116
+    i32.const 114
+    i32.const 105
+    i32.const 110
+    i32.const 103
+    i32.const 95
+    i32.const 103
+    i32.const 101
+    i32.const 116
+    array.new_fixed $String 10
+    call $print_string
+    unreachable
           ;; TODO: re-enable exception
           (;(throw $exc
             (array.new_fixed $Gen_block 3
@@ -248,7 +265,19 @@
         (else
           (local.set $pos (i32.add (i32.const 1) (local.get $pos)))
           (br $next_char))))
-    (unreachable)
+    ;; TODO: ?
+    i32.const 115
+    i32.const 116
+    i32.const 114
+    i32.const 105
+    i32.const 110
+    i32.const 103
+    i32.const 95
+    i32.const 101
+    i32.const 113
+    array.new_fixed $String 9
+    call $print_string
+    unreachable
   )
 
   (func $string_neq (param $a (ref $String)) (param $b (ref $String)) (result i32)
@@ -290,12 +319,66 @@
   ;; ==========
 
   (func (export "unimplemented_1") (param (ref eq)) (result (ref eq))
-    (unreachable))
+    i32.const 117
+    i32.const 110
+    i32.const 105
+    i32.const 109
+    i32.const 112
+    i32.const 108
+    i32.const 101
+    i32.const 109
+    i32.const 101
+    i32.const 110
+    i32.const 116
+    i32.const 101
+    i32.const 100
+    i32.const 95
+    i32.const 49
+    array.new_fixed $String 15
+    call $print_string
+    unreachable
+  )
 
   (func (export "unimplemented_2") (param (ref eq)) (param (ref eq)) (result (ref eq))
-    (unreachable))
+    i32.const 117
+    i32.const 110
+    i32.const 105
+    i32.const 109
+    i32.const 112
+    i32.const 108
+    i32.const 101
+    i32.const 109
+    i32.const 101
+    i32.const 110
+    i32.const 116
+    i32.const 101
+    i32.const 100
+    i32.const 95
+    i32.const 50
+    array.new_fixed $String 15
+    call $print_string
+    unreachable
+  )
 
   (func (export "unimplemented_3") (param (ref eq)) (param (ref eq)) (param (ref eq)) (result (ref eq))
-    (unreachable))
+    i32.const 117
+    i32.const 110
+    i32.const 105
+    i32.const 109
+    i32.const 112
+    i32.const 108
+    i32.const 101
+    i32.const 109
+    i32.const 101
+    i32.const 110
+    i32.const 116
+    i32.const 101
+    i32.const 100
+    i32.const 95
+    i32.const 51
+    array.new_fixed $String 15
+    call $print_string
+    unreachable
+  )
 
 )

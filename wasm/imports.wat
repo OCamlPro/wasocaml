@@ -8,7 +8,6 @@
 
   ;; (import "js_runtime" "print_string_mem" (func $print_string_mem (param i32) (param i32)))
 
-  (import "js_runtime" "print_string" (func $print_string (param (ref $String))))
   (import "js_runtime" "print_endline" (func $print_endline))
 
   (import "js_runtime" "print_i32" (func $print_i32 (param i32)))
@@ -35,6 +34,27 @@
           (memory $mem 1)
   ;; )
 
+
+  (func $print_string (export "print_string") (param $s (ref $String))
+    (local $i i32)
+    local.get $s
+    array.len
+    local.set $i
+    (block $stop
+      (loop $loop
+        local.get $i
+        i32.eqz
+        br_if $stop
+        (local.set $i (i32.sub (local.get $i) (i32.const 1)))
+        (array.get $String (local.get $s) (local.get $i))
+        call $putchar
+        br $loop
+      )
+    )
+  )
+
+  ;;(import "js_runtime" "print_string" (func $print_string (param (ref $String))))
+
   (func (export "caml_int64_float_of_bits") (param $x (ref eq)) (result (ref $Float))
     (struct.new $Float
       (f64.reinterpret_i64
@@ -44,16 +64,91 @@
       (f64.reinterpret_i64 (local.get $x)))
 
   (func $C_caml_obj_tag (export "caml_obj_tag") (param $obj (ref eq)) (result (ref eq))
-      (unreachable))
+    i32.const 111
+    i32.const 98
+    i32.const 106
+    i32.const 46
+    i32.const 116
+    i32.const 97
+    i32.const 103
+    array.new_fixed $String 7
+    call $print_string
+    unreachable
+  )
 
   (func $C_caml_obj_make_forward (export "caml_obj_make_forward") (param $a (ref eq)) (param $b (ref eq)) (result (ref eq))
-      (unreachable))
+    i32.const 99
+    i32.const 97
+    i32.const 109
+    i32.const 108
+    i32.const 95
+    i32.const 111
+    i32.const 98
+    i32.const 106
+    i32.const 95
+    i32.const 109
+    i32.const 97
+    i32.const 107
+    i32.const 101
+    i32.const 95
+    i32.const 102
+    i32.const 111
+    i32.const 114
+    i32.const 119
+    i32.const 97
+    i32.const 114
+    i32.const 100
+    array.new_fixed $String 21
+    call $print_string
+    unreachable
+  )
 
   (func $C_caml_lazy_make_forward (export "caml_lazy_make_forward") (param $a (ref eq)) (result (ref eq))
-      (unreachable))
+    i32.const 99
+    i32.const 97
+    i32.const 109
+    i32.const 108
+    i32.const 95
+    i32.const 108
+    i32.const 97
+    i32.const 122
+    i32.const 121
+    i32.const 95
+    i32.const 109
+    i32.const 97
+    i32.const 107
+    i32.const 101
+    i32.const 95
+    i32.const 102
+    i32.const 111
+    i32.const 114
+    i32.const 119
+    i32.const 97
+    i32.const 114
+    i32.const 100
+    array.new_fixed $String 22
+    unreachable
+  )
 
   (func $C_caml_obj_block (export "caml_obj_block") (param $tag (ref eq)) (param $size (ref eq)) (result (ref eq))
-      (unreachable))
+    i32.const 99
+    i32.const 97
+    i32.const 109
+    i32.const 108
+    i32.const 95
+    i32.const 111
+    i32.const 98
+    i32.const 106
+    i32.const 95
+    i32.const 98
+    i32.const 108
+    i32.const 111
+    i32.const 99
+    i32.const 107
+    array.new_fixed $String 14
+    call $print_string
+    unreachable
+  )
 
   (global $oo_id (mut i32) (i32.const 0))
 
@@ -179,22 +274,88 @@
                                     (param (ref eq))
                                     (result (ref eq))
       ;; TODO
-      (unreachable))
+    i32.const 99
+    i32.const 97
+    i32.const 109
+    i32.const 108
+    i32.const 95
+    i32.const 98
+    i32.const 108
+    i32.const 105
+    i32.const 116
+    i32.const 95
+    i32.const 115
+    i32.const 116
+    i32.const 114
+    i32.const 105
+    i32.const 110
+    i32.const 103
+    array.new_fixed $String 16
+    call $print_string
+    unreachable
+  )
 
   (func (export "caml_blit_bytes") (param (ref eq)) (param (ref eq))
                                    (param (ref eq)) (param (ref eq))
                                    (param (ref eq))
                                    (result (ref eq))
       ;; TODO
-      (unreachable))
+    i32.const 99
+    i32.const 97
+    i32.const 109
+    i32.const 108
+    i32.const 95
+    i32.const 98
+    i32.const 108
+    i32.const 105
+    i32.const 116
+    i32.const 95
+    i32.const 98
+    i32.const 121
+    i32.const 116
+    i32.const 101
+    i32.const 115
+    array.new_fixed $String 15
+    call $print_string
+    unreachable
+  )
 
   ;; ======
   ;; Stdlib
   ;; ======
 
   (func (export "caml_classify_float_unboxed") (param f64) (result (ref eq))
-      ;; TODO
-      (unreachable))
+    i32.const 99
+    i32.const 97
+    i32.const 109
+    i32.const 108
+    i32.const 95
+    i32.const 99
+    i32.const 108
+    i32.const 97
+    i32.const 115
+    i32.const 115
+    i32.const 105
+    i32.const 102
+    i32.const 121
+    i32.const 95
+    i32.const 102
+    i32.const 108
+    i32.const 111
+    i32.const 97
+    i32.const 116
+    i32.const 95
+    i32.const 117
+    i32.const 110
+    i32.const 98
+    i32.const 111
+    i32.const 120
+    i32.const 101
+    i32.const 100
+    array.new_fixed $String 27
+    call $print_string
+    unreachable
+  )
 
   ;; ==========
   ;; Comparison
@@ -253,7 +414,28 @@
               (i32.gt_s (local.get $len_a) (local.get $len_b))
               (i32.lt_s (local.get $len_a) (local.get $len_b)))))))
     ;; TODO
-    (unreachable)
+    i32.const 99
+    i32.const 97
+    i32.const 109
+    i32.const 108
+    i32.const 95
+    i32.const 99
+    i32.const 111
+    i32.const 109
+    i32.const 112
+    i32.const 97
+    i32.const 114
+    i32.const 101
+    i32.const 95
+    i32.const 98
+    i32.const 108
+    i32.const 111
+    i32.const 99
+    i32.const 107
+    i32.const 115
+    array.new_fixed $String 19
+    call $print_string
+    unreachable
   )
 
   (func $caml_equal (export "caml_equal") (param $a (ref eq)) (param $b (ref eq)) (result (ref eq))
@@ -401,16 +583,80 @@
       (call $format_int_default (i31.get_s (ref.cast (ref i31) (local.get $d)))))
 
   (func (export "caml_format_float") (param (ref eq)) (param (ref eq)) (result (ref eq))
-      ;; TODO
-      (unreachable))
+    ;; TODO
+    i32.const 99
+    i32.const 97
+    i32.const 109
+    i32.const 108
+    i32.const 95
+    i32.const 102
+    i32.const 111
+    i32.const 114
+    i32.const 109
+    i32.const 97
+    i32.const 116
+    i32.const 95
+    i32.const 102
+    i32.const 108
+    i32.const 111
+    i32.const 97
+    i32.const 116
+    array.new_fixed $String 17
+    call $print_string
+    unreachable
+  )
 
   (func (export "caml_int_of_string") (param (ref eq)) (result (ref eq))
-      ;; TODO
-      (unreachable))
+    ;; TODO
+    i32.const 99
+    i32.const 97
+    i32.const 109
+    i32.const 108
+    i32.const 95
+    i32.const 105
+    i32.const 110
+    i32.const 116
+    i32.const 95
+    i32.const 111
+    i32.const 102
+    i32.const 95
+    i32.const 115
+    i32.const 116
+    i32.const 114
+    i32.const 105
+    i32.const 110
+    i32.const 103
+    array.new_fixed $String 18
+    call $print_string
+    unreachable
+  )
 
   (func (export "caml_float_of_string") (param (ref eq)) (result (ref eq))
       ;; TODO
-      (unreachable))
+    i32.const 99
+    i32.const 97
+    i32.const 109
+    i32.const 108
+    i32.const 95
+    i32.const 102
+    i32.const 108
+    i32.const 111
+    i32.const 97
+    i32.const 116
+    i32.const 95
+    i32.const 111
+    i32.const 102
+    i32.const 95
+    i32.const 115
+    i32.const 116
+    i32.const 114
+    i32.const 105
+    i32.const 110
+    i32.const 103
+    array.new_fixed $String 20
+    call $print_string
+    unreachable
+  )
 
     ;; Channels
     ;; ========
@@ -425,7 +671,23 @@
                                  (param (ref eq))
                                  (result (ref eq))
       ;; TODO
-      (unreachable))
+    i32.const 99
+    i32.const 97
+    i32.const 109
+    i32.const 108
+    i32.const 95
+    i32.const 115
+    i32.const 121
+    i32.const 115
+    i32.const 95
+    i32.const 111
+    i32.const 112
+    i32.const 101
+    i32.const 110
+    array.new_fixed $String 13
+    call $print_string
+    unreachable
+  )
 
   (func (export "caml_ml_flush") (param (ref eq))
                                  (result (ref eq))
@@ -466,12 +728,50 @@
   (func (export "caml_ml_output_bytes") (param (ref eq)) (param (ref eq)) (param (ref eq)) (param (ref eq))
                                    (result (ref eq))
       ;; TODO
-      (unreachable))
+    i32.const 99
+    i32.const 97
+    i32.const 109
+    i32.const 108
+    i32.const 95
+    i32.const 111
+    i32.const 117
+    i32.const 116
+    i32.const 112
+    i32.const 117
+    i32.const 116
+    i32.const 95
+    i32.const 98
+    i32.const 121
+    i32.const 116
+    i32.const 101
+    i32.const 115
+    array.new_fixed $String 17
+    call $print_string
+    unreachable
+  )
 
   (func (export "caml_ml_output_int") (param (ref eq)) (param (ref eq))
                                    (result (ref eq))
       ;; TODO
-      (unreachable))
+    i32.const 99
+    i32.const 97
+    i32.const 109
+    i32.const 108
+    i32.const 95
+    i32.const 111
+    i32.const 117
+    i32.const 116
+    i32.const 112
+    i32.const 117
+    i32.const 116
+    i32.const 95
+    i32.const 105
+    i32.const 110
+    i32.const 116
+    array.new_fixed $String 15
+    call $print_string
+    unreachable
+  )
 
   (func (export "caml_ml_output_char") (param $ch (ref eq)) (param $char (ref eq))
                                    (result (ref eq))
@@ -482,22 +782,98 @@
   (func (export "caml_ml_output_string") (param (ref eq)) (param (ref eq))
                                    (result (ref eq))
       ;; TODO
-      (unreachable))
+    i32.const 99
+    i32.const 97
+    i32.const 109
+    i32.const 108
+    i32.const 95
+    i32.const 111
+    i32.const 117
+    i32.const 116
+    i32.const 112
+    i32.const 117
+    i32.const 116
+    i32.const 95
+    i32.const 115
+    i32.const 116
+    i32.const 114
+    i32.const 105
+    i32.const 110
+    i32.const 103
+    array.new_fixed $String 18
+    call $print_string
+    unreachable
+  )
 
   (func (export "caml_output_value") (param (ref eq)) (param (ref eq)) (param (ref eq))
                                    (result (ref eq))
       ;; TODO
-      (unreachable))
+    i32.const 99
+    i32.const 97
+    i32.const 109
+    i32.const 108
+    i32.const 95
+    i32.const 111
+    i32.const 117
+    i32.const 116
+    i32.const 112
+    i32.const 117
+    i32.const 116
+    i32.const 95
+    i32.const 118
+    i32.const 97
+    i32.const 108
+    i32.const 117
+    i32.const 101
+    array.new_fixed $String 17
+    call $print_string
+    unreachable
+  )
 
   (func (export "caml_ml_seek_out") (param (ref eq)) (param (ref eq))
                                    (result (ref eq))
       ;; TODO
-      (unreachable))
+    i32.const 99
+    i32.const 97
+    i32.const 109
+    i32.const 108
+    i32.const 95
+    i32.const 115
+    i32.const 101
+    i32.const 101
+    i32.const 107
+    i32.const 95
+    i32.const 111
+    i32.const 117
+    i32.const 116
+    array.new_fixed $String 13
+    call $print_string
+    unreachable
+  )
 
   (func (export "caml_ml_seek_out_64") (param (ref eq)) (param (ref eq))
                                    (result (ref eq))
       ;; TODO
-      (unreachable))
+    i32.const 99
+    i32.const 97
+    i32.const 109
+    i32.const 108
+    i32.const 95
+    i32.const 115
+    i32.const 101
+    i32.const 101
+    i32.const 107
+    i32.const 95
+    i32.const 111
+    i32.const 117
+    i32.const 116
+    i32.const 95
+    i32.const 54
+    i32.const 52
+    array.new_fixed $String 16
+    call $print_string
+    unreachable
+  )
 
   (func (export "caml_ml_input_scan_line") (param (ref eq)) (result (ref eq))
       ;; TODO
@@ -611,25 +987,489 @@
 
  (func $C_caml_sys_executable_name  (export "caml_sys_executable_name") (param (ref eq)) (result (ref eq))
    (global.get $executable_name))
- (func $C_caml_ml_runtime_warnings_enabled  (export "caml_ml_runtime_warnings_enabled") (param (ref eq)) (result (ref eq)) (unreachable))
- (func $C_caml_ml_enable_runtime_warnings  (export "caml_ml_enable_runtime_warnings") (param (ref eq)) (result (ref eq)) (unreachable))
- (func $C_caml_install_signal_handler  (export "caml_install_signal_handler") (param (ref eq) (ref eq)) (result (ref eq)) (unreachable))
- (func $C_caml_obj_raw_field  (export "caml_obj_raw_field") (param (ref eq) (ref eq)) (result (ref eq)) (unreachable))
- (func $C_caml_floatarray_set  (export "caml_floatarray_set") (param (ref eq) (ref eq) (ref eq)) (result (ref eq)) (unreachable))
- (func $C_caml_floatarray_get  (export "caml_floatarray_get") (param (ref eq) (ref eq)) (result (ref eq)) (unreachable))
- (func $C_caml_ephe_unset_key  (export "caml_ephe_unset_key") (param (ref eq) (ref eq)) (result (ref eq)) (unreachable))
- (func $C_caml_ephe_unset_data  (export "caml_ephe_unset_data") (param (ref eq)) (result (ref eq)) (unreachable))
- (func $C_caml_ephe_set_key  (export "caml_ephe_set_key") (param (ref eq) (ref eq) (ref eq)) (result (ref eq)) (unreachable))
- (func $C_caml_ephe_set_data  (export "caml_ephe_set_data") (param (ref eq) (ref eq)) (result (ref eq)) (unreachable))
- (func $C_caml_ephe_get_key_copy  (export "caml_ephe_get_key_copy") (param (ref eq) (ref eq)) (result (ref eq)) (unreachable))
- (func $C_caml_ephe_get_key  (export "caml_ephe_get_key") (param (ref eq) (ref eq)) (result (ref eq)) (unreachable))
- (func $C_caml_ephe_get_data_copy  (export "caml_ephe_get_data_copy") (param (ref eq)) (result (ref eq)) (unreachable))
- (func $C_caml_ephe_get_data  (export "caml_ephe_get_data") (param (ref eq)) (result (ref eq)) (unreachable))
- (func $C_caml_ephe_create  (export "caml_ephe_create") (param (ref eq)) (result (ref eq)) (unreachable))
- (func $C_caml_ephe_check_key  (export "caml_ephe_check_key") (param (ref eq) (ref eq)) (result (ref eq)) (unreachable))
- (func $C_caml_ephe_check_data  (export "caml_ephe_check_data") (param (ref eq)) (result (ref eq)) (unreachable))
- (func $C_caml_ephe_blit_key  (export "caml_ephe_blit_key") (param (ref eq) (ref eq) (ref eq) (ref eq) (ref eq)) (result (ref eq)) (unreachable))
- (func $C_caml_ephe_blit_data  (export "caml_ephe_blit_data") (param (ref eq) (ref eq)) (result (ref eq)) (unreachable))
+ (func $C_caml_ml_runtime_warnings_enabled  (export "caml_ml_runtime_warnings_enabled") (param (ref eq)) (result (ref eq))
+    i32.const 99
+    i32.const 97
+    i32.const 109
+    i32.const 108
+    i32.const 95
+    i32.const 109
+    i32.const 108
+    i32.const 95
+    i32.const 114
+    i32.const 117
+    i32.const 110
+    i32.const 116
+    i32.const 105
+    i32.const 109
+    i32.const 101
+    i32.const 95
+    i32.const 119
+    i32.const 97
+    i32.const 114
+    i32.const 110
+    i32.const 105
+    i32.const 110
+    i32.const 103
+    i32.const 115
+    i32.const 95
+    i32.const 101
+    i32.const 110
+    i32.const 97
+    i32.const 98
+    i32.const 108
+    i32.const 101
+    i32.const 100
+    array.new_fixed $String 32
+    call $print_string
+    unreachable
+ )
+ (func $C_caml_ml_enable_runtime_warnings  (export "caml_ml_enable_runtime_warnings") (param (ref eq)) (result (ref eq))
+    i32.const 99
+    i32.const 97
+    i32.const 109
+    i32.const 108
+    i32.const 95
+    i32.const 109
+    i32.const 108
+    i32.const 95
+    i32.const 101
+    i32.const 110
+    i32.const 97
+    i32.const 98
+    i32.const 108
+    i32.const 101
+    i32.const 95
+    i32.const 114
+    i32.const 117
+    i32.const 110
+    i32.const 116
+    i32.const 105
+    i32.const 109
+    i32.const 101
+    i32.const 95
+    i32.const 119
+    i32.const 97
+    i32.const 114
+    i32.const 110
+    i32.const 105
+    i32.const 110
+    i32.const 103
+    i32.const 115
+    array.new_fixed $String 31
+    call $print_string
+    unreachable
+ )
+ (func $C_caml_install_signal_handler  (export "caml_install_signal_handler") (param (ref eq) (ref eq)) (result (ref eq))
+    i32.const 99
+    i32.const 97
+    i32.const 109
+    i32.const 108
+    i32.const 95
+    i32.const 105
+    i32.const 110
+    i32.const 115
+    i32.const 116
+    i32.const 97
+    i32.const 108
+    i32.const 108
+    i32.const 95
+    i32.const 115
+    i32.const 105
+    i32.const 103
+    i32.const 110
+    i32.const 97
+    i32.const 108
+    i32.const 95
+    i32.const 104
+    i32.const 97
+    i32.const 110
+    i32.const 100
+    i32.const 108
+    i32.const 101
+    i32.const 114
+    array.new_fixed $String 27
+    call $print_string
+    unreachable
+ )
+ (func $C_caml_obj_raw_field  (export "caml_obj_raw_field") (param (ref eq) (ref eq)) (result (ref eq))
+    i32.const 99
+    i32.const 97
+    i32.const 109
+    i32.const 108
+    i32.const 95
+    i32.const 111
+    i32.const 98
+    i32.const 106
+    i32.const 95
+    i32.const 114
+    i32.const 97
+    i32.const 119
+    i32.const 95
+    i32.const 102
+    i32.const 105
+    i32.const 101
+    i32.const 108
+    i32.const 100
+    array.new_fixed $String 18
+    call $print_string
+    unreachable
+ )
+ (func $C_caml_floatarray_set  (export "caml_floatarray_set") (param (ref eq) (ref eq) (ref eq)) (result (ref eq))
+    i32.const 99
+    i32.const 97
+    i32.const 109
+    i32.const 108
+    i32.const 95
+    i32.const 102
+    i32.const 108
+    i32.const 111
+    i32.const 97
+    i32.const 116
+    i32.const 97
+    i32.const 114
+    i32.const 114
+    i32.const 97
+    i32.const 121
+    i32.const 95
+    i32.const 115
+    i32.const 101
+    i32.const 116
+    array.new_fixed $String 19
+    call $print_string
+    unreachable
+ )
+ (func $C_caml_floatarray_get  (export "caml_floatarray_get") (param (ref eq) (ref eq)) (result (ref eq))
+    i32.const 99
+    i32.const 97
+    i32.const 109
+    i32.const 108
+    i32.const 95
+    i32.const 102
+    i32.const 108
+    i32.const 111
+    i32.const 97
+    i32.const 116
+    i32.const 97
+    i32.const 114
+    i32.const 114
+    i32.const 97
+    i32.const 121
+    i32.const 95
+    i32.const 103
+    i32.const 101
+    i32.const 116
+    array.new_fixed $String 19
+    call $print_string
+    unreachable
+ )
+ (func $C_caml_ephe_unset_key  (export "caml_ephe_unset_key") (param (ref eq) (ref eq)) (result (ref eq))
+    i32.const 99
+    i32.const 97
+    i32.const 109
+    i32.const 108
+    i32.const 95
+    i32.const 101
+    i32.const 112
+    i32.const 104
+    i32.const 101
+    i32.const 95
+    i32.const 117
+    i32.const 110
+    i32.const 115
+    i32.const 101
+    i32.const 116
+    i32.const 95
+    i32.const 107
+    i32.const 101
+    i32.const 121
+    array.new_fixed $String 19
+    call $print_string
+    unreachable
+ )
+ (func $C_caml_ephe_unset_data  (export "caml_ephe_unset_data") (param (ref eq)) (result (ref eq))
+    i32.const 99
+    i32.const 97
+    i32.const 109
+    i32.const 108
+    i32.const 95
+    i32.const 101
+    i32.const 112
+    i32.const 104
+    i32.const 101
+    i32.const 95
+    i32.const 117
+    i32.const 110
+    i32.const 115
+    i32.const 101
+    i32.const 116
+    i32.const 95
+    i32.const 100
+    i32.const 97
+    i32.const 116
+    i32.const 97
+    array.new_fixed $String 20
+    call $print_string
+    unreachable
+ )
+ (func $C_caml_ephe_set_key  (export "caml_ephe_set_key") (param (ref eq) (ref eq) (ref eq)) (result (ref eq))
+    i32.const 99
+    i32.const 97
+    i32.const 109
+    i32.const 108
+    i32.const 95
+    i32.const 101
+    i32.const 112
+    i32.const 104
+    i32.const 101
+    i32.const 95
+    i32.const 115
+    i32.const 101
+    i32.const 116
+    i32.const 95
+    i32.const 107
+    i32.const 101
+    i32.const 121
+    array.new_fixed $String 17
+    call $print_string
+    unreachable
+ )
+ (func $C_caml_ephe_set_data  (export "caml_ephe_set_data") (param (ref eq) (ref eq)) (result (ref eq))
+    i32.const 99
+    i32.const 97
+    i32.const 109
+    i32.const 108
+    i32.const 95
+    i32.const 101
+    i32.const 112
+    i32.const 104
+    i32.const 101
+    i32.const 95
+    i32.const 115
+    i32.const 101
+    i32.const 116
+    i32.const 95
+    i32.const 100
+    i32.const 97
+    i32.const 116
+    i32.const 97
+    array.new_fixed $String 18
+    call $print_string
+    unreachable
+ )
+ (func $C_caml_ephe_get_key_copy  (export "caml_ephe_get_key_copy") (param (ref eq) (ref eq)) (result (ref eq))
+    i32.const 99
+    i32.const 97
+    i32.const 109
+    i32.const 108
+    i32.const 95
+    i32.const 101
+    i32.const 112
+    i32.const 104
+    i32.const 101
+    i32.const 95
+    i32.const 103
+    i32.const 101
+    i32.const 116
+    i32.const 95
+    i32.const 99
+    i32.const 111
+    i32.const 112
+    i32.const 121
+    array.new_fixed $String 18
+    call $print_string
+    unreachable
+ )
+ (func $C_caml_ephe_get_key  (export "caml_ephe_get_key") (param (ref eq) (ref eq)) (result (ref eq))
+    i32.const 99
+    i32.const 97
+    i32.const 109
+    i32.const 108
+    i32.const 95
+    i32.const 101
+    i32.const 112
+    i32.const 104
+    i32.const 101
+    i32.const 95
+    i32.const 103
+    i32.const 101
+    i32.const 116
+    i32.const 95
+    i32.const 107
+    i32.const 101
+    i32.const 121
+    array.new_fixed $String 17
+    call $print_string
+    unreachable
+ )
+ (func $C_caml_ephe_get_data_copy  (export "caml_ephe_get_data_copy") (param (ref eq)) (result (ref eq))
+    i32.const 99
+    i32.const 97
+    i32.const 109
+    i32.const 108
+    i32.const 95
+    i32.const 101
+    i32.const 112
+    i32.const 104
+    i32.const 101
+    i32.const 95
+    i32.const 103
+    i32.const 101
+    i32.const 116
+    i32.const 95
+    i32.const 100
+    i32.const 97
+    i32.const 116
+    i32.const 97
+    i32.const 95
+    i32.const 99
+    i32.const 111
+    i32.const 112
+    i32.const 121
+    array.new_fixed $String 23
+    call $print_string
+    unreachable
+ )
+ (func $C_caml_ephe_get_data  (export "caml_ephe_get_data") (param (ref eq)) (result (ref eq))
+    i32.const 99
+    i32.const 97
+    i32.const 109
+    i32.const 108
+    i32.const 95
+    i32.const 101
+    i32.const 112
+    i32.const 104
+    i32.const 101
+    i32.const 95
+    i32.const 103
+    i32.const 101
+    i32.const 116
+    i32.const 95
+    i32.const 100
+    i32.const 97
+    i32.const 116
+    i32.const 97
+    array.new_fixed $String 18
+    call $print_string
+    unreachable
+ )
+ (func $C_caml_ephe_create  (export "caml_ephe_create") (param (ref eq)) (result (ref eq))
+    i32.const 99
+    i32.const 97
+    i32.const 109
+    i32.const 108
+    i32.const 95
+    i32.const 101
+    i32.const 112
+    i32.const 104
+    i32.const 101
+    i32.const 95
+    i32.const 99
+    i32.const 114
+    i32.const 101
+    i32.const 97
+    i32.const 116
+    i32.const 101
+    array.new_fixed $String 16
+    call $print_string
+    unreachable
+ )
+ (func $C_caml_ephe_check_key  (export "caml_ephe_check_key") (param (ref eq) (ref eq)) (result (ref eq))
+    i32.const 99
+    i32.const 97
+    i32.const 109
+    i32.const 108
+    i32.const 95
+    i32.const 101
+    i32.const 112
+    i32.const 104
+    i32.const 101
+    i32.const 95
+    i32.const 99
+    i32.const 104
+    i32.const 101
+    i32.const 99
+    i32.const 107
+    i32.const 95
+    i32.const 107
+    i32.const 101
+    i32.const 121
+    array.new_fixed $String 19
+    call $print_string
+    unreachable
+ )
+ (func $C_caml_ephe_check_data  (export "caml_ephe_check_data") (param (ref eq)) (result (ref eq))
+    i32.const 99
+    i32.const 97
+    i32.const 109
+    i32.const 108
+    i32.const 95
+    i32.const 101
+    i32.const 112
+    i32.const 104
+    i32.const 101
+    i32.const 95
+    i32.const 99
+    i32.const 104
+    i32.const 101
+    i32.const 99
+    i32.const 107
+    i32.const 95
+    i32.const 100
+    i32.const 97
+    i32.const 116
+    i32.const 97
+    array.new_fixed $String 20
+    call $print_string
+    unreachable
+ )
+ (func $C_caml_ephe_blit_key  (export "caml_ephe_blit_key") (param (ref eq) (ref eq) (ref eq) (ref eq) (ref eq)) (result (ref eq))
+    i32.const 99
+    i32.const 97
+    i32.const 109
+    i32.const 108
+    i32.const 95
+    i32.const 101
+    i32.const 112
+    i32.const 104
+    i32.const 101
+    i32.const 95
+    i32.const 98
+    i32.const 108
+    i32.const 105
+    i32.const 116
+    i32.const 95
+    i32.const 107
+    i32.const 101
+    i32.const 121
+    array.new_fixed $String 18
+    call $print_string
+    unreachable
+ )
+ (func $C_caml_ephe_blit_data  (export "caml_ephe_blit_data") (param (ref eq) (ref eq)) (result (ref eq))
+    i32.const 99
+    i32.const 97
+    i32.const 109
+    i32.const 108
+    i32.const 95
+    i32.const 101
+    i32.const 112
+    i32.const 104
+    i32.const 101
+    i32.const 95
+    i32.const 98
+    i32.const 108
+    i32.const 105
+    i32.const 116
+    i32.const 95
+    i32.const 100
+    i32.const 97
+    i32.const 116
+    i32.const 97
+    array.new_fixed $String 19
+    call $print_string
+    unreachable
+ )
 
   (func (export "caml_gc_major") (param (ref eq)) (result (ref eq))
     (ref.i31 (i32.const 0)))
@@ -643,10 +1483,104 @@
   ;; CamlinternalFormat
   ;; ==================
 
-  (func (export "caml_int32_format") (param (ref eq)) (param (ref eq)) (result (ref eq)) (unreachable))
-  (func (export "caml_nativeint_format") (param (ref eq)) (param (ref eq)) (result (ref eq)) (unreachable))
-  (func (export "caml_int64_format") (param (ref eq)) (param (ref eq)) (result (ref eq)) (unreachable))
-  (func (export "caml_hexstring_of_float") (param (ref eq)) (param (ref eq)) (param (ref eq)) (result (ref eq)) (unreachable))
+  (func (export "caml_int32_format") (param (ref eq)) (param (ref eq)) (result (ref eq))
+    i32.const 99
+    i32.const 97
+    i32.const 109
+    i32.const 108
+    i32.const 95
+    i32.const 105
+    i32.const 110
+    i32.const 116
+    i32.const 51
+    i32.const 50
+    i32.const 95
+    i32.const 102
+    i32.const 111
+    i32.const 114
+    i32.const 109
+    i32.const 97
+    i32.const 116
+    array.new_fixed $String 17
+    call $print_string
+    unreachable
+  )
+  (func (export "caml_nativeint_format") (param (ref eq)) (param (ref eq)) (result (ref eq))
+    i32.const 99
+    i32.const 97
+    i32.const 109
+    i32.const 108
+    i32.const 95
+    i32.const 110
+    i32.const 97
+    i32.const 116
+    i32.const 105
+    i32.const 118
+    i32.const 101
+    i32.const 105
+    i32.const 110
+    i32.const 116
+    i32.const 95
+    i32.const 102
+    i32.const 111
+    i32.const 114
+    i32.const 109
+    i32.const 97
+    i32.const 116
+    array.new_fixed $String 21
+    call $print_string
+    unreachable
+  )
+  (func (export "caml_int64_format") (param (ref eq)) (param (ref eq)) (result (ref eq))
+    i32.const 99
+    i32.const 97
+    i32.const 109
+    i32.const 108
+    i32.const 95
+    i32.const 105
+    i32.const 110
+    i32.const 116
+    i32.const 54
+    i32.const 52
+    i32.const 95
+    i32.const 102
+    i32.const 111
+    i32.const 114
+    i32.const 109
+    i32.const 97
+    i32.const 116
+    array.new_fixed $String 17
+    call $print_string
+    unreachable
+  )
+  (func (export "caml_hexstring_of_float") (param (ref eq)) (param (ref eq)) (param (ref eq)) (result (ref eq))
+    i32.const 99
+    i32.const 97
+    i32.const 109
+    i32.const 108
+    i32.const 95
+    i32.const 104
+    i32.const 101
+    i32.const 120
+    i32.const 115
+    i32.const 116
+    i32.const 114
+    i32.const 105
+    i32.const 110
+    i32.const 103
+    i32.const 95
+    i32.const 111
+    i32.const 102
+    i32.const 95
+    i32.const 102
+    i32.const 108
+    i32.const 111
+    i32.const 97
+    i32.const 116
+    array.new_fixed $String 23
+    call $print_string
+    unreachable
+  )
 
   ;; =====
   ;; Array
@@ -657,16 +1591,135 @@
         (local.get $value)
         (i31.get_s (ref.cast (ref i31) (local.get $size))))
   )
-  (func (export "caml_make_float_vect") (param (ref eq)) (result (ref eq)) (unreachable))
-  (func (export "caml_array_sub") (param (ref eq)) (param (ref eq)) (param (ref eq)) (result (ref eq)) (unreachable))
-  (func (export "caml_array_append") (param (ref eq)) (param (ref eq)) (result (ref eq)) (unreachable))
-  (func (export "caml_array_concat") (param (ref eq)) (result (ref eq)) (unreachable))
+  (func (export "caml_make_float_vect") (param (ref eq)) (result (ref eq))
+    i32.const 99
+    i32.const 97
+    i32.const 109
+    i32.const 108
+    i32.const 95
+    i32.const 109
+    i32.const 97
+    i32.const 107
+    i32.const 101
+    i32.const 95
+    i32.const 102
+    i32.const 108
+    i32.const 111
+    i32.const 97
+    i32.const 116
+    i32.const 95
+    i32.const 118
+    i32.const 101
+    i32.const 99
+    array.new_fixed $String 19
+    call $print_string
+    unreachable
+  )
+  (func (export "caml_array_sub") (param (ref eq)) (param (ref eq)) (param (ref eq)) (result (ref eq))
+    i32.const 99
+    i32.const 97
+    i32.const 109
+    i32.const 108
+    i32.const 95
+    i32.const 97
+    i32.const 114
+    i32.const 114
+    i32.const 97
+    i32.const 121
+    i32.const 95
+    i32.const 115
+    i32.const 117
+    i32.const 98
+    array.new_fixed $String 14
+    call $print_string
+    unreachable
+  )
+  (func (export "caml_array_append") (param (ref eq)) (param (ref eq)) (result (ref eq))
+    i32.const 99
+    i32.const 97
+    i32.const 109
+    i32.const 108
+    i32.const 95
+    i32.const 97
+    i32.const 114
+    i32.const 114
+    i32.const 97
+    i32.const 121
+    i32.const 95
+    i32.const 97
+    i32.const 112
+    i32.const 112
+    i32.const 101
+    i32.const 110
+    i32.const 100
+    array.new_fixed $String 17
+    call $print_string
+    unreachable
+  )
+  (func (export "caml_array_concat") (param (ref eq)) (result (ref eq))
+    i32.const 99
+    i32.const 97
+    i32.const 109
+    i32.const 108
+    i32.const 95
+    i32.const 97
+    i32.const 114
+    i32.const 114
+    i32.const 97
+    i32.const 121
+    i32.const 95
+    i32.const 99
+    i32.const 111
+    i32.const 110
+    i32.const 99
+    i32.const 97
+    i32.const 116
+    array.new_fixed $String 17
+    call $print_string
+    unreachable
+  )
   (func (export "caml_array_blit") (param (ref eq)) (param (ref eq)) (param (ref eq))
-                     (param (ref eq)) (param (ref eq)) (result (ref eq)) (unreachable))
+                     (param (ref eq)) (param (ref eq)) (result (ref eq))
+    i32.const 99
+    i32.const 97
+    i32.const 109
+    i32.const 108
+    i32.const 95
+    i32.const 97
+    i32.const 114
+    i32.const 114
+    i32.const 97
+    i32.const 121
+    i32.const 95
+    i32.const 98
+    i32.const 108
+    i32.const 105
+    i32.const 116
+    array.new_fixed $String 15
+    call $print_string
+    unreachable
+  )
   (func (export "caml_array_fill") (param (ref eq)) (param (ref eq)) (param (ref eq))
-                     (param (ref eq)) (result (ref eq)) (unreachable))
-
-
+                     (param (ref eq)) (result (ref eq))
+    i32.const 99
+    i32.const 97
+    i32.const 109
+    i32.const 108
+    i32.const 95
+    i32.const 97
+    i32.const 114
+    i32.const 114
+    i32.const 97
+    i32.const 121
+    i32.const 95
+    i32.const 102
+    i32.const 105
+    i32.const 108
+    i32.const 108
+    array.new_fixed $String 15
+    call $print_string
+    unreachable
+  )
 
   ;; ====
   ;; MISC
