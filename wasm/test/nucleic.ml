@@ -7265,13 +7265,12 @@ let sol_most_distant_atom s = maximum (List.map var_most_distant_atom s)
 
 let most_distant_atom sols = maximum (List.map sol_most_distant_atom sols)
 
-let check () = List.length (pseudoknot ())
-
 let run () = most_distant_atom (pseudoknot ())
 
 let main () =
   for _ = 1 to 350 do
-    ignore (run ())
+    print_float (run ());
+    print_string "\n"
   done;
   assert (abs_float (run () -. 33.7976) < 0.0002)
 
@@ -7279,4 +7278,4 @@ let main () =
   Printf.printf "%.4f" (run ()); print_newline()
 *)
 
-let _ = main ()
+let () = main ()
