@@ -176,7 +176,7 @@ let test np =
 
 let () =
   let np = ref 16 in
-  for _i = 1 to 16 do
+  for _i = 1 to 18 do
     test !np;
     np := !np * 2
   done

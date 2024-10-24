@@ -7270,7 +7270,7 @@ let check () = List.length (pseudoknot ())
 let run () = most_distant_atom (pseudoknot ())
 
 let main () =
-  for _ = 1 to 50 do
+  for _ = 1 to 350 do
     ignore (run ())
   done;
   assert (abs_float (run () -. 33.7976) < 0.0002)
