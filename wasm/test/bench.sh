@@ -45,6 +45,7 @@ bench() {
 #bench "Boyer" "boyer" # unreachable: caml_compare_blocks
 #bench "Boyer no exceptions" "boyer_no_exc" # unreachable: caml_compare_blocks
 #bench "Hamming" "hamming" # missing value let-rec
+#bench "Nucleic" "nucleic" # wrong result
 #bench "Ray-Trace" "raytrace" # global init must have correct type
 #bench "Splay Tree" "splay" # string_of_float is not supported
 
@@ -54,7 +55,6 @@ bench "Fibonacci" "fib"
 bench "Knuth-Bendix" "kb"
 bench "Knuth-Bendix (no exception)" "kb_no_exc"
 bench "Loop" "loop"
-bench "Nucleic" "nucleic"
 bench "Pfannkuchen" "fannkuch"
 bench "Pfannkuchen 2" "fannkuch2"
 bench "Quicksort" "quicksort"
