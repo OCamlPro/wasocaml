@@ -12,6 +12,11 @@ module type Block = sig
     cast:bool -> block:Expr.t -> Expr.t -> field:int -> Expr.no_value_expression
   val gen_block_decl : Decl.t list
   val type_decl : Type.Var.t -> int -> Decl.t list
+  module Float : sig
+    val make : Expr.t list -> Expr.t
+    val get_field : Expr.t -> field:int -> Expr.t
+    val set_field : block:Expr.t -> Expr.t -> field:int -> Expr.no_value_expression
+  end
 end
 
 module Block_struct : Block = struct
@@ -68,6 +73,28 @@ module Block_struct : Block = struct
                                  I16 :: fields }
 
   let type_decl name size : Decl.t list = [ Decl.Type (name, type_descr size) ]
+
+  module Float = struct
+    let make fields : Expr.t =
+      let size = List.length fields in
+      State.add_block_float_size size;
+      Struct_new (BlockFloat { size }, Expr.I32 (Int32.of_int size) :: fields)
+
+    let get_field e ~field : Expr.t =
+      let size = field + 1 in
+      State.add_block_float_size size;
+      let typ : Type.Var.t = BlockFloat { size } in
+      Unop
+        (Struct_get { typ; field = field + 1 }, Expr.(Ref_cast { typ; r = e }))
+
+    let set_field ~block value ~field : Expr.no_value_expression =
+      let size = field + 1 in
+      State.add_block_float_size size;
+      let typ : Type.Var.t = BlockFloat { size } in
+      NV_binop
+        ( Struct_set { typ; field = field + 1 }
+        , (Expr.(Ref_cast { typ; r = block }), value) )
+  end
 end
 
 module Block_array : Block = struct
@@ -121,6 +148,28 @@ module Block_array : Block = struct
     [ Decl.Type (Gen_block, Array { sub = None; fields = ref_eq }) ]
 
   let type_decl _name _size : Decl.t list = []
+
+  module Float = struct
+    let make fields : Expr.t =
+      let size = List.length fields in
+      State.add_block_size size;
+      Array_new_fixed { typ = FloatArray; fields = fields }
+
+    let get_field e ~field : Expr.t =
+      let size = field + 1 in
+      State.add_block_size size;
+      Binop (Array_get FloatArray, (e, I32 (Int32.of_int field)))
+
+    let set_field ~block value ~field : Expr.no_value_expression =
+      let size = field + 1 in
+      State.add_block_size size;
+      Array_set
+        { typ = FloatArray
+        ; array = block
+        ; field = I32 (Int32.of_int field)
+        ; value
+        }
+  end
 end
 
 let block_module =

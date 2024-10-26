@@ -305,27 +305,7 @@ module Conv = struct
 
   module Block = Block_repr.Block
 
-  module FloatBlock = struct
-    let make fields : Expr.t =
-      let size = List.length fields in
-      State.add_block_float_size size;
-      Struct_new (BlockFloat { size }, Expr.I32 (Int32.of_int size) :: fields)
-
-    let get_field e ~field : Expr.t =
-      let size = field + 1 in
-      State.add_block_float_size size;
-      let typ : Type.Var.t = BlockFloat { size } in
-      Unop
-        (Struct_get { typ; field = field + 1 }, Expr.(Ref_cast { typ; r = e }))
-
-    let set_field ~block value ~field : Expr.no_value_expression =
-      let size = field + 1 in
-      State.add_block_float_size size;
-      let typ : Type.Var.t = BlockFloat { size } in
-      NV_binop
-        ( Struct_set { typ; field = field + 1 }
-        , (Expr.(Ref_cast { typ; r = block }), value) )
-  end
+  module FloatBlock = Block.Float
 
   let integer_comparision (c : Lambda.integer_comparison) : Expr.irelop =
     match c with

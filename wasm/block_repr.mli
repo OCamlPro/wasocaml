@@ -9,6 +9,11 @@ module type Block = sig
     cast:bool -> block:Expr.t -> Expr.t -> field:int -> Expr.no_value_expression
   val gen_block_decl : Decl.t list
   val type_decl : Type.Var.t -> int -> Decl.t list
+  module Float : sig
+    val make : Expr.t list -> Expr.t
+    val get_field : Expr.t -> field:int -> Expr.t
+    val set_field : block:Expr.t -> Expr.t -> field:int -> Expr.no_value_expression
+  end
 end
 
 module Block : Block
