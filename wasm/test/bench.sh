@@ -64,7 +64,7 @@ bench "Soli" "soli"
 bench "Takc" "takc"
 bench "Taku" "taku"
 
-python script.py
+python plot.py
 # bench "Fast Fourier Transform" "fft" # requires --disable-flat-float-array illegal cast on float array, see comment in file
 
 # bench "Pascal" "pascal" # not part of the wsoo bench suite
