@@ -84,6 +84,7 @@ bench() {
 #bench "Ray-Trace" "raytrace" # global init must have correct type
 #bench "Splay Tree" "splay" # string_of_float is not supported
 
+bench "Almabench" "almabench"
 bench "Binary Decision Diagram" "bdd"
 bench "Binary Trees" "binary_trees" # seems wrong if we uncomment the check print in loop_depths ?
 bench "Fibonacci" "fib"
@@ -97,7 +98,6 @@ bench "Soli" "soli"
 bench "Takc" "takc"
 bench "Taku" "taku"
 
-# bench "Almabench" "almabench" # requires --disable-flat-float-array, otherwise: global init must have correct type
 # bench "Fast Fourier Transform" "fft" # requires --disable-flat-float-array illegal cast on float array, see comment in file
 
 # bench "Pascal" "pascal" # not part of the wsoo bench suite
