@@ -31,12 +31,13 @@ bench() {
   js_of_ocaml compile --target-env=nodejs --opt=3 ./a.out.bc -o a.jsoo.bc.js
 
   # bench
-  hyperfine --warmup 3 --runs 5 \
+  # TODO: use ../../ocamlrun when it'll be produced
+  hyperfine --warmup 2 --runs 5 --export-json ${2}.json \
     -n "OCaml native" "./a.out" \
     -n "Wasocaml" "${NODE} ./main_node.mjs" \
     -n "Wsoo" "${NODE} ./a.wsoo.bc.js" \
     -n "Jsoo" "${NODE} ./a.jsoo.bc.js" \
-    -n "Bytecode" "ocamlrun ./a.out.bc" # TODO: use ../../ocamlrun when it'll be produced
+    -n "Bytecode" "ocamlrun ./a.out.bc"
 
   echo ""
 }
@@ -63,6 +64,7 @@ bench "Soli" "soli"
 bench "Takc" "takc"
 bench "Taku" "taku"
 
+python script.py
 # bench "Fast Fourier Transform" "fft" # requires --disable-flat-float-array illegal cast on float array, see comment in file
 
 # bench "Pascal" "pascal" # not part of the wsoo bench suite
