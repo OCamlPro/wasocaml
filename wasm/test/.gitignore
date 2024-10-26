@@ -1,3 +1,7 @@
 *.wasm
 *.wat
 a.js
+*.svg
+*.json
+*.bc.js
+*.bc
