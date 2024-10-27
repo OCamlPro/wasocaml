@@ -32,7 +32,7 @@ bench() {
 
   # bench
   # TODO: use ../../ocamlrun when it'll be produced
-  hyperfine --warmup 2 --runs 5 --export-json ${2}.json \
+  hyperfine --warmup 2 --runs 10 --export-json ${2}.json \
     -n "OCaml native" "./a.out" \
     -n "Wasocaml" "${NODE} ./main_node.mjs" \
     -n "Wsoo" "${NODE} ./a.wsoo.bc.js" \

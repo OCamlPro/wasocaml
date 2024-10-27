@@ -89,11 +89,8 @@ let rec solve board m =
     with Found ->
       true
 
-let array_copy a =
-  Sys.opaque_identity (Array.init (Array.length a) (Sys.opaque_identity (fun i -> a.(i))))
-
 let rec runbench n =
-  let board = Array.map array_copy initial_board in
+  let board = Array.map Array.copy initial_board in
   if n > 1 then begin
     ignore (solve board 0);
     runbench (n - 1)
@@ -101,6 +98,6 @@ let rec runbench n =
     if solve board 0 then (print_string "\n"; print_board board)
   end
 
-let _ =
+let () =
   let nruns = 500 in
   runbench nruns
